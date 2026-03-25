@@ -280,6 +280,7 @@ export default function App() {
   // Overlays
   const [showInfoPage, setShowInfoPage] = useState(false);
   const [showPaymentPage, setShowPaymentPage] = useState(false);
+  const [showBorrowedBooksPage, setShowBorrowedBooksPage] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   
@@ -823,6 +824,12 @@ export default function App() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
+                    icon={<BookOpen className="w-5 h-5" />} 
+                    label="Borrowed Books" 
+                    onClick={() => setShowBorrowedBooksPage(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
                     label="Dark Mode" 
                     onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -917,6 +924,48 @@ export default function App() {
                   </button>
                 ))
               )}
+            </div>
+          </OverlayPage>
+        )}
+
+        {showBorrowedBooksPage && currentUser && (
+          <OverlayPage key="borrowed-books-overlay" title="গৃহীত বইসমূহ" onClose={() => setShowBorrowedBooksPage(false)} isDarkMode={isDarkMode}>
+            <div className="space-y-3">
+              {(() => {
+                const userBooks = books.filter(b => b.recipientId === currentUser.id);
+                if (userBooks.length === 0) {
+                  return <div className="text-center p-10 opacity-50">কোনো গৃহীত বই পাওয়া যায়নি</div>;
+                }
+                return userBooks.map((book, idx) => (
+                  <div 
+                    key={`user-book-${idx}-${book.name}`}
+                    className={cn(
+                      "p-4 rounded-xl border",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold">{book.name}</h4>
+                        <p className="text-xs opacity-60">{book.author}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        <span className="block text-slate-400 mb-1">গ্রহণের তারিখ</span>
+                        <span className="font-bold">{book.date || 'N/A'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        <span className="block text-slate-400 mb-1">ধরণ</span>
+                        <span className="font-bold">{book.category || 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </OverlayPage>
         )}
