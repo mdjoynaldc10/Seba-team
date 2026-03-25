@@ -13,12 +13,32 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the post was created" }
       },
       "required": ["authorName", "authorId", "content", "createdAt"]
+    },
+    "messages": {
+      "title": "Messages",
+      "description": "Private messages between members.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the message" },
+        "senderId": { "type": "string", "description": "ID of the member who sent the message" },
+        "receiverId": { "type": "string", "description": "ID of the member who received the message" },
+        "senderName": { "type": "string", "description": "Name of the sender" },
+        "receiverName": { "type": "string", "description": "Name of the receiver" },
+        "text": { "type": "string", "description": "Text content of the message" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Timestamp when the message was sent" },
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "Array of sender and receiver IDs" }
+      },
+      "required": ["senderId", "receiverId", "text", "timestamp", "participants"]
     }
   },
   "firestore": {
     "/posts/{postId}": {
       "schema": "posts",
       "description": "Collection of user-created posts."
+    },
+    "/messages/{messageId}": {
+      "schema": "messages",
+      "description": "Collection of private messages."
     }
   }
 }

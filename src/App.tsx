@@ -23,7 +23,10 @@ import {
   Facebook,
   ExternalLink,
   Gamepad2,
-  Plus
+  Plus,
+  MessageSquare,
+  Send,
+  PlusCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -31,6 +34,25 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
+import { 
+  db, 
+  auth, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp, 
+  Timestamp, 
+  signInAnonymously, 
+  where, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  deleteDoc, 
+  getDocs, 
+  limit 
+} from './firebase';
 
 // --- Types ---
 interface Member {
@@ -44,6 +66,17 @@ interface Member {
   email: string;
   joiningDate: string;
   photoId?: string;
+}
+
+interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  senderName: string;
+  receiverName: string;
+  text: string;
+  timestamp: any;
+  participants: string[];
 }
 
 interface Payment {
@@ -312,6 +345,12 @@ export default function App() {
   const [showBorrowedBooksPage, setShowBorrowedBooksPage] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showJoinDonorForm, setShowJoinDonorForm] = useState(false);
+  const [showMessagesOverlay, setShowMessagesOverlay] = useState(false);
+  const [activeChat, setActiveChat] = useState<Member | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isNewChatSearchOpen, setIsNewChatSearchOpen] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
   const [isDonorSubmitting, setIsDonorSubmitting] = useState(false);
   const [donorFormMsg, setDonorFormMsg] = useState<{ text: string, type: 'success' | 'error' | 'warning' | null }>({ text: '', type: null });
@@ -543,6 +582,93 @@ export default function App() {
     }
   };
 
+  const handleFirestoreError = (error: any, operationType: string, path: string | null) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified,
+        isAnonymous: auth.currentUser?.isAnonymous,
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    // throw new Error(JSON.stringify(errInfo)); // Don't throw to avoid crashing, just log and handle
+  };
+
+  // Firebase Auth and Messaging
+  useEffect(() => {
+    if (currentUser) {
+      const initAuth = async () => {
+        try {
+          const userCredential = await signInAnonymously(auth);
+          const user = userCredential.user;
+          // Map auth UID to member ID in Firestore
+          await setDoc(doc(db, 'users', user.uid), { memberId: currentUser.id }, { merge: true });
+          setIsAuthReady(true);
+          setAuthError(null);
+        } catch (err: any) {
+          console.error("Firebase Auth Error:", err);
+          if (err.code === 'auth/admin-restricted-operation') {
+            setAuthError("Anonymous Auth is disabled in Firebase Console. Please enable it to use messaging.");
+          } else {
+            setAuthError(err.message);
+          }
+        }
+      };
+      initAuth();
+    } else {
+      setIsAuthReady(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (isAuthReady && currentUser) {
+      // Listen for messages
+      const q = query(
+        collection(db, 'messages'),
+        where('participants', 'array-contains', currentUser.id),
+        orderBy('timestamp', 'asc')
+      );
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const msgs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Message[];
+        
+        // Client-side filtering for 2-hour limit
+        const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+        const filteredMsgs = msgs.filter(m => {
+          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : Date.now();
+          return ts > twoHoursAgo;
+        });
+        
+        setMessages(filteredMsgs);
+
+        // Cleanup old messages (where current user is sender)
+        const oldMsgs = msgs.filter(m => {
+          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : Date.now();
+          return ts < twoHoursAgo && m.senderId === currentUser.id;
+        });
+        
+        oldMsgs.forEach(async (m) => {
+          try {
+            await deleteDoc(doc(db, 'messages', m.id));
+          } catch (err) {
+            handleFirestoreError(err, 'delete', `messages/${m.id}`);
+          }
+        });
+      }, (err) => {
+        handleFirestoreError(err, 'list', 'messages');
+      });
+
+      return () => unsubscribe();
+    }
+  }, [isAuthReady, currentUser]);
+
   const loadInitialData = async () => {
     setIsLoading(true);
     const [posts, donors, allBooks] = await Promise.all([
@@ -572,6 +698,21 @@ export default function App() {
       const payments = await fetchPaymentHistory(id, phone);
       setPaymentData(payments);
       localStorage.setItem('seba_payments', JSON.stringify(payments));
+      
+      // Sign in to Firebase Auth
+      try {
+        const userCredential = await signInAnonymously(auth);
+        await setDoc(doc(db, 'users', userCredential.user.uid), { memberId: member.id }, { merge: true });
+        setIsAuthReady(true);
+        setAuthError(null);
+      } catch (err: any) {
+        console.error("Firebase Auth Error during login:", err);
+        if (err.code === 'auth/admin-restricted-operation') {
+          setAuthError("Anonymous Auth is disabled in Firebase Console.");
+        } else {
+          setAuthError(err.message);
+        }
+      }
     } else {
       alert("সদস্য পাওয়া যায়নি!");
     }
@@ -594,6 +735,11 @@ export default function App() {
     localStorage.removeItem('seba_payments');
     setIsMenuOpen(false);
     setActiveTab('home');
+    setShowInfoPage(false);
+    setShowPaymentPage(false);
+    setShowBorrowedBooksPage(false);
+    setShowJoinDonorForm(false);
+    setShowTicTacToe(false);
   };
 
   const formatDate = (dateValue: any) => {
@@ -671,7 +817,15 @@ export default function App() {
           <Menu className="w-6 h-6" />
         </button>
         <h1 className="text-lg font-bold flex-1 ml-3">সেবা ফাউন্ডেশন</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          {currentUser && (
+            <button onClick={() => setShowMessagesOverlay(true)} className="p-2 relative">
+              <MessageSquare className="w-6 h-6" />
+              {messages.length > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-emerald-500" />
+              )}
+            </button>
+          )}
           <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2">
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
@@ -1255,6 +1409,138 @@ export default function App() {
           <OverlayPage key="tictactoe-overlay" title="TicTacToe Game" onClose={() => setShowTicTacToe(false)} isDarkMode={isDarkMode}>
             <TicTacToeGame isDarkMode={isDarkMode} />
           </OverlayPage>
+        )}
+
+        {showMessagesOverlay && currentUser && (
+          <OverlayPage 
+            key="messages-overlay" 
+            title={activeChat ? activeChat.name : "মেসেজসমূহ"} 
+            onClose={() => {
+              if (activeChat) setActiveChat(null);
+              else setShowMessagesOverlay(false);
+            }} 
+            isDarkMode={isDarkMode}
+          >
+            {authError && (
+              <div className="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm">
+                {authError}
+              </div>
+            )}
+            {activeChat ? (
+              <ChatWindow 
+                currentUser={currentUser} 
+                recipient={activeChat} 
+                messages={messages.filter(m => m.participants.includes(activeChat.id))}
+                isDarkMode={isDarkMode}
+              />
+            ) : (
+              <div className="flex flex-col h-[calc(100vh-120px)]">
+                <div className="flex-1 overflow-y-auto space-y-2 pb-20">
+                  {(() => {
+                    const conversations = messages.reduce((acc: any[], msg) => {
+                      const otherId = msg.senderId === currentUser.id ? msg.receiverId : msg.senderId;
+                      const otherName = msg.senderId === currentUser.id ? msg.receiverName : msg.senderName;
+                      
+                      if (!acc.find(c => c.id === otherId)) {
+                        acc.push({ id: otherId, name: otherName, lastMessage: msg.text, timestamp: msg.timestamp });
+                      } else {
+                        const existing = acc.find(c => c.id === otherId);
+                        if (msg.timestamp?.toMillis() > existing.timestamp?.toMillis()) {
+                          existing.lastMessage = msg.text;
+                          existing.timestamp = msg.timestamp;
+                        }
+                      }
+                      return acc;
+                    }, []).sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+
+                    if (conversations.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full opacity-50 py-20">
+                          <MessageSquare className="w-12 h-12 mb-2" />
+                          <p>কোনো মেসেজ নেই</p>
+                        </div>
+                      );
+                    }
+
+                    return conversations.map(conv => (
+                      <button
+                        key={conv.id}
+                        onClick={() => setActiveChat({ id: conv.id, name: conv.name } as Member)}
+                        className={cn(
+                          "w-full p-4 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.98]",
+                          isDarkMode ? "bg-slate-800/50 hover:bg-slate-800" : "bg-slate-100 hover:bg-slate-200"
+                        )}
+                      >
+                        <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-xl">
+                          {conv.name[0]}
+                        </div>
+                        <div className="flex-1 text-left">
+                          <h4 className="font-bold">{conv.name}</h4>
+                          <p className="text-sm opacity-60 truncate max-w-[200px]">{conv.lastMessage}</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 opacity-30" />
+                      </button>
+                    ));
+                  })()}
+                </div>
+
+                <button
+                  onClick={() => setIsNewChatSearchOpen(true)}
+                  className="fixed bottom-24 right-8 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-xl flex items-center justify-center transition-all active:scale-90 z-50"
+                >
+                  <Plus className="w-8 h-8" />
+                </button>
+              </div>
+            )}
+          </OverlayPage>
+        )}
+
+        {isNewChatSearchOpen && (
+          <div className="fixed inset-0 z-[6000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className={cn(
+                "w-full max-w-md rounded-3xl p-6 shadow-2xl",
+                isDarkMode ? "bg-slate-900" : "bg-white"
+              )}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold">নতুন মেসেজ</h3>
+                <button onClick={() => setIsNewChatSearchOpen(false)} className="p-2 opacity-50">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="relative mb-6">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 opacity-30" />
+                <input 
+                  type="tel"
+                  placeholder="ফোন নাম্বার দিয়ে খুঁজুন..."
+                  className={cn(
+                    "w-full pl-12 pr-4 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                    isDarkMode ? "bg-slate-800" : "bg-slate-100"
+                  )}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter') {
+                      const val = (e.target as HTMLInputElement).value;
+                      if (val.length >= 10) {
+                        const results = await searchMembers(val);
+                        if (results.length > 0) {
+                          setActiveChat(results[0]);
+                          setIsNewChatSearchOpen(false);
+                          setShowMessagesOverlay(true);
+                        } else {
+                          alert("সদস্য পাওয়া যায়নি!");
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-xs opacity-50 text-center">সদস্যের ফোন নাম্বার লিখে এন্টার চাপুন</p>
+            </motion.div>
+          </div>
         )}
 
         {showJoinDonorForm && (
@@ -1852,6 +2138,84 @@ function InvoiceRow({ label, value }: { label: string, value: string }) {
     <div className="flex justify-between items-center text-sm">
       <span className="text-slate-400 font-medium">{label}:</span>
       <span className="text-slate-900 font-bold text-right">{value}</span>
+    </div>
+  );
+}
+
+function ChatWindow({ currentUser, recipient, messages, isDarkMode }: { currentUser: Member, recipient: Member, messages: Message[], isDarkMode: boolean }) {
+  const [inputText, setInputText] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!inputText.trim()) return;
+    
+    const text = inputText.trim();
+    setInputText('');
+
+    try {
+      await addDoc(collection(db, 'messages'), {
+        senderId: currentUser.id,
+        receiverId: recipient.id,
+        senderName: currentUser.name,
+        receiverName: recipient.name,
+        text: text,
+        timestamp: serverTimestamp(),
+        participants: [currentUser.id, recipient.id]
+      });
+    } catch (err) {
+      console.error("Error sending message:", err);
+      alert("মেসেজ পাঠানো যায়নি!");
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-120px)]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg) => {
+          const isMe = msg.senderId === currentUser.id;
+          return (
+            <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+              <div className={cn(
+                "max-w-[80%] p-3 rounded-2xl text-sm shadow-sm",
+                isMe 
+                  ? "bg-emerald-500 text-white rounded-tr-none" 
+                  : (isDarkMode ? "bg-slate-800 text-white rounded-tl-none" : "bg-white text-slate-900 rounded-tl-none")
+              )}>
+                {msg.text}
+              </div>
+              <span className="text-[10px] opacity-40 mt-1">
+                {msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex gap-2">
+        <input 
+          type="text"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          placeholder="মেসেজ লিখুন..."
+          className={cn(
+            "flex-1 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500",
+            isDarkMode ? "bg-slate-800" : "bg-slate-100"
+          )}
+        />
+        <button 
+          onClick={handleSend}
+          className="w-12 h-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center transition-all active:scale-90"
+        >
+          <Send className="w-5 h-5" />
+        </button>
+      </div>
     </div>
   );
 }

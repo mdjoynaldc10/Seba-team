@@ -20,6 +20,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function getMemberId() {
+      let userDoc = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userDoc) ? get(userDoc).data.memberId : null;
+    }
+
     function isValidPost(data) {
       return data.keys().hasAll(['authorName', 'authorId', 'content', 'createdAt']) &&
              data.authorName is string && data.authorName.size() > 0 && data.authorName.size() < 100 &&
@@ -28,20 +33,39 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'receiverId', 'text', 'timestamp', 'participants']) &&
+             data.senderId is string && data.receiverId is string &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 2000 &&
+             data.timestamp is timestamp &&
+             data.participants is list && data.participants.size() == 2;
+    }
+
     match /posts/{postId} {
       // Everyone can read posts
       allow read: if true;
       
       // Only authenticated users can create posts
-      allow create: if isAuthenticated() && isValidPost(request.resource.data) && request.resource.data.authorId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidPost(request.resource.data) && request.resource.data.authorId == getMemberId();
       
       // Only author can update or delete their posts
-      allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.authorId == getMemberId();
     }
     
     match /users/{userId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /messages/{messageId} {
+      // Only participants can read messages
+      allow read: if isAuthenticated() && getMemberId() in resource.data.participants;
+      
+      // Only authenticated users can create messages where they are the sender
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data) && request.resource.data.senderId == getMemberId();
+      
+      // Only sender can delete their messages
+      allow delete: if isAuthenticated() && resource.data.senderId == getMemberId();
     }
   }
 }
