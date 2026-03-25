@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Tiro+Bangla&display=swap');
+
+@theme {
+  --font-sans: "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  body {
+    @apply antialiased;
+  }
+}
+
+/* Custom styles for the invoice download to hide buttons */
+@media print {
+  .no-capture {
+    display: none !important;
+  }
+}
+
+.no-capture {
+  /* This is handled by logic in App.tsx usually, but we can use this class too */
+}

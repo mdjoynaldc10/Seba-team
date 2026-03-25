@@ -1,0 +1,5 @@
+{
+  "name": "SebaApp",
+  "description": "A comprehensive membership management app for Seba Foundation with Google Sheets integration, blood donor search, and payment tracking.",
+  "requestFramePermissions": []
+}
