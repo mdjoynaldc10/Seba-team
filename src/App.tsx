@@ -267,7 +267,7 @@ function cn(...inputs: ClassValue[]) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [paymentData, setPaymentData] = useState<Payment[]>([]);
@@ -288,6 +288,9 @@ export default function App() {
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [foundMembers, setFoundMembers] = useState<Member[]>([]);
   const [bloodSearchQuery, setBloodSearchQuery] = useState('');
+  const [selectedBloodGroup, setSelectedBloodGroup] = useState('সব');
+  const [selectedDistrict, setSelectedDistrict] = useState('সব');
+  const [selectedThana, setSelectedThana] = useState('সব');
   const [filteredDonors, setFilteredDonors] = useState<Donor[]>([]);
   const [bookSearchQuery, setBookSearchQuery] = useState('');
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
@@ -296,13 +299,33 @@ export default function App() {
   const touchStartX = useRef(0);
 
   useEffect(() => {
+    localStorage.setItem('seba_dark_mode', String(isDarkMode));
+  }, [isDarkMode]);
+
+  useEffect(() => {
     loadInitialData();
+    // Load saved user from localStorage
+    const savedUser = localStorage.getItem('seba_user');
+    const savedPayments = localStorage.getItem('seba_payments');
+    if (savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+        if (savedPayments) {
+          setPaymentData(JSON.parse(savedPayments));
+        }
+      } catch (e) {
+        console.error("Error parsing saved user data:", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
+    let result = [...donorData];
+
+    // Text search
     if (bloodSearchQuery.trim()) {
       const query = bloodSearchQuery.toLowerCase();
-      setFilteredDonors(donorData.filter(d => {
+      result = result.filter(d => {
         const name = String(d.name || '').toLowerCase();
         const group = String(d.group || '').toLowerCase();
         const district = String(d.district || '').toLowerCase();
@@ -314,11 +337,26 @@ export default function App() {
                district.includes(query) || 
                thana.includes(query) || 
                phone.includes(query);
-      }));
-    } else {
-      setFilteredDonors([]);
+      });
     }
-  }, [bloodSearchQuery, donorData]);
+
+    // Blood Group filter
+    if (selectedBloodGroup !== 'সব') {
+      result = result.filter(d => d.group === selectedBloodGroup);
+    }
+
+    // District filter
+    if (selectedDistrict !== 'সব') {
+      result = result.filter(d => d.district === selectedDistrict);
+    }
+
+    // Thana filter
+    if (selectedThana !== 'সব') {
+      result = result.filter(d => d.thana === selectedThana);
+    }
+
+    setFilteredDonors(result);
+  }, [bloodSearchQuery, selectedBloodGroup, selectedDistrict, selectedThana, donorData]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -345,8 +383,10 @@ export default function App() {
     const member = await loginMember(id, phone);
     if (member) {
       setCurrentUser(member);
+      localStorage.setItem('seba_user', JSON.stringify(member));
       const payments = await fetchPaymentHistory(id, phone);
       setPaymentData(payments);
+      localStorage.setItem('seba_payments', JSON.stringify(payments));
     } else {
       alert("সদস্য পাওয়া যায়নি!");
     }
@@ -365,6 +405,8 @@ export default function App() {
   const logout = () => {
     setCurrentUser(null);
     setPaymentData([]);
+    localStorage.removeItem('seba_user');
+    localStorage.removeItem('seba_payments');
     setIsMenuOpen(false);
     setActiveTab('home');
   };
@@ -699,21 +741,79 @@ export default function App() {
           <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto">
             <div className="mb-6">
               <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
-              <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ফোন নম্বর ইংরেজিতে লিখে সার্চ করুন।</p>
+              <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
             </div>
-            <div className={cn(
-              "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm mb-6",
-              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-            )}>
-              <Search className="w-5 h-5 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="নাম, রক্তের গ্রুপ, জেলা বা থানা..." 
-                className="flex-1 py-3 bg-transparent outline-none text-sm"
-                value={bloodSearchQuery}
-                onChange={(e) => setBloodSearchQuery(e.target.value)}
-              />
+
+            <div className="space-y-3 mb-6">
+              <div className={cn(
+                "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+              )}>
+                <Search className="w-5 h-5 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
+                  className="flex-1 py-3 bg-transparent outline-none text-sm"
+                  value={bloodSearchQuery}
+                  onChange={(e) => setBloodSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
+                  <select 
+                    value={selectedBloodGroup}
+                    onChange={(e) => setSelectedBloodGroup(e.target.value)}
+                    className={cn(
+                      "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                    )}
+                  >
+                    <option value="সব">সব গ্রুপ</option>
+                    {Array.from(new Set(donorData.map(d => d.group))).filter(Boolean).sort().map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase opacity-50 ml-2">জেলা</label>
+                    <select 
+                      value={selectedDistrict}
+                      onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedThana('সব'); }}
+                      className={cn(
+                        "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                      )}
+                    >
+                      <option value="সব">সব জেলা</option>
+                      {Array.from(new Set(donorData.map(d => d.district))).filter(Boolean).sort().map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase opacity-50 ml-2">থানা</label>
+                    <select 
+                      value={selectedThana}
+                      onChange={(e) => setSelectedThana(e.target.value)}
+                      className={cn(
+                        "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                      )}
+                    >
+                      <option value="সব">সব থানা</option>
+                      {Array.from(new Set(donorData.filter(d => selectedDistrict === 'সব' || d.district === selectedDistrict).map(d => d.thana))).filter(Boolean).sort().map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
+
             <div className="space-y-4">
               {filteredDonors.map((donor, idx) => (
                 <div key={`donor-${idx}-${donor.phone}`} className={cn(
@@ -731,7 +831,7 @@ export default function App() {
                   </a>
                 </div>
               ))}
-              {bloodSearchQuery && filteredDonors.length === 0 && (
+              {filteredDonors.length === 0 && (
                 <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
               )}
             </div>
@@ -954,12 +1054,12 @@ export default function App() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50">
-                        <span className="block text-slate-400 mb-1">গ্রহণের তারিখ</span>
+                      <div className="p-2 rounded-lg bg-emerald-500 text-white">
+                        <span className="block text-white/80 mb-1">গ্রহণের তারিখ</span>
                         <span className="font-bold">{book.date || 'N/A'}</span>
                       </div>
-                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50">
-                        <span className="block text-slate-400 mb-1">ধরণ</span>
+                      <div className="p-2 rounded-lg bg-emerald-500 text-white">
+                        <span className="block text-white/80 mb-1">ধরণ</span>
                         <span className="font-bold">{book.category || 'N/A'}</span>
                       </div>
                     </div>
