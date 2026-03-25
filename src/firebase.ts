@@ -1,0 +1,24 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+// Import the Firebase configuration
+import firebaseConfig from '../firebase-applet-config.json';
+
+// Initialize Firebase SDK
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const auth = getAuth();
+export const storage = getStorage(app);
+
+export { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp, ref, uploadBytes, getDownloadURL };
+
+export interface UserPost {
+  id: string;
+  authorName: string;
+  authorId: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: any;
+}

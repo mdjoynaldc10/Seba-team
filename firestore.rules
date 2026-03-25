@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: posts
+    // Fields:
+    //   - authorName: string (required)
+    //   - authorId: string (required)
+    //   - content: string (required, size < 1000)
+    //   - imageUrl: string (optional, URL)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['authorName', 'authorId', 'content', 'createdAt']) &&
+             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() < 100 &&
+             data.authorId is string && data.authorId.size() > 0 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 2000 &&
+             data.createdAt is timestamp;
+    }
+
+    match /posts/{postId} {
+      // Everyone can read posts
+      allow read: if true;
+      
+      // Only authenticated users can create posts
+      allow create: if isAuthenticated() && isValidPost(request.resource.data) && request.resource.data.authorId == request.auth.uid;
+      
+      // Only author can update or delete their posts
+      allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}

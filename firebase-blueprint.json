@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "posts": {
+      "title": "User Posts",
+      "description": "Posts created by members on the home page.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the post" },
+        "authorName": { "type": "string", "description": "Name of the member who posted" },
+        "authorId": { "type": "string", "description": "ID of the member who posted" },
+        "content": { "type": "string", "description": "Text content of the post" },
+        "imageUrl": { "type": "string", "description": "URL of the image attached to the post" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the post was created" }
+      },
+      "required": ["authorName", "authorId", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/posts/{postId}": {
+      "schema": "posts",
+      "description": "Collection of user-created posts."
+    }
+  }
+}

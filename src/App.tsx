@@ -21,12 +21,16 @@ import {
   X,
   Smartphone,
   Facebook,
-  ExternalLink
+  ExternalLink,
+  Gamepad2,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+import { GoogleGenAI } from "@google/genai";
 
 // --- Types ---
 interface Member {
@@ -73,6 +77,7 @@ interface Book {
   date: string;
   recipientId: string;
   address: string;
+  imageUrl?: string;
 }
 
 // --- Sheets Logic ---
@@ -119,15 +124,15 @@ async function fetchBooks(): Promise<Book[]> {
             const c = row.c;
             if (!c || !c[1]?.v) return null;
             return {
-              id: String(c[0]?.v || ''),
-              name: String(c[1]?.v || ''),
-              author: String(c[2]?.v || ''),
-              category: String(c[3]?.v || ''),
-              status: String(c[4]?.v || ''),
-              recipient: String(c[6]?.v || ''),
-              date: String(c[7]?.v || ''),
-              recipientId: String(c[8]?.v || ''),
-              address: String(c[9]?.v || '')
+              id: String(c[0]?.v || '').trim(),
+              name: String(c[1]?.v || '').trim(),
+              author: String(c[2]?.v || '').trim(),
+              category: String(c[3]?.v || '').trim(),
+              status: String(c[4]?.v || '').trim(),
+              recipient: String(c[6]?.v || '').trim(),
+              date: String(c[7]?.v || '').trim(),
+              recipientId: String(c[8]?.v || '').trim(),
+              address: String(c[9]?.v || '').trim()
             };
           }).filter(Boolean);
         })
@@ -150,15 +155,15 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
       if (json.table.rows.length) {
         const r = json.table.rows[0].c;
         return {
-          name: r[0]?.v || '',
-          designation: r[1]?.v || '',
-          area: r[2]?.v || '',
-          id: r[3]?.v || '',
-          dob: r[4]?.v || '',
-          bloodGroup: r[5]?.v || '',
-          phone: r[6]?.v || '',
-          email: r[7]?.v || '',
-          joiningDate: r[8]?.v || '',
+          name: String(r[0]?.v || '').trim(),
+          designation: String(r[1]?.v || '').trim(),
+          area: String(r[2]?.v || '').trim(),
+          id: String(r[3]?.v || '').trim(),
+          dob: String(r[4]?.v || '').trim(),
+          bloodGroup: String(r[5]?.v || '').trim(),
+          phone: String(r[6]?.v || '').trim(),
+          email: String(r[7]?.v || '').trim(),
+          joiningDate: String(r[8]?.v || '').trim(),
           photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0]
         };
       }
@@ -207,13 +212,25 @@ async function fetchAllDonors(): Promise<Donor[]> {
           return json.table.rows.map((row: any) => {
             const c = row.c;
             if (!c) return null;
-            return {
-              group: String(c[0]?.v || ''),
-              name: String(c[1]?.v || ''),
-              district: String(c[2]?.v || ''),
-              thana: String(c[3]?.v || ''),
-              phone: String(c[4]?.v || '')
-            };
+            const group = String(c[0]?.v || '').trim();
+            const name = String(c[1]?.v || '').trim();
+            const district = String(c[2]?.v || '').trim();
+            const thana = String(c[3]?.v || '').trim();
+            const phone = String(c[4]?.v || '').trim();
+
+            // Skip header rows or empty rows
+            if (!group || !name || !phone || 
+                group.toLowerCase().includes('group') || 
+                name.toLowerCase().includes('name') ||
+                district.toLowerCase() === 'district' ||
+                thana.toLowerCase() === 'thana'
+            ) return null;
+
+            // Normalize: Trim and Capitalize first letter for consistency (Data Validation)
+            const cleanDistrict = district.charAt(0).toUpperCase() + district.slice(1);
+            const cleanThana = thana.charAt(0).toUpperCase() + thana.slice(1);
+
+            return { group, name, district: cleanDistrict, thana: cleanThana, phone };
           }).filter(Boolean);
         })
     );
@@ -238,15 +255,15 @@ async function searchMembers(phone: string): Promise<Member[]> {
         const members = json.table.rows.map((row: any) => {
           const d = row.c;
           return {
-            name: d[0]?.v || '',
-            designation: d[1]?.v || '',
-            area: d[2]?.v || '',
-            id: d[3]?.v || '',
-            dob: d[4]?.v || '',
-            bloodGroup: d[5]?.v || '',
-            phone: d[6]?.v || '',
-            email: d[7]?.v || '',
-            joiningDate: d[8]?.v || '',
+            name: String(d[0]?.v || '').trim(),
+            designation: String(d[1]?.v || '').trim(),
+            area: String(d[2]?.v || '').trim(),
+            id: String(d[3]?.v || '').trim(),
+            dob: String(d[4]?.v || '').trim(),
+            bloodGroup: String(d[5]?.v || '').trim(),
+            phone: String(d[6]?.v || '').trim(),
+            email: String(d[7]?.v || '').trim(),
+            joiningDate: String(d[8]?.v || '').trim(),
             photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0]
           };
         });
@@ -265,8 +282,20 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// --- Components ---
+const BookImage = ({ book, isDarkMode, className }: { book: Book, isDarkMode: boolean, className?: string }) => {
+  const sizeClasses = className || "w-10 h-14";
+
+  return (
+    <div className={cn(sizeClasses, "bg-emerald-100 dark:bg-emerald-900/30 rounded-md flex items-center justify-center text-emerald-500")}>
+      <BookOpen className="w-5 h-5" />
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
+
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
@@ -281,22 +310,147 @@ export default function App() {
   const [showInfoPage, setShowInfoPage] = useState(false);
   const [showPaymentPage, setShowPaymentPage] = useState(false);
   const [showBorrowedBooksPage, setShowBorrowedBooksPage] = useState(false);
+  const [showTicTacToe, setShowTicTacToe] = useState(false);
+  const [showJoinDonorForm, setShowJoinDonorForm] = useState(false);
+  const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
+  const [isDonorSubmitting, setIsDonorSubmitting] = useState(false);
+  const [donorFormMsg, setDonorFormMsg] = useState<{ text: string, type: 'success' | 'error' | 'warning' | null }>({ text: '', type: null });
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [showBorrowForm, setShowBorrowForm] = useState(false);
+  const [isRequestSent, setIsRequestSent] = useState(false);
+  const [borrowFormData, setBorrowFormData] = useState({
+    name: '',
+    id: '',
+    date: new Date().toISOString().split('T')[0],
+    address: ''
+  });
   
   // Search states
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [foundMembers, setFoundMembers] = useState<Member[]>([]);
   const [bloodSearchQuery, setBloodSearchQuery] = useState('');
   const [selectedBloodGroup, setSelectedBloodGroup] = useState('সব');
-  const [selectedDistrict, setSelectedDistrict] = useState('সব');
-  const [selectedThana, setSelectedThana] = useState('সব');
   const [filteredDonors, setFilteredDonors] = useState<Donor[]>([]);
+  const [isSearchingDonors, setIsSearchingDonors] = useState(false);
   const [bookSearchQuery, setBookSearchQuery] = useState('');
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
 
+  useEffect(() => {
+    if (currentUser) {
+      setBorrowFormData(prev => ({
+        ...prev,
+        name: currentUser.name,
+        id: currentUser.id,
+        address: currentUser.area
+      }));
+    }
+  }, [currentUser]);
+
+  const handleBorrowRequest = () => {
+    if (!selectedBook) return;
+    
+    const message = `বই সংগ্রহের অনুরোধ:
+বইয়ের নাম: ${selectedBook.name}
+লেখক: ${selectedBook.author}
+গ্রহীতা: ${borrowFormData.name}
+আইডি নং: ${borrowFormData.id}
+তারিখ: ${borrowFormData.date}
+ঠিকানা: ${borrowFormData.address}`;
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(message).then(() => {
+      // Show tick animation
+      setIsRequestSent(true);
+      
+      // Wait for animation then open messenger
+      setTimeout(() => {
+        window.open(`https://m.me/100071182715718`, '_blank');
+        setShowBorrowForm(false);
+        setIsRequestSent(false);
+      }, 800);
+    }).catch(() => {
+      // Fallback if clipboard fails
+      window.open(`https://m.me/100071182715718`, '_blank');
+      setShowBorrowForm(false);
+      setIsRequestSent(false);
+    });
+  };
+
+  const isInternalNavigation = useRef(false);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        isInternalNavigation.current = true;
+        setActiveTab(event.state.tab || 'home');
+        setShowInfoPage(!!event.state.showInfoPage);
+        setShowPaymentPage(!!event.state.showPaymentPage);
+        setShowBorrowedBooksPage(!!event.state.showBorrowedBooksPage);
+        setIsMenuOpen(!!event.state.isMenuOpen);
+        setShowJoinDonorForm(!!event.state.showJoinDonorForm);
+        setShowTicTacToe(!!event.state.showTicTacToe);
+        setSelectedBook(event.state.selectedBook || null);
+        setTimeout(() => {
+          isInternalNavigation.current = false;
+        }, 50);
+      }
+    };
+
+    // Initial state
+    window.history.replaceState({ 
+      tab: activeTab, 
+      showInfoPage, 
+      showPaymentPage, 
+      showBorrowedBooksPage, 
+      isMenuOpen,
+      showJoinDonorForm,
+      showTicTacToe,
+      selectedBook
+    }, '');
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Push state when navigation changes
+  useEffect(() => {
+    if (!isInternalNavigation.current) {
+      window.history.pushState({ 
+        tab: activeTab, 
+        showInfoPage, 
+        showPaymentPage, 
+        showBorrowedBooksPage, 
+        isMenuOpen,
+        showJoinDonorForm,
+        showTicTacToe,
+        selectedBook
+      }, '');
+    }
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook]);
+
   // Refs for swipe
   const touchStartX = useRef(0);
+  const bloodTabRef = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef(0);
+
+  const handleBloodScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const st = e.currentTarget.scrollTop;
+    // Hide the FAB when scrolled down from the top
+    if (st > 10) {
+      setIsDonorFabVisible(false);
+    } else {
+      setIsDonorFabVisible(true);
+    }
+    lastScrollTop.current = st <= 0 ? 0 : st;
+  };
+
+  useEffect(() => {
+    if (activeTab === 'blood' && bloodTabRef.current) {
+      setIsDonorFabVisible(bloodTabRef.current.scrollTop <= 10);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     localStorage.setItem('seba_dark_mode', String(isDarkMode));
@@ -304,6 +458,7 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
+
     // Load saved user from localStorage
     const savedUser = localStorage.getItem('seba_user');
     const savedPayments = localStorage.getItem('seba_payments');
@@ -320,43 +475,73 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let result = [...donorData];
+    setIsSearchingDonors(true);
+    const timer = setTimeout(() => {
+      let result = [...donorData];
 
-    // Text search
-    if (bloodSearchQuery.trim()) {
-      const query = bloodSearchQuery.toLowerCase();
-      result = result.filter(d => {
-        const name = String(d.name || '').toLowerCase();
-        const group = String(d.group || '').toLowerCase();
-        const district = String(d.district || '').toLowerCase();
-        const thana = String(d.thana || '').toLowerCase();
-        const phone = String(d.phone || '');
-        
-        return name.includes(query) || 
-               group.includes(query) || 
-               district.includes(query) || 
-               thana.includes(query) || 
-               phone.includes(query);
-      });
+      // Text search
+      if (bloodSearchQuery.trim()) {
+        const query = bloodSearchQuery.toLowerCase();
+        result = result.filter(d => {
+          const name = String(d.name || '').toLowerCase();
+          const group = String(d.group || '').toLowerCase();
+          const district = String(d.district || '').toLowerCase();
+          const thana = String(d.thana || '').toLowerCase();
+          const phone = String(d.phone || '');
+          
+          return name.includes(query) || 
+                 group.includes(query) || 
+                 district.includes(query) || 
+                 thana.includes(query) || 
+                 phone.includes(query);
+        });
+      }
+
+      // Blood Group filter
+      if (selectedBloodGroup !== 'সব') {
+        result = result.filter(d => d.group === selectedBloodGroup);
+      }
+
+      setFilteredDonors(result);
+      setIsSearchingDonors(false);
+    }, 400); // Simulate system search delay for better UX
+    return () => clearTimeout(timer);
+  }, [bloodSearchQuery, selectedBloodGroup, donorData]);
+
+  const handleJoinDonorSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const contactNo = formData.get('ContactNo') as string;
+    
+    const joinedList = JSON.parse(localStorage.getItem('joinedDonors') || "[]");
+    if (joinedList.includes(contactNo)) {
+      setDonorFormMsg({ text: "আপনি আগে থেকেই Joined আছেন!", type: 'warning' });
+      return;
     }
 
-    // Blood Group filter
-    if (selectedBloodGroup !== 'সব') {
-      result = result.filter(d => d.group === selectedBloodGroup);
-    }
+    setIsDonorSubmitting(true);
+    setDonorFormMsg({ text: "আপনার তথ্য সংরক্ষণ করা হচ্ছে...", type: null });
 
-    // District filter
-    if (selectedDistrict !== 'সব') {
-      result = result.filter(d => d.district === selectedDistrict);
+    try {
+      const scriptURL = 'https://script.google.com/macros/s/AKfycbw7SvFWNmwKLwz-9IUJH3yXhl8Dgt52j4hlRpv-2AW0QRXNEcoNMcLPuMikC6pX6518/exec';
+      await fetch(scriptURL, { method: 'POST', body: formData });
+      
+      joinedList.push(contactNo);
+      localStorage.setItem('joinedDonors', JSON.stringify(joinedList));
+      
+      setDonorFormMsg({ text: "ধন্যবাদ! আপনার তথ্য সফলভাবে সংরক্ষণ করা হয়েছে।", type: 'success' });
+      (e.target as HTMLFormElement).reset();
+      
+      setTimeout(() => {
+        setShowJoinDonorForm(false);
+        setDonorFormMsg({ text: '', type: null });
+      }, 2000);
+    } catch (error) {
+      setDonorFormMsg({ text: "দুঃখিত! আবার চেষ্টা করুন।", type: 'error' });
+    } finally {
+      setIsDonorSubmitting(false);
     }
-
-    // Thana filter
-    if (selectedThana !== 'সব') {
-      result = result.filter(d => d.thana === selectedThana);
-    }
-
-    setFilteredDonors(result);
-  }, [bloodSearchQuery, selectedBloodGroup, selectedDistrict, selectedThana, donorData]);
+  };
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -667,9 +852,7 @@ export default function App() {
                             )}
                           >
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500">
-                                <BookOpen className="w-5 h-5" />
-                              </div>
+                              <BookImage book={book} isDarkMode={isDarkMode} />
                               <div>
                                 <span className="block font-bold">{book.name}</span>
                                 <span className="text-xs opacity-60">{book.author}</span>
@@ -738,7 +921,11 @@ export default function App() {
           </div>
 
           {/* Blood Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto">
+          <div 
+            ref={bloodTabRef}
+            onScroll={handleBloodScroll}
+            className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto relative"
+          >
             <div className="mb-6">
               <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
               <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
@@ -776,65 +963,37 @@ export default function App() {
                     ))}
                   </select>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase opacity-50 ml-2">জেলা</label>
-                    <select 
-                      value={selectedDistrict}
-                      onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedThana('সব'); }}
-                      className={cn(
-                        "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                      )}
-                    >
-                      <option value="সব">সব জেলা</option>
-                      {Array.from(new Set(donorData.map(d => d.district))).filter(Boolean).sort().map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase opacity-50 ml-2">থানা</label>
-                    <select 
-                      value={selectedThana}
-                      onChange={(e) => setSelectedThana(e.target.value)}
-                      className={cn(
-                        "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                      )}
-                    >
-                      <option value="সব">সব থানা</option>
-                      {Array.from(new Set(donorData.filter(d => selectedDistrict === 'সব' || d.district === selectedDistrict).map(d => d.thana))).filter(Boolean).sort().map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              {filteredDonors.map((donor, idx) => (
-                <div key={`donor-${idx}-${donor.phone}`} className={cn(
-                  "p-4 rounded-xl border shadow-sm",
-                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                )}>
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg">{donor.name}</h3>
-                    <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
+            {isSearchingDonors ? (
+              <div className="flex flex-col items-center justify-center py-12 space-y-4 opacity-70">
+                <Loader2 className="w-10 h-10 animate-spin text-red-500" />
+                <p className="text-sm font-bold animate-pulse">সিস্টেম সার্চ করছে...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredDonors.map((donor, idx) => (
+                  <div key={`donor-${idx}-${donor.phone}`} className={cn(
+                    "p-4 rounded-xl border shadow-sm",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                  )}>
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg">{donor.name}</h3>
+                      <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
+                    </div>
+                    <p className="text-sm opacity-80 mb-1"><strong>ঠিকানা:</strong> {donor.district}, {donor.thana}</p>
+                    <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {donor.phone}</p>
+                    <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">
+                      কল করুন
+                    </a>
                   </div>
-                  <p className="text-sm opacity-80 mb-1"><strong>ঠিকানা:</strong> {donor.district}, {donor.thana}</p>
-                  <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {donor.phone}</p>
-                  <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">
-                    কল করুন
-                  </a>
-                </div>
-              ))}
-              {filteredDonors.length === 0 && (
-                <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
-              )}
-            </div>
+                ))}
+                {filteredDonors.length === 0 && (
+                  <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Profile Tab */}
@@ -930,6 +1089,12 @@ export default function App() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
+                    icon={<Gamepad2 className="w-5 h-5" />} 
+                    label="Play TicTacToe" 
+                    onClick={() => setShowTicTacToe(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
                     label="Dark Mode" 
                     onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -964,6 +1129,22 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {/* FAB for joining as donor - Moved outside transformed container for visibility */}
+        <AnimatePresence>
+          {activeTab === 'blood' && isDonorFabVisible && (
+            <motion.button
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setShowJoinDonorForm(true)}
+              className="fixed bottom-[85px] right-6 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-2xl flex items-center justify-center z-[2000] transition-all"
+            >
+              <Plus className="w-8 h-8" />
+            </motion.button>
+          )}
+        </AnimatePresence>
       </main>
 
       {/* Bottom Nav */}
@@ -1070,19 +1251,265 @@ export default function App() {
           </OverlayPage>
         )}
 
+        {showTicTacToe && (
+          <OverlayPage key="tictactoe-overlay" title="TicTacToe Game" onClose={() => setShowTicTacToe(false)} isDarkMode={isDarkMode}>
+            <TicTacToeGame isDarkMode={isDarkMode} />
+          </OverlayPage>
+        )}
+
+        {showJoinDonorForm && (
+          <OverlayPage key="join-donor-overlay" title="রক্তদাতা হিসেবে যোগ দিন" onClose={() => setShowJoinDonorForm(false)} isDarkMode={isDarkMode}>
+            <div className="space-y-6 pb-10">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold mb-2">রক্তদাতা হিসেবে যোগ দিন</h2>
+                <p className="text-xs text-slate-900 dark:text-white font-medium">সতর্কবার্তা: উন্মুক্ত তথ্য, ব্যাক্তিগত নাম্বার না দিয়ে অভিভাবক অথবা কাছের কারো নাম্বার দিন।</p>
+              </div>
+
+              <form onSubmit={handleJoinDonorSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Blood Group</label>
+                  <select 
+                    name="BloodGroup" 
+                    required
+                    className={cn(
+                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                    )}
+                  >
+                    <option value="">আপনার রক্তের গ্রুপ সিলেক্ট করুন...</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Name</label>
+                  <input 
+                    type="text" 
+                    name="Name" 
+                    placeholder="সম্পূর্ণ নাম লিখুন (বাংলায়)..." 
+                    required
+                    className={cn(
+                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">District</label>
+                  <input 
+                    type="text" 
+                    name="District" 
+                    placeholder="জেলার নাম লিখুন (বাংলায়)..." 
+                    required
+                    className={cn(
+                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">City</label>
+                  <input 
+                    type="text" 
+                    name="City" 
+                    placeholder="শহর/উপজেলার নাম লিখুন (বাংলায়)..." 
+                    required
+                    className={cn(
+                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Contact No.</label>
+                  <input 
+                    type="tel" 
+                    name="ContactNo" 
+                    id="contactField"
+                    placeholder="01XXXXXXXXX" 
+                    required
+                    className={cn(
+                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
+                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="pt-4 flex flex-col gap-3">
+                  <button 
+                    type="submit" 
+                    disabled={isDonorSubmitting}
+                    className="w-full h-14 bg-black hover:bg-emerald-700 text-white rounded-[30px] font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-70"
+                  >
+                    {isDonorSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" /> সংরক্ষণ করা হচ্ছে...
+                      </>
+                    ) : (
+                      "যোগ দিন"
+                    )}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowJoinDonorForm(false);
+                      setActiveTab('blood');
+                    }}
+                    className="w-full h-14 bg-black hover:bg-emerald-700 text-white rounded-[30px] font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  >
+                    ডোনার খুঁজুন
+                  </button>
+                </div>
+              </form>
+
+              {donorFormMsg.text && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "p-4 rounded-xl text-center text-sm font-medium",
+                    donorFormMsg.type === 'success' ? "bg-emerald-100 text-emerald-600" :
+                    donorFormMsg.type === 'error' ? "bg-red-100 text-red-600" :
+                    donorFormMsg.type === 'warning' ? "bg-amber-100 text-amber-600" :
+                    "bg-slate-100 text-slate-600"
+                  )}
+                >
+                  {donorFormMsg.text}
+                </motion.div>
+              )}
+            </div>
+          </OverlayPage>
+        )}
+
         {selectedBook && (
           <OverlayPage key="book-overlay" title="বই গ্রহীতার তথ্য" onClose={() => setSelectedBook(null)} isDarkMode={isDarkMode}>
-            <div className="space-y-3">
+            <div className="space-y-3 pb-20">
+              <div className="flex justify-center mb-6">
+                <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-32 h-44 shadow-xl" />
+              </div>
               <InfoItem label="বইয়ের নাম" value={selectedBook.name} isDarkMode={isDarkMode} />
               <InfoItem label="লেখক" value={selectedBook.author} isDarkMode={isDarkMode} />
               <InfoItem label="ধরণ" value={selectedBook.category} isDarkMode={isDarkMode} />
               <InfoItem label="স্ট্যাটাস" value={selectedBook.status} isDarkMode={isDarkMode} />
               <div className="h-px bg-slate-200 dark:bg-slate-700 my-4" />
               <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider">গ্রহীতার তথ্য</h3>
-              <InfoItem label="গ্রহীতা" value={selectedBook.recipient} isDarkMode={isDarkMode} />
-              <InfoItem label="আইডি নং" value={selectedBook.recipientId} isDarkMode={isDarkMode} />
-              <InfoItem label="তারিখ" value={selectedBook.date} isDarkMode={isDarkMode} />
-              <InfoItem label="ঠিকানা" value={selectedBook.address} isDarkMode={isDarkMode} />
+              <InfoItem label="গ্রহীতা" value={selectedBook.recipient || 'N/A'} isDarkMode={isDarkMode} />
+              <InfoItem label="আইডি নং" value={selectedBook.recipientId || 'N/A'} isDarkMode={isDarkMode} />
+              <InfoItem label="তারিখ" value={selectedBook.date || 'N/A'} isDarkMode={isDarkMode} />
+              <InfoItem label="ঠিকানা" value={selectedBook.address || 'N/A'} isDarkMode={isDarkMode} />
+            </div>
+
+            {/* Floating Borrow Button */}
+            <div className="absolute bottom-6 left-6 right-6 flex justify-center">
+              <button 
+                onClick={() => setShowBorrowForm(true)}
+                className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
+                <BookOpen className="w-5 h-5" /> Borrow a book
+              </button>
+            </div>
+          </OverlayPage>
+        )}
+
+        {showBorrowForm && selectedBook && (
+          <OverlayPage key="borrow-form-overlay" title="বই সংগ্রহের ফর্ম" onClose={() => { setShowBorrowForm(false); setIsRequestSent(false); }} isDarkMode={isDarkMode}>
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-emerald-500 border border-emerald-600 mb-4 text-white shadow-lg shadow-emerald-500/20 flex gap-4 items-center">
+                <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-12 h-16 border-white/20" />
+                <div>
+                  <p className="text-xs text-white/80 font-medium mb-1">নির্বাচিত বই:</p>
+                  <h4 className="font-bold text-lg">{selectedBook.name}</h4>
+                  <p className="text-xs text-white/70">{selectedBook.author}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold opacity-60 ml-1">গ্রহীতার নাম</label>
+                  <input 
+                    type="text" 
+                    value={borrowFormData.name}
+                    onChange={(e) => setBorrowFormData({...borrowFormData, name: e.target.value})}
+                    placeholder="আপনার নাম লিখুন"
+                    className={cn(
+                      "w-full h-12 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500",
+                      isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold opacity-60 ml-1">আইডি নং</label>
+                  <input 
+                    type="text" 
+                    value={borrowFormData.id}
+                    onChange={(e) => setBorrowFormData({...borrowFormData, id: e.target.value})}
+                    placeholder="আপনার আইডি নম্বর"
+                    className={cn(
+                      "w-full h-12 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500",
+                      isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold opacity-60 ml-1">তারিখ</label>
+                  <input 
+                    type="date" 
+                    value={borrowFormData.date}
+                    onChange={(e) => setBorrowFormData({...borrowFormData, date: e.target.value})}
+                    className={cn(
+                      "w-full h-12 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500",
+                      isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold opacity-60 ml-1">ঠিকানা</label>
+                  <textarea 
+                    value={borrowFormData.address}
+                    onChange={(e) => setBorrowFormData({...borrowFormData, address: e.target.value})}
+                    placeholder="আপনার বর্তমান ঠিকানা"
+                    rows={3}
+                    className={cn(
+                      "w-full p-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none",
+                      isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+                    )}
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleBorrowRequest}
+                disabled={isRequestSent}
+                className={cn(
+                  "w-full h-14 rounded-2xl font-bold mt-6 flex items-center justify-center gap-2 active:scale-95 transition-all",
+                  isRequestSent ? "bg-emerald-100 text-emerald-500" : "bg-emerald-500 text-white"
+                )}
+              >
+                {isRequestSent ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-6 h-6" /> Request Sent!
+                  </motion.div>
+                ) : (
+                  "Send Request"
+                )}
+              </button>
             </div>
           </OverlayPage>
         )}
@@ -1216,6 +1643,195 @@ function OverlayPage({ title, onClose, children, isDarkMode }: { title: string, 
         {children}
       </div>
     </motion.div>
+  );
+}
+
+function TicTacToeGame({ isDarkMode }: { isDarkMode: boolean }) {
+  const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
+  const [isXNext, setIsXNext] = useState(true);
+  const [gameMode, setGameMode] = useState<'PvP' | 'PvE'>('PvE');
+  const [difficulty, setDifficulty] = useState<'Medium' | 'Hard'>('Medium');
+  const [winner, setWinner] = useState<string | null>(null);
+  const [winningLine, setWinningLine] = useState<number[] | null>(null);
+
+  const calculateWinner = (squares: (string | null)[]) => {
+    const lines = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6]
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      const [a, b, c] = lines[i];
+      if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+        return { winner: squares[a], line: lines[i] };
+      }
+    }
+    return null;
+  };
+
+  const handleClick = (i: number) => {
+    if (winner || board[i]) return;
+    const newBoard = [...board];
+    newBoard[i] = isXNext ? 'X' : 'O';
+    setBoard(newBoard);
+    setIsXNext(!isXNext);
+    
+    const winInfo = calculateWinner(newBoard);
+    if (winInfo) {
+      setWinner(winInfo.winner);
+      setWinningLine(winInfo.line);
+    } else if (!newBoard.includes(null)) {
+      setWinner('Draw');
+    }
+  };
+
+  useEffect(() => {
+    if (gameMode === 'PvE' && !isXNext && !winner) {
+      const timer = setTimeout(() => {
+        const bestMove = getBestMove(board, difficulty);
+        if (bestMove !== -1) {
+          handleClick(bestMove);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isXNext, gameMode, winner, board, difficulty]);
+
+  const getBestMove = (squares: (string | null)[], diff: 'Medium' | 'Hard') => {
+    if (diff === 'Hard') {
+      return minimax(squares, 'O').index;
+    } else {
+      if (Math.random() > 0.3) {
+        return minimax(squares, 'O').index;
+      } else {
+        const avail = squares.map((v, i) => v === null ? i : null).filter(v => v !== null) as number[];
+        return avail[Math.floor(Math.random() * avail.length)];
+      }
+    }
+  };
+
+  const minimax = (newBoard: (string | null)[], player: string): { score: number, index: number } => {
+    const availSpots = newBoard.map((v, i) => v === null ? i : null).filter(v => v !== null) as number[];
+    const winInfo = calculateWinner(newBoard);
+    if (winInfo?.winner === 'X') return { score: -10, index: -1 };
+    if (winInfo?.winner === 'O') return { score: 10, index: -1 };
+    if (availSpots.length === 0) return { score: 0, index: -1 };
+
+    const moves = [];
+    for (let i = 0; i < availSpots.length; i++) {
+      const move: any = {};
+      move.index = availSpots[i];
+      newBoard[availSpots[i]] = player;
+
+      if (player === 'O') {
+        move.score = minimax(newBoard, 'X').score;
+      } else {
+        move.score = minimax(newBoard, 'O').score;
+      }
+
+      newBoard[availSpots[i]] = null;
+      moves.push(move);
+    }
+
+    let bestMove = 0;
+    if (player === 'O') {
+      let bestScore = -10000;
+      for (let i = 0; i < moves.length; i++) {
+        if (moves[i].score > bestScore) {
+          bestScore = moves[i].score;
+          bestMove = i;
+        }
+      }
+    } else {
+      let bestScore = 10000;
+      for (let i = 0; i < moves.length; i++) {
+        if (moves[i].score < bestScore) {
+          bestScore = moves[i].score;
+          bestMove = i;
+        }
+      }
+    }
+    return moves[bestMove];
+  };
+
+  const resetGame = () => {
+    setBoard(Array(9).fill(null));
+    setIsXNext(true);
+    setWinner(null);
+    setWinningLine(null);
+  };
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="flex gap-2 mb-4 w-full">
+        <button 
+          onClick={() => { setGameMode('PvE'); resetGame(); }}
+          className={cn("flex-1 py-2 rounded-xl text-sm font-bold transition-all", gameMode === 'PvE' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+        >
+          Vs Computer
+        </button>
+        <button 
+          onClick={() => { setGameMode('PvP'); resetGame(); }}
+          className={cn("flex-1 py-2 rounded-xl text-sm font-bold transition-all", gameMode === 'PvP' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+        >
+          Vs Friend
+        </button>
+      </div>
+
+      {gameMode === 'PvE' && (
+        <div className="flex gap-2 mb-6 w-full">
+          <button 
+            onClick={() => setDifficulty('Medium')}
+            className={cn("flex-1 py-1 rounded-lg text-xs font-bold transition-all", difficulty === 'Medium' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          >
+            Medium
+          </button>
+          <button 
+            onClick={() => setDifficulty('Hard')}
+            className={cn("flex-1 py-1 rounded-lg text-xs font-bold transition-all", difficulty === 'Hard' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          >
+            Hard
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        {board.map((square, i) => (
+          <button
+            key={i}
+            onClick={() => handleClick(i)}
+            className={cn(
+              "w-20 h-20 text-3xl font-bold rounded-2xl flex items-center justify-center transition-all active:scale-90",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-100 border-slate-200",
+              winningLine?.includes(i) ? "bg-emerald-500 text-white" : (square === 'X' ? "text-emerald-500" : "text-amber-500")
+            )}
+          >
+            {square}
+          </button>
+        ))}
+      </div>
+
+      <div className="text-center mb-6">
+        {winner ? (
+          <div className="animate-bounce">
+            <p className="text-xl font-bold text-emerald-500">
+              {winner === 'Draw' ? "It's a Draw!" : `${winner} Wins!`}
+            </p>
+          </div>
+        ) : (
+          <p className="font-bold opacity-60">
+            Next Player: <span className={isXNext ? "text-emerald-500" : "text-amber-500"}>{isXNext ? 'X' : 'O'}</span>
+          </p>
+        )}
+      </div>
+
+      <button 
+        onClick={resetGame}
+        className="w-full py-3 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+      >
+        Restart Game
+      </button>
+    </div>
   );
 }
 
