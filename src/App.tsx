@@ -24,9 +24,7 @@ import {
   ExternalLink,
   Gamepad2,
   Plus,
-  MessageSquare,
-  Send,
-  PlusCircle
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -34,25 +32,6 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
-import { 
-  db, 
-  auth, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  serverTimestamp, 
-  Timestamp, 
-  signInAnonymously, 
-  where, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  deleteDoc, 
-  getDocs, 
-  limit 
-} from './firebase';
 
 // --- Types ---
 interface Member {
@@ -66,17 +45,6 @@ interface Member {
   email: string;
   joiningDate: string;
   photoId?: string;
-}
-
-interface Message {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  senderName: string;
-  receiverName: string;
-  text: string;
-  timestamp: any;
-  participants: string[];
 }
 
 interface Payment {
@@ -280,7 +248,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
   try {
     let allFound: Member[] = [];
     for (const s of MEMBER_SHEETS) {
-      const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}'`);
+      const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}'`);
       const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${s}&tq=${q}`);
       const text = await res.text();
       const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -306,6 +274,40 @@ async function searchMembers(phone: string): Promise<Member[]> {
     return allFound;
   } catch (e) {
     console.error("Error searching members:", e);
+    return [];
+  }
+}
+
+async function fetchAllMembers(): Promise<Member[]> {
+  try {
+    const fetchPromises = MEMBER_SHEETS.map(sheet =>
+      fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`)
+        .then(res => res.text())
+        .then(text => {
+          const json = JSON.parse(text.substring(47).slice(0, -2));
+          if (!json.table || !json.table.rows) return [];
+          return json.table.rows.map((row: any) => {
+            const r = row.c;
+            if (!r || !r[0]?.v) return null;
+            return {
+              name: String(r[0]?.v || '').trim(),
+              designation: String(r[1]?.v || '').trim(),
+              area: String(r[2]?.v || '').trim(),
+              id: String(r[3]?.v || '').trim(),
+              dob: String(r[4]?.v || '').trim(),
+              bloodGroup: String(r[5]?.v || '').trim(),
+              phone: String(r[6]?.v || '').trim(),
+              email: String(r[7]?.v || '').trim(),
+              joiningDate: String(r[8]?.v || '').trim(),
+              photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0]
+            };
+          }).filter(Boolean);
+        })
+    );
+    const allResults = await Promise.all(fetchPromises);
+    return allResults.flat();
+  } catch (e) {
+    console.error("Error fetching all members:", e);
     return [];
   }
 }
@@ -336,6 +338,7 @@ export default function App() {
   const [donorData, setDonorData] = useState<Donor[]>([]);
   const [homePosts, setHomePosts] = useState<HomePost[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
@@ -343,14 +346,13 @@ export default function App() {
   const [showInfoPage, setShowInfoPage] = useState(false);
   const [showPaymentPage, setShowPaymentPage] = useState(false);
   const [showBorrowedBooksPage, setShowBorrowedBooksPage] = useState(false);
+  const [showDonatePopup, setShowDonatePopup] = useState(false);
+  const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showJoinDonorForm, setShowJoinDonorForm] = useState(false);
-  const [showMessagesOverlay, setShowMessagesOverlay] = useState(false);
-  const [activeChat, setActiveChat] = useState<Member | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isNewChatSearchOpen, setIsNewChatSearchOpen] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
+  const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
   const [isDonorSubmitting, setIsDonorSubmitting] = useState(false);
   const [donorFormMsg, setDonorFormMsg] = useState<{ text: string, type: 'success' | 'error' | 'warning' | null }>({ text: '', type: null });
@@ -582,93 +584,6 @@ export default function App() {
     }
   };
 
-  const handleFirestoreError = (error: any, operationType: string, path: string | null) => {
-    const errInfo = {
-      error: error instanceof Error ? error.message : String(error),
-      authInfo: {
-        userId: auth.currentUser?.uid,
-        email: auth.currentUser?.email,
-        emailVerified: auth.currentUser?.emailVerified,
-        isAnonymous: auth.currentUser?.isAnonymous,
-      },
-      operationType,
-      path
-    };
-    console.error('Firestore Error: ', JSON.stringify(errInfo));
-    // throw new Error(JSON.stringify(errInfo)); // Don't throw to avoid crashing, just log and handle
-  };
-
-  // Firebase Auth and Messaging
-  useEffect(() => {
-    if (currentUser) {
-      const initAuth = async () => {
-        try {
-          const userCredential = await signInAnonymously(auth);
-          const user = userCredential.user;
-          // Map auth UID to member ID in Firestore
-          await setDoc(doc(db, 'users', user.uid), { memberId: currentUser.id }, { merge: true });
-          setIsAuthReady(true);
-          setAuthError(null);
-        } catch (err: any) {
-          console.error("Firebase Auth Error:", err);
-          if (err.code === 'auth/admin-restricted-operation') {
-            setAuthError("Anonymous Auth is disabled in Firebase Console. Please enable it to use messaging.");
-          } else {
-            setAuthError(err.message);
-          }
-        }
-      };
-      initAuth();
-    } else {
-      setIsAuthReady(false);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (isAuthReady && currentUser) {
-      // Listen for messages
-      const q = query(
-        collection(db, 'messages'),
-        where('participants', 'array-contains', currentUser.id),
-        orderBy('timestamp', 'asc')
-      );
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const msgs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Message[];
-        
-        // Client-side filtering for 2-hour limit
-        const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
-        const filteredMsgs = msgs.filter(m => {
-          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : Date.now();
-          return ts > twoHoursAgo;
-        });
-        
-        setMessages(filteredMsgs);
-
-        // Cleanup old messages (where current user is sender)
-        const oldMsgs = msgs.filter(m => {
-          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : Date.now();
-          return ts < twoHoursAgo && m.senderId === currentUser.id;
-        });
-        
-        oldMsgs.forEach(async (m) => {
-          try {
-            await deleteDoc(doc(db, 'messages', m.id));
-          } catch (err) {
-            handleFirestoreError(err, 'delete', `messages/${m.id}`);
-          }
-        });
-      }, (err) => {
-        handleFirestoreError(err, 'list', 'messages');
-      });
-
-      return () => unsubscribe();
-    }
-  }, [isAuthReady, currentUser]);
-
   const loadInitialData = async () => {
     setIsLoading(true);
     const [posts, donors, allBooks] = await Promise.all([
@@ -680,6 +595,30 @@ export default function App() {
     setDonorData(donors);
     setBooks(allBooks);
     setIsLoading(false);
+  };
+
+  const isSpecialMember = (member: Member | null) => {
+    if (!member) return false;
+    const des = member.designation.toLowerCase();
+    return des.includes('founder') || des.includes('developer');
+  };
+
+  useEffect(() => {
+    if (activeTab === 'members' && isSpecialMember(currentUser) && allMembers.length === 0) {
+      setIsLoading(true);
+      fetchAllMembers().then(members => {
+        setAllMembers(members);
+        setIsLoading(false);
+      });
+    }
+  }, [activeTab, currentUser]);
+
+  const handleMemberClick = async (member: Member) => {
+    setSelectedMemberProfile(member);
+    setIsProfileLoading(true);
+    const payments = await fetchPaymentHistory(member.id, member.phone);
+    setMemberProfilePayments(payments);
+    setIsProfileLoading(false);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -698,21 +637,6 @@ export default function App() {
       const payments = await fetchPaymentHistory(id, phone);
       setPaymentData(payments);
       localStorage.setItem('seba_payments', JSON.stringify(payments));
-      
-      // Sign in to Firebase Auth
-      try {
-        const userCredential = await signInAnonymously(auth);
-        await setDoc(doc(db, 'users', userCredential.user.uid), { memberId: member.id }, { merge: true });
-        setIsAuthReady(true);
-        setAuthError(null);
-      } catch (err: any) {
-        console.error("Firebase Auth Error during login:", err);
-        if (err.code === 'auth/admin-restricted-operation') {
-          setAuthError("Anonymous Auth is disabled in Firebase Console.");
-        } else {
-          setAuthError(err.message);
-        }
-      }
     } else {
       alert("সদস্য পাওয়া যায়নি!");
     }
@@ -817,15 +741,7 @@ export default function App() {
           <Menu className="w-6 h-6" />
         </button>
         <h1 className="text-lg font-bold flex-1 ml-3">সেবা ফাউন্ডেশন</h1>
-        <div className="flex items-center gap-2">
-          {currentUser && (
-            <button onClick={() => setShowMessagesOverlay(true)} className="p-2 relative">
-              <MessageSquare className="w-6 h-6" />
-              {messages.length > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-emerald-500" />
-              )}
-            </button>
-          )}
+        <div className="flex items-center gap-4">
           <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2">
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
@@ -1037,8 +953,8 @@ export default function App() {
               )}>
                 <Search className="w-5 h-5 text-slate-400" />
                 <input 
-                  type="password" 
-                  placeholder="কন্টাক্ট নম্বর লিখুন..." 
+                  type={isSpecialMember(currentUser) ? "text" : "password"} 
+                  placeholder={isSpecialMember(currentUser) ? "নাম, আইডি বা ফোন নম্বর..." : "কন্টাক্ট নম্বর লিখুন..."} 
                   className="flex-1 py-3 bg-transparent outline-none text-sm"
                   value={memberSearchQuery}
                   onChange={(e) => setMemberSearchQuery(e.target.value)}
@@ -1047,30 +963,75 @@ export default function App() {
               </div>
             </div>
             <div className="mt-4 space-y-3">
-              {isLoading && memberSearchQuery ? (
-                <div className="text-center p-4">খোঁজা হচ্ছে...</div>
-              ) : foundMembers.length > 0 ? (
-                foundMembers.map((m, idx) => (
-                  <div key={`member-${idx}-${m.id}`} className={cn(
-                    "flex items-center gap-4 p-3 rounded-xl border",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                  )}>
-                    <img 
-                      src={m.photoId ? `https://lh3.googleusercontent.com/d/${m.photoId}` : 'https://via.placeholder.com/60'} 
-                      className="w-14 h-14 rounded-lg object-cover"
-                      alt={m.name}
-                    />
-                    <div>
-                      <h4 className="font-bold">{m.name}</h4>
-                      <p className="text-xs opacity-70">{m.designation}</p>
+              {(() => {
+                if (isSpecialMember(currentUser)) {
+                  const query = memberSearchQuery.toLowerCase();
+                  const filtered = allMembers.filter(m => 
+                    m.name.toLowerCase().includes(query) || 
+                    m.id.toLowerCase().includes(query) || 
+                    m.phone.includes(query)
+                  );
+
+                  if (isLoading && allMembers.length === 0) {
+                    return <div className="text-center p-4">সদস্য তালিকা লোড হচ্ছে...</div>;
+                  }
+
+                  if (filtered.length === 0) {
+                    return <div className="text-center p-10 opacity-50">কোনো সদস্য পাওয়া যায়নি!</div>;
+                  }
+
+                  return filtered.map((m, idx) => (
+                    <button 
+                      key={`member-${idx}-${m.id}`} 
+                      onClick={() => handleMemberClick(m)}
+                      className={cn(
+                        "w-full flex items-center gap-4 p-3 rounded-xl border text-left active:scale-95 transition-transform",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}
+                    >
+                      <img 
+                        src={m.photoId ? `https://lh3.googleusercontent.com/d/${m.photoId}` : 'https://via.placeholder.com/60'} 
+                        className="w-14 h-14 rounded-lg object-cover"
+                        alt={m.name}
+                      />
+                      <div>
+                        <h4 className="font-bold">{m.name}</h4>
+                        <p className="text-xs opacity-70">{m.designation}</p>
+                      </div>
+                    </button>
+                  ));
+                }
+
+                // Normal member search logic
+                if (isLoading && memberSearchQuery) {
+                  return <div className="text-center p-4">খোঁজা হচ্ছে...</div>;
+                }
+                
+                if (foundMembers.length > 0) {
+                  return foundMembers.map((m, idx) => (
+                    <div key={`member-${idx}-${m.id}`} className={cn(
+                      "flex items-center gap-4 p-3 rounded-xl border",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                    )}>
+                      <img 
+                        src={m.photoId ? `https://lh3.googleusercontent.com/d/${m.photoId}` : 'https://via.placeholder.com/60'} 
+                        className="w-14 h-14 rounded-lg object-cover"
+                        alt={m.name}
+                      />
+                      <div>
+                        <h4 className="font-bold">{m.name}</h4>
+                        <p className="text-xs opacity-70">{m.designation}</p>
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : memberSearchQuery && !isLoading ? (
-                <div className="text-center p-10 text-red-500">পাওয়া যায়নি!</div>
-              ) : (
-                <div className="text-center p-10 opacity-50">সদস্য খুঁজতে ফোন নম্বর দিন</div>
-              )}
+                  ));
+                }
+
+                if (memberSearchQuery && !isLoading) {
+                  return <div className="text-center p-10 text-red-500">পাওয়া যায়নি!</div>;
+                }
+
+                return <div className="text-center p-10 opacity-50">সদস্য খুঁজতে ফোন নম্বর দিন</div>;
+              })()}
             </div>
           </div>
 
@@ -1151,7 +1112,7 @@ export default function App() {
           </div>
 
           {/* Profile Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto">
+          <div className="w-1/5 h-full overflow-y-auto p-4 pt-0 max-w-2xl mx-auto">
             {!currentUser ? (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
@@ -1184,6 +1145,12 @@ export default function App() {
 
                 <div className="w-full pt-6 space-y-2">
                   <ProfileMenuLink 
+                    icon={<Heart className="w-5 h-5 text-red-500" />} 
+                    label="Donate" 
+                    onClick={() => { setIsNumberCopied(false); setShowDonatePopup(true); }} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
                     label="Dark Mode" 
                     onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -1209,21 +1176,26 @@ export default function App() {
             ) : (
               <div className="space-y-6">
                 <div className={cn(
-                  "text-center p-6 rounded-2xl border",
-                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                  "sticky top-0 z-10 pt-4 pb-2",
+                  isDarkMode ? "bg-slate-900" : "bg-slate-50"
                 )}>
-                  <div className="relative inline-block">
-                    <img 
-                      src={currentUser.photoId ? `https://lh3.googleusercontent.com/d/${currentUser.photoId}` : 'https://via.placeholder.com/100'} 
-                      className="w-24 h-24 rounded-full border-4 border-emerald-500 object-cover mx-auto"
-                      alt={currentUser.name}
-                    />
+                  <div className={cn(
+                    "text-center p-6 rounded-2xl border shadow-sm",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                  )}>
+                    <div className="relative inline-block">
+                      <img 
+                        src={currentUser.photoId ? `https://lh3.googleusercontent.com/d/${currentUser.photoId}` : 'https://via.placeholder.com/100'} 
+                        className="w-24 h-24 rounded-full border-4 border-emerald-500 object-cover mx-auto"
+                        alt={currentUser.name}
+                      />
+                    </div>
+                    <h2 className="text-2xl font-bold mt-4 mb-1">{currentUser.name}</h2>
+                    <p className="text-slate-500 font-medium">{currentUser.designation}</p>
                   </div>
-                  <h2 className="text-2xl font-bold mt-4 mb-1">{currentUser.name}</h2>
-                  <p className="text-slate-500 font-medium">{currentUser.designation}</p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 px-1">
                   <ProfileMenuLink 
                     icon={<Info className="w-5 h-5" />} 
                     label="Information" 
@@ -1256,6 +1228,12 @@ export default function App() {
                     rightElement={<div className={cn("w-10 h-5 rounded-full relative transition-colors", isDarkMode ? "bg-emerald-500" : "bg-slate-300")}><div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", isDarkMode ? "right-1" : "left-1")} /></div>}
                   />
                   <ProfileMenuLink 
+                    icon={<Heart className="w-5 h-5 text-red-500" />} 
+                    label="Donate" 
+                    onClick={() => { setIsNumberCopied(false); setShowDonatePopup(true); }} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={<Facebook className="w-5 h-5" />} 
                     label="Facebook Page" 
                     onClick={() => window.open('https://www.facebook.com/profile.php?id=100071182715718', '_blank')} 
@@ -1284,7 +1262,94 @@ export default function App() {
           </div>
         </div>
 
-        {/* FAB for joining as donor - Moved outside transformed container for visibility */}
+        {/* Donate Popup */}
+      <AnimatePresence>
+        {showDonatePopup && (
+          <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDonatePopup(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className={cn(
+                "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10",
+                isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+              )}
+            >
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <Heart className="w-8 h-8 text-red-500 fill-red-500" />
+                </div>
+                <h3 className="text-xl font-bold">অনুদান দিন</h3>
+                <p className="text-sm leading-relaxed opacity-80">
+                  আসসালামু আলাইকুম, আমাদের সেবা ফাউন্ডেশনে অনুদান দিতে নিম্নলিখিত বিকাশ অথবা নগদ নাম্বারে সেন্ড মানি করুন - 
+                </p>
+                
+                <div className={cn(
+                  "w-full p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all",
+                  isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-slate-50 border-slate-200",
+                  isNumberCopied && "border-emerald-500 bg-emerald-50/10"
+                )}>
+                  <span className="text-lg font-bold tracking-wider">01821293053</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText('01821293053');
+                      setIsNumberCopied(true);
+                      setTimeout(() => {
+                        setShowDonatePopup(false);
+                        setTimeout(() => setIsNumberCopied(false), 300);
+                      }, 1500);
+                    }}
+                    className={cn(
+                      "p-2 rounded-xl active:scale-90 transition-all",
+                      isNumberCopied ? "bg-emerald-500 text-white" : "bg-emerald-500 text-white"
+                    )}
+                  >
+                    {isNumberCopied ? (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', damping: 12 }}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </motion.div>
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+
+                {isNumberCopied && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-xs font-bold text-emerald-500"
+                  >
+                    নম্বরটি কপি করা হয়েছে!
+                  </motion.p>
+                )}
+
+                <p className="text-sm font-bold text-emerald-500">ধন্যবাদ!</p>
+
+                <button 
+                  onClick={() => setShowDonatePopup(false)}
+                  className="w-full py-3 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform mt-2"
+                >
+                  বন্ধ করুন
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* FAB for joining as donor - Moved outside transformed container for visibility */}
         <AnimatePresence>
           {activeTab === 'blood' && isDonorFabVisible && (
             <motion.button
@@ -1405,142 +1470,99 @@ export default function App() {
           </OverlayPage>
         )}
 
+        {selectedMemberProfile && (
+          <OverlayPage 
+            key="member-full-profile" 
+            title="সদস্য প্রোফাইল" 
+            onClose={() => setSelectedMemberProfile(null)} 
+            isDarkMode={isDarkMode}
+          >
+            <div className="space-y-6 pb-10">
+              {/* Profile Header */}
+              <div className="flex flex-col items-center text-center space-y-3">
+                <img 
+                  src={selectedMemberProfile.photoId ? `https://lh3.googleusercontent.com/d/${selectedMemberProfile.photoId}` : 'https://via.placeholder.com/120'} 
+                  className="w-24 h-24 rounded-2xl object-cover shadow-xl border-4 border-emerald-500/20"
+                  alt={selectedMemberProfile.name}
+                />
+                <div>
+                  <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
+                  <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>
+                </div>
+              </div>
+
+              {/* Sections */}
+              <div className="space-y-4">
+                {/* Information */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ব্যক্তিগত তথ্য</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    <InfoItem label="আইডি" value={selectedMemberProfile.id} isDarkMode={isDarkMode} />
+                    <InfoItem label="এলাকা" value={selectedMemberProfile.area} isDarkMode={isDarkMode} />
+                    <InfoItem label="রক্তের গ্রুপ" value={selectedMemberProfile.bloodGroup} isDarkMode={isDarkMode} />
+                    <InfoItem label="ফোন" value={selectedMemberProfile.phone} isDarkMode={isDarkMode} />
+                    <InfoItem label="ইমেইল" value={selectedMemberProfile.email} isDarkMode={isDarkMode} />
+                    <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />
+                    <InfoItem label="যোগদানের তারিখ" value={selectedMemberProfile.joiningDate} isDarkMode={isDarkMode} />
+                  </div>
+                </div>
+
+                {/* Payment History */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">পেমেন্ট হিস্টোরি</h3>
+                  {isProfileLoading ? (
+                    <div className="text-center p-4">লোড হচ্ছে...</div>
+                  ) : memberProfilePayments.length === 0 ? (
+                    <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {memberProfilePayments.map((p, idx) => (
+                        <div key={`prof-pay-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                          <div>
+                            <span className="block font-bold text-sm">{p.reason}</span>
+                            <span className="text-[10px] opacity-60">{formatDate(p.date)}</span>
+                          </div>
+                          <div className="font-bold text-emerald-500">৳{p.amount}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Borrowed Books */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
+                  {(() => {
+                    const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
+                    if (userBooks.length === 0) {
+                      return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {userBooks.map((book, idx) => (
+                          <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="block font-bold text-sm">{book.name}</span>
+                                <span className="text-[10px] opacity-60">{book.author}</span>
+                              </div>
+                              <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{book.date}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          </OverlayPage>
+        )}
+
         {showTicTacToe && (
           <OverlayPage key="tictactoe-overlay" title="TicTacToe Game" onClose={() => setShowTicTacToe(false)} isDarkMode={isDarkMode}>
             <TicTacToeGame isDarkMode={isDarkMode} />
           </OverlayPage>
-        )}
-
-        {showMessagesOverlay && currentUser && (
-          <OverlayPage 
-            key="messages-overlay" 
-            title={activeChat ? activeChat.name : "মেসেজসমূহ"} 
-            onClose={() => {
-              if (activeChat) setActiveChat(null);
-              else setShowMessagesOverlay(false);
-            }} 
-            isDarkMode={isDarkMode}
-          >
-            {authError && (
-              <div className="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm">
-                {authError}
-              </div>
-            )}
-            {activeChat ? (
-              <ChatWindow 
-                currentUser={currentUser} 
-                recipient={activeChat} 
-                messages={messages.filter(m => m.participants.includes(activeChat.id))}
-                isDarkMode={isDarkMode}
-              />
-            ) : (
-              <div className="flex flex-col h-[calc(100vh-120px)]">
-                <div className="flex-1 overflow-y-auto space-y-2 pb-20">
-                  {(() => {
-                    const conversations = messages.reduce((acc: any[], msg) => {
-                      const otherId = msg.senderId === currentUser.id ? msg.receiverId : msg.senderId;
-                      const otherName = msg.senderId === currentUser.id ? msg.receiverName : msg.senderName;
-                      
-                      if (!acc.find(c => c.id === otherId)) {
-                        acc.push({ id: otherId, name: otherName, lastMessage: msg.text, timestamp: msg.timestamp });
-                      } else {
-                        const existing = acc.find(c => c.id === otherId);
-                        if (msg.timestamp?.toMillis() > existing.timestamp?.toMillis()) {
-                          existing.lastMessage = msg.text;
-                          existing.timestamp = msg.timestamp;
-                        }
-                      }
-                      return acc;
-                    }, []).sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
-
-                    if (conversations.length === 0) {
-                      return (
-                        <div className="flex flex-col items-center justify-center h-full opacity-50 py-20">
-                          <MessageSquare className="w-12 h-12 mb-2" />
-                          <p>কোনো মেসেজ নেই</p>
-                        </div>
-                      );
-                    }
-
-                    return conversations.map(conv => (
-                      <button
-                        key={conv.id}
-                        onClick={() => setActiveChat({ id: conv.id, name: conv.name } as Member)}
-                        className={cn(
-                          "w-full p-4 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.98]",
-                          isDarkMode ? "bg-slate-800/50 hover:bg-slate-800" : "bg-slate-100 hover:bg-slate-200"
-                        )}
-                      >
-                        <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-xl">
-                          {conv.name[0]}
-                        </div>
-                        <div className="flex-1 text-left">
-                          <h4 className="font-bold">{conv.name}</h4>
-                          <p className="text-sm opacity-60 truncate max-w-[200px]">{conv.lastMessage}</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 opacity-30" />
-                      </button>
-                    ));
-                  })()}
-                </div>
-
-                <button
-                  onClick={() => setIsNewChatSearchOpen(true)}
-                  className="fixed bottom-24 right-8 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-xl flex items-center justify-center transition-all active:scale-90 z-50"
-                >
-                  <Plus className="w-8 h-8" />
-                </button>
-              </div>
-            )}
-          </OverlayPage>
-        )}
-
-        {isNewChatSearchOpen && (
-          <div className="fixed inset-0 z-[6000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={cn(
-                "w-full max-w-md rounded-3xl p-6 shadow-2xl",
-                isDarkMode ? "bg-slate-900" : "bg-white"
-              )}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold">নতুন মেসেজ</h3>
-                <button onClick={() => setIsNewChatSearchOpen(false)} className="p-2 opacity-50">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              
-              <div className="relative mb-6">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 opacity-30" />
-                <input 
-                  type="tel"
-                  placeholder="ফোন নাম্বার দিয়ে খুঁজুন..."
-                  className={cn(
-                    "w-full pl-12 pr-4 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                    isDarkMode ? "bg-slate-800" : "bg-slate-100"
-                  )}
-                  onKeyDown={async (e) => {
-                    if (e.key === 'Enter') {
-                      const val = (e.target as HTMLInputElement).value;
-                      if (val.length >= 10) {
-                        const results = await searchMembers(val);
-                        if (results.length > 0) {
-                          setActiveChat(results[0]);
-                          setIsNewChatSearchOpen(false);
-                          setShowMessagesOverlay(true);
-                        } else {
-                          alert("সদস্য পাওয়া যায়নি!");
-                        }
-                      }
-                    }
-                  }}
-                />
-              </div>
-              <p className="text-xs opacity-50 text-center">সদস্যের ফোন নাম্বার লিখে এন্টার চাপুন</p>
-            </motion.div>
-          </div>
         )}
 
         {showJoinDonorForm && (
@@ -2138,84 +2160,6 @@ function InvoiceRow({ label, value }: { label: string, value: string }) {
     <div className="flex justify-between items-center text-sm">
       <span className="text-slate-400 font-medium">{label}:</span>
       <span className="text-slate-900 font-bold text-right">{value}</span>
-    </div>
-  );
-}
-
-function ChatWindow({ currentUser, recipient, messages, isDarkMode }: { currentUser: Member, recipient: Member, messages: Message[], isDarkMode: boolean }) {
-  const [inputText, setInputText] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
-    
-    const text = inputText.trim();
-    setInputText('');
-
-    try {
-      await addDoc(collection(db, 'messages'), {
-        senderId: currentUser.id,
-        receiverId: recipient.id,
-        senderName: currentUser.name,
-        receiverName: recipient.name,
-        text: text,
-        timestamp: serverTimestamp(),
-        participants: [currentUser.id, recipient.id]
-      });
-    } catch (err) {
-      console.error("Error sending message:", err);
-      alert("মেসেজ পাঠানো যায়নি!");
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg) => {
-          const isMe = msg.senderId === currentUser.id;
-          return (
-            <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
-              <div className={cn(
-                "max-w-[80%] p-3 rounded-2xl text-sm shadow-sm",
-                isMe 
-                  ? "bg-emerald-500 text-white rounded-tr-none" 
-                  : (isDarkMode ? "bg-slate-800 text-white rounded-tl-none" : "bg-white text-slate-900 rounded-tl-none")
-              )}>
-                {msg.text}
-              </div>
-              <span className="text-[10px] opacity-40 mt-1">
-                {msg.timestamp?.toMillis ? new Date(msg.timestamp.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...'}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex gap-2">
-        <input 
-          type="text"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="মেসেজ লিখুন..."
-          className={cn(
-            "flex-1 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500",
-            isDarkMode ? "bg-slate-800" : "bg-slate-100"
-          )}
-        />
-        <button 
-          onClick={handleSend}
-          className="w-12 h-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center transition-all active:scale-90"
-        >
-          <Send className="w-5 h-5" />
-        </button>
-      </div>
     </div>
   );
 }

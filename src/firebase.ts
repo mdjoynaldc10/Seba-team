@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp, where, doc, setDoc, getDoc, deleteDoc, getDocs, limit } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -12,7 +12,7 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 export const storage = getStorage(app);
 
-export { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp, ref, uploadBytes, getDownloadURL, signInAnonymously, where, doc, setDoc, getDoc, deleteDoc, getDocs, limit };
+export { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp, ref, uploadBytes, getDownloadURL, where, doc, setDoc, getDoc, deleteDoc, getDocs, limit };
 
 export interface UserPost {
   id: string;
