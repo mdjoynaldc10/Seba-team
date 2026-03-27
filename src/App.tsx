@@ -13,7 +13,6 @@ import {
   ArrowLeft, 
   Info, 
   FileText, 
-  Download,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -711,20 +710,6 @@ export default function App() {
     if (isNaN(date.getTime())) return dateValue;
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${date.getDate().toString().padStart(2, '0')} ${months[date.getMonth()]}, ${date.getFullYear()}`;
-  };
-
-  const downloadInvoice = async () => {
-    const area = document.getElementById('capture-area');
-    if (!area) return;
-    
-    const canvas = await html2canvas(area, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-    });
-    const link = document.createElement('a');
-    link.download = `Seba_Invoice_${Date.now()}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1989,7 +1974,10 @@ export default function App() {
             </div>
           </OverlayPage>
         )}
+      </AnimatePresence>
 
+      {/* Invoice Modal - Outside main AnimatePresence to stay on top of background pages */}
+      <AnimatePresence>
         {selectedPayment && currentUser && (
           <div key="invoice-modal-overlay" className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
             <motion.div 
@@ -2006,8 +1994,8 @@ export default function App() {
               <div className="relative z-10">
                 <div className="text-center border-b-2 border-dashed border-slate-200 pb-6 mb-6">
                   <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                  <h2 className="text-2xl font-bold text-emerald-500">পেমেন্ট ইনভয়েস</h2>
-                  <p className="text-xs text-slate-400 mt-1">সেবা ফাউন্ডেশন - ডিজিটাল রিসিট</p>
+                  <h2 className="text-2xl font-bold text-emerald-500">সেবা ফাউন্ডেশন</h2>
+                  <p className="text-xs text-slate-400 mt-1">ডিজিটাল রিসিট</p>
                 </div>
                 
                 <div className="space-y-3">
@@ -2020,10 +2008,6 @@ export default function App() {
                     <span className="text-lg font-medium">মোট টাকা:</span>
                     <span className="text-2xl font-bold text-emerald-500">৳{selectedPayment.amount}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400 flex justify-between pt-2">
-                    <span>ট্রানজ্যাকশন আইডি:</span>
-                    <span>TXN{Math.floor(Math.random() * 900000 + 100000)}</span>
-                  </div>
                 </div>
 
                 <div className="text-center mt-8 pt-4 border-t border-slate-50 text-[10px] text-slate-400">
@@ -2033,14 +2017,8 @@ export default function App() {
 
               <div className="mt-6 flex flex-col gap-2 no-capture">
                 <button 
-                  onClick={downloadInvoice}
-                  className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <Download className="w-5 h-5" /> ইমেজ ডাউনলোড করুন
-                </button>
-                <button 
                   onClick={() => setSelectedPayment(null)}
-                  className="w-full h-10 text-slate-400 font-medium"
+                  className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
                 >
                   বন্ধ করুন
                 </button>
