@@ -15,6 +15,7 @@ import {
   FileText, 
   Download,
   CheckCircle2,
+  AlertCircle,
   Loader2,
   BookOpen,
   Filter,
@@ -22,9 +23,12 @@ import {
   Smartphone,
   Facebook,
   ExternalLink,
+  MessageCircle,
   Gamepad2,
   Plus,
-  Copy
+  Copy,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -45,6 +49,7 @@ interface Member {
   email: string;
   joiningDate: string;
   photoId?: string;
+  access: string;
 }
 
 interface Payment {
@@ -148,28 +153,35 @@ async function fetchBooks(): Promise<Book[]> {
 
 async function loginMember(id: string, phone: string): Promise<Member | null> {
   try {
-    for (const sheet of MEMBER_SHEETS) {
+    const promises = MEMBER_SHEETS.map(async (sheet) => {
       const q = encodeURIComponent(`SELECT * WHERE D = '${id}' AND G CONTAINS '${phone}'`);
-      const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}&tq=${q}`);
-      const text = await res.text();
-      const json = JSON.parse(text.substring(47).slice(0, -2));
-      if (json.table.rows.length) {
-        const r = json.table.rows[0].c;
-        return {
-          name: String(r[0]?.v || '').trim(),
-          designation: String(r[1]?.v || '').trim(),
-          area: String(r[2]?.v || '').trim(),
-          id: String(r[3]?.v || '').trim(),
-          dob: String(r[4]?.v || '').trim(),
-          bloodGroup: String(r[5]?.v || '').trim(),
-          phone: String(r[6]?.v || '').trim(),
-          email: String(r[7]?.v || '').trim(),
-          joiningDate: String(r[8]?.v || '').trim(),
-          photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0]
-        };
+      try {
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}&tq=${q}`);
+        const text = await res.text();
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        if (json.table.rows.length) {
+          const r = json.table.rows[0].c;
+          return {
+            name: String(r[0]?.v || '').trim(),
+            designation: String(r[1]?.v || '').trim(),
+            area: String(r[2]?.v || '').trim(),
+            id: String(r[3]?.v || '').trim(),
+            dob: String(r[4]?.v || '').trim(),
+            bloodGroup: String(r[5]?.v || '').trim(),
+            phone: String(r[6]?.v || '').trim(),
+            email: String(r[7]?.v || '').trim(),
+            joiningDate: String(r[8]?.v || '').trim(),
+            photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
+            access: String(r[10]?.v || '').trim()
+          };
+        }
+        return null;
+      } catch (e) {
+        return null;
       }
-    }
-    return null;
+    });
+    const results = await Promise.all(promises);
+    return results.find(m => m !== null) || null;
   } catch (e) {
     console.error("Error logging in member:", e);
     return null;
@@ -246,14 +258,14 @@ async function fetchAllDonors(): Promise<Donor[]> {
 
 async function searchMembers(phone: string): Promise<Member[]> {
   try {
-    let allFound: Member[] = [];
-    for (const s of MEMBER_SHEETS) {
+    const fetchPromises = MEMBER_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}'`);
-      const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${s}&tq=${q}`);
-      const text = await res.text();
-      const json = JSON.parse(text.substring(47).slice(0, -2));
-      if (json.table.rows.length) {
-        const members = json.table.rows.map((row: any) => {
+      try {
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${s}&tq=${q}`);
+        const text = await res.text();
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        if (!json.table || !json.table.rows) return [];
+        return json.table.rows.map((row: any) => {
           const d = row.c;
           return {
             name: String(d[0]?.v || '').trim(),
@@ -265,13 +277,18 @@ async function searchMembers(phone: string): Promise<Member[]> {
             phone: String(d[6]?.v || '').trim(),
             email: String(d[7]?.v || '').trim(),
             joiningDate: String(d[8]?.v || '').trim(),
-            photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0]
+            photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0],
+            access: String(d[10]?.v || '').trim()
           };
         });
-        allFound = [...allFound, ...members];
+      } catch (e) {
+        return [];
       }
-    }
-    return allFound;
+    });
+    const allResults = await Promise.all(fetchPromises);
+    const flatResults = allResults.flat();
+    // Remove duplicates by ID
+    return Array.from(new Map(flatResults.map(m => [m.id, m])).values());
   } catch (e) {
     console.error("Error searching members:", e);
     return [];
@@ -286,7 +303,8 @@ async function fetchAllMembers(): Promise<Member[]> {
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
           if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any) => {
+          // Skip the first row (header)
+          return json.table.rows.slice(1).map((row: any) => {
             const r = row.c;
             if (!r || !r[0]?.v) return null;
             return {
@@ -299,13 +317,16 @@ async function fetchAllMembers(): Promise<Member[]> {
               phone: String(r[6]?.v || '').trim(),
               email: String(r[7]?.v || '').trim(),
               joiningDate: String(r[8]?.v || '').trim(),
-              photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0]
+              photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
+              access: String(r[10]?.v || '').trim()
             };
           }).filter(Boolean);
         })
     );
     const allResults = await Promise.all(fetchPromises);
-    return allResults.flat();
+    const flatResults = allResults.flat();
+    // Remove duplicates by ID
+    return Array.from(new Map(flatResults.map(m => [m.id, m])).values());
   } catch (e) {
     console.error("Error fetching all members:", e);
     return [];
@@ -351,6 +372,7 @@ export default function App() {
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showJoinDonorForm, setShowJoinDonorForm] = useState(false);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
@@ -360,6 +382,8 @@ export default function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showBorrowForm, setShowBorrowForm] = useState(false);
   const [isRequestSent, setIsRequestSent] = useState(false);
+  const [showLoginError, setShowLoginError] = useState(false);
+  const [loginErrorMsg, setLoginErrorMsg] = useState('');
   const [borrowFormData, setBorrowFormData] = useState({
     name: '',
     id: '',
@@ -387,6 +411,15 @@ export default function App() {
       }));
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (showLoginError) {
+      const timer = setTimeout(() => {
+        setShowLoginError(false);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [showLoginError]);
 
   const handleBorrowRequest = () => {
     if (!selectedBook) return;
@@ -599,8 +632,7 @@ export default function App() {
 
   const isSpecialMember = (member: Member | null) => {
     if (!member) return false;
-    const des = member.designation.toLowerCase();
-    return des.includes('founder') || des.includes('developer');
+    return member.access === 'Admin';
   };
 
   useEffect(() => {
@@ -638,7 +670,8 @@ export default function App() {
       setPaymentData(payments);
       localStorage.setItem('seba_payments', JSON.stringify(payments));
     } else {
-      alert("সদস্য পাওয়া যায়নি!");
+      setLoginErrorMsg("সদস্য পাওয়া যায়নি! আইডি নাম্বারে SF বড় হাতের দিন এবং ফোন নাম্বার শুন্য (০) ছাড়া লিখুন।");
+      setShowLoginError(true);
     }
     setIsGlobalLoading(false);
   };
@@ -989,11 +1022,17 @@ export default function App() {
                         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                       )}
                     >
-                      <img 
-                        src={m.photoId ? `https://lh3.googleusercontent.com/d/${m.photoId}` : 'https://via.placeholder.com/60'} 
-                        className="w-14 h-14 rounded-lg object-cover"
-                        alt={m.name}
-                      />
+                      {m.photoId ? (
+                        <img 
+                          src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
+                          className="w-14 h-14 rounded-lg object-cover"
+                          alt={m.name}
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
+                          <User className="w-8 h-8" />
+                        </div>
+                      )}
                       <div>
                         <h4 className="font-bold">{m.name}</h4>
                         <p className="text-xs opacity-70">{m.designation}</p>
@@ -1013,11 +1052,17 @@ export default function App() {
                       "flex items-center gap-4 p-3 rounded-xl border",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                     )}>
-                      <img 
-                        src={m.photoId ? `https://lh3.googleusercontent.com/d/${m.photoId}` : 'https://via.placeholder.com/60'} 
-                        className="w-14 h-14 rounded-lg object-cover"
-                        alt={m.name}
-                      />
+                      {m.photoId ? (
+                        <img 
+                          src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
+                          className="w-14 h-14 rounded-lg object-cover"
+                          alt={m.name}
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
+                          <User className="w-8 h-8" />
+                        </div>
+                      )}
                       <div>
                         <h4 className="font-bold">{m.name}</h4>
                         <p className="text-xs opacity-70">{m.designation}</p>
@@ -1171,6 +1216,13 @@ export default function App() {
                     isDarkMode={isDarkMode}
                     rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
                   />
+                  <ProfileMenuLink 
+                    icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
+                    label="WhatsApp Channel" 
+                    onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
+                    isDarkMode={isDarkMode}
+                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
+                  />
                 </div>
               </div>
             ) : (
@@ -1244,6 +1296,13 @@ export default function App() {
                     icon={<Facebook className="w-5 h-5" />} 
                     label="Facebook Group" 
                     onClick={() => window.open('https://www.facebook.com/share/g/17BCSBMTA8/', '_blank')} 
+                    isDarkMode={isDarkMode}
+                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
+                  />
+                  <ProfileMenuLink 
+                    icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
+                    label="WhatsApp Channel" 
+                    onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
                     isDarkMode={isDarkMode}
                     rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
                   />
@@ -1340,6 +1399,46 @@ export default function App() {
                 <button 
                   onClick={() => setShowDonatePopup(false)}
                   className="w-full py-3 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform mt-2"
+                >
+                  বন্ধ করুন
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Login Error Popup */}
+      <AnimatePresence>
+        {showLoginError && (
+          <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLoginError(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className={cn(
+                "relative w-full max-w-xs p-6 rounded-3xl shadow-2xl z-10 border-2",
+                isDarkMode ? "bg-slate-800 border-red-500/30 text-white" : "bg-white border-red-100 text-slate-900"
+              )}
+            >
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-red-500" />
+                </div>
+                <h3 className="text-lg font-bold text-red-500">সতর্কবার্তা!</h3>
+                <p className="text-sm leading-relaxed font-medium">
+                  {loginErrorMsg}
+                </p>
+                <button 
+                  onClick={() => setShowLoginError(false)}
+                  className="w-full py-3 bg-red-500 text-white rounded-2xl font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform mt-2"
                 >
                   বন্ধ করুন
                 </button>
@@ -1478,82 +1577,151 @@ export default function App() {
             isDarkMode={isDarkMode}
           >
             <div className="space-y-6 pb-10">
-              {/* Profile Header */}
-              <div className="flex flex-col items-center text-center space-y-3">
-                <img 
-                  src={selectedMemberProfile.photoId ? `https://lh3.googleusercontent.com/d/${selectedMemberProfile.photoId}` : 'https://via.placeholder.com/120'} 
-                  className="w-24 h-24 rounded-2xl object-cover shadow-xl border-4 border-emerald-500/20"
-                  alt={selectedMemberProfile.name}
-                />
-                <div>
-                  <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
-                  <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>
-                </div>
-              </div>
-
-              {/* Sections */}
-              <div className="space-y-4">
-                {/* Information */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ব্যক্তিগত তথ্য</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    <InfoItem label="আইডি" value={selectedMemberProfile.id} isDarkMode={isDarkMode} />
-                    <InfoItem label="এলাকা" value={selectedMemberProfile.area} isDarkMode={isDarkMode} />
-                    <InfoItem label="রক্তের গ্রুপ" value={selectedMemberProfile.bloodGroup} isDarkMode={isDarkMode} />
-                    <InfoItem label="ফোন" value={selectedMemberProfile.phone} isDarkMode={isDarkMode} />
-                    <InfoItem label="ইমেইল" value={selectedMemberProfile.email} isDarkMode={isDarkMode} />
-                    <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />
-                    <InfoItem label="যোগদানের তারিখ" value={selectedMemberProfile.joiningDate} isDarkMode={isDarkMode} />
+              {/* Profile Header - Sticky */}
+              <div className={cn(
+                "sticky top-0 z-50 bg-inherit pt-2 pb-4 space-y-4 shadow-sm -mx-4 px-4",
+                isDarkMode ? "bg-slate-900" : "bg-slate-50"
+              )}>
+                <div className="flex flex-col items-center text-center space-y-3">
+                  {selectedMemberProfile.photoId ? (
+                    <img 
+                      src={`https://lh3.googleusercontent.com/d/${selectedMemberProfile.photoId}`} 
+                      className="w-24 h-24 rounded-2xl object-cover shadow-xl border-4 border-emerald-500/20"
+                      alt={selectedMemberProfile.name}
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500 shadow-xl border-4 border-emerald-500/20">
+                      <User className="w-12 h-12" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
+                    <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>
+                  </div>
+                  
+                  {/* Call and Mail Buttons - Iconic */}
+                  <div className="flex gap-6">
+                    <a 
+                      href={`tel:${selectedMemberProfile.phone}`} 
+                      className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/30 active:scale-90 transition-all border-2 border-white/20"
+                      title="Call"
+                    >
+                      <Phone className="w-6 h-6" />
+                    </a>
+                    <a 
+                      href={`mailto:${selectedMemberProfile.email}`} 
+                      className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/30 active:scale-90 transition-all border-2 border-white/20"
+                      title="Mail"
+                    >
+                      <Mail className="w-6 h-6" />
+                    </a>
                   </div>
                 </div>
 
-                {/* Payment History */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">পেমেন্ট হিস্টোরি</h3>
-                  {isProfileLoading ? (
-                    <div className="text-center p-4">লোড হচ্ছে...</div>
-                  ) : memberProfilePayments.length === 0 ? (
-                    <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {memberProfilePayments.map((p, idx) => (
-                        <div key={`prof-pay-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
-                          <div>
-                            <span className="block font-bold text-sm">{p.reason}</span>
-                            <span className="text-[10px] opacity-60">{formatDate(p.date)}</span>
-                          </div>
-                          <div className="font-bold text-emerald-500">৳{p.amount}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Tab Navigation Buttons - Sticky with Active/Inactive Effect */}
+                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                  <button 
+                    onClick={() => setActiveProfileTab('info')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                      activeProfileTab === 'info' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:text-emerald-500"
+                    )}
+                  >
+                    Information
+                  </button>
+                  <button 
+                    onClick={() => setActiveProfileTab('payments')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                      activeProfileTab === 'payments' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:text-emerald-500"
+                    )}
+                  >
+                    Payments
+                  </button>
+                  <button 
+                    onClick={() => setActiveProfileTab('books')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                      activeProfileTab === 'books' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:text-emerald-500"
+                    )}
+                  >
+                    Books
+                  </button>
                 </div>
+              </div>
 
-                {/* Borrowed Books */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
-                  {(() => {
-                    const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
-                    if (userBooks.length === 0) {
-                      return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
-                    }
-                    return (
+              {/* Tab Content */}
+              <div className="space-y-4">
+                {activeProfileTab === 'info' && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ব্যক্তিগত তথ্য</h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      <InfoItem label="আইডি" value={selectedMemberProfile.id} isDarkMode={isDarkMode} />
+                      <InfoItem label="এলাকা" value={selectedMemberProfile.area} isDarkMode={isDarkMode} />
+                      <InfoItem label="রক্তের গ্রুপ" value={selectedMemberProfile.bloodGroup} isDarkMode={isDarkMode} />
+                      <InfoItem label="ফোন" value={selectedMemberProfile.phone} isDarkMode={isDarkMode} />
+                      <InfoItem label="ইমেইল" value={selectedMemberProfile.email} isDarkMode={isDarkMode} />
+                      <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />
+                      <InfoItem label="যোগদানের তারিখ" value={selectedMemberProfile.joiningDate} isDarkMode={isDarkMode} />
+                    </div>
+                  </div>
+                )}
+
+                {activeProfileTab === 'payments' && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">পেমেন্ট হিস্টোরি</h3>
+                    {isProfileLoading ? (
+                      <div className="text-center p-4">লোড হচ্ছে...</div>
+                    ) : memberProfilePayments.length === 0 ? (
+                      <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
+                    ) : (
                       <div className="space-y-2">
-                        {userBooks.map((book, idx) => (
-                          <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="block font-bold text-sm">{book.name}</span>
-                                <span className="text-[10px] opacity-60">{book.author}</span>
-                              </div>
-                              <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{book.date}</span>
+                        {memberProfilePayments.map((p, idx) => (
+                          <div key={`prof-pay-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                            <div>
+                              <span className="block font-bold text-sm">{p.reason}</span>
+                              <span className="text-[10px] opacity-60">{formatDate(p.date)}</span>
                             </div>
+                            <div className="font-bold text-emerald-500">৳{p.amount}</div>
                           </div>
                         ))}
                       </div>
-                    );
-                  })()}
-                </div>
+                    )}
+                  </div>
+                )}
+
+                {activeProfileTab === 'books' && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
+                    {(() => {
+                      const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
+                      if (userBooks.length === 0) {
+                        return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
+                      }
+                      return (
+                        <div className="space-y-2">
+                          {userBooks.map((book, idx) => (
+                            <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="block font-bold text-sm">{book.name}</span>
+                                  <span className="text-[10px] opacity-60">{book.author}</span>
+                                </div>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{book.date}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           </OverlayPage>
