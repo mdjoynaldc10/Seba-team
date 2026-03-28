@@ -1960,7 +1960,7 @@ export default function App() {
                                   <span className="block font-bold text-sm">{book.name}</span>
                                   <span className="text-[10px] opacity-60">{book.author}</span>
                                 </div>
-                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{book.date}</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{formatDate(book.date)}</span>
                               </div>
                             </div>
                           ))}
@@ -2128,7 +2128,7 @@ export default function App() {
               <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider">গ্রহীতার তথ্য</h3>
               <InfoItem label="গ্রহীতা" value={selectedBook.recipient || 'N/A'} isDarkMode={isDarkMode} />
               <InfoItem label="আইডি নং" value={selectedBook.recipientId || 'N/A'} isDarkMode={isDarkMode} />
-              <InfoItem label="তারিখ" value={selectedBook.date || 'N/A'} isDarkMode={isDarkMode} />
+              <InfoItem label="তারিখ" value={formatDate(selectedBook.date)} isDarkMode={isDarkMode} />
               <InfoItem label="ঠিকানা" value={selectedBook.address || 'N/A'} isDarkMode={isDarkMode} />
             </div>
 
