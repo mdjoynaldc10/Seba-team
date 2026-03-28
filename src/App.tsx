@@ -680,7 +680,7 @@ export default function App() {
         showNotice
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
   const touchStartX = useRef(0);
@@ -1417,10 +1417,7 @@ export default function App() {
                   )}>
                     <div className="absolute top-4 right-4">
                       <button 
-                        onClick={() => {
-                          setShowNotificationsPage(true);
-                          window.history.pushState({ page: 'notifications' }, '');
-                        }}
+                        onClick={() => setShowNotificationsPage(true)}
                         className="relative p-2 bg-transparent rounded-full text-white active:scale-95 transition-all"
                         style={{ backgroundColor: '#FFFFFF00' }}
                       >
@@ -2395,10 +2392,7 @@ export default function App() {
                 return myNotifications.map((n, idx) => (
                   <button 
                     key={`notif-list-${idx}`}
-                    onClick={() => {
-                      setSelectedNotification(n);
-                      window.history.pushState({ ...window.history.state, selectedNotification: n }, '');
-                    }}
+                    onClick={() => setSelectedNotification(n)}
                     className={cn(
                       "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -2421,9 +2415,10 @@ export default function App() {
             <AnimatePresence>
               {selectedNotification && (
                 <motion.div 
-                  initial={{ x: '100%' }}
-                  animate={{ x: 0 }}
-                  exit={{ x: '100%' }}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
                   className={cn(
                     "fixed inset-0 z-[5000] flex flex-col",
                     isDarkMode ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-900"
@@ -2439,7 +2434,7 @@ export default function App() {
                     >
                       <ArrowLeft className="w-6 h-6" />
                     </button>
-                    <h2 className="text-lg font-bold">বিস্তারিত নোটিফিকেশন</h2>
+                    <h2 className="text-lg font-bold">বিস্তারিত</h2>
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-6">
