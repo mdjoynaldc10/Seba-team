@@ -27,7 +27,8 @@ import {
   Plus,
   Copy,
   Phone,
-  Mail
+  Mail,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -109,6 +110,12 @@ interface Notice {
   message: string;
 }
 
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+}
+
 // --- Sheets Logic ---
 const HOME_SHEET_ID = '1YBSs5w0E5ujQBhCXkO4wtmVWbeEd66O7LJbaMXZAKEE';
 const MEMBER_SHEET_ID = '1pJ5Tg-ihE1TQT4VO9wus52o9Rbm7Iv5ck5XMdjvlino';
@@ -159,6 +166,26 @@ async function fetchNotice(): Promise<Notice | null> {
   } catch (e) {
     console.error("Error fetching notice:", e);
     return null;
+  }
+}
+
+async function fetchNotifications(): Promise<Notification[]> {
+  try {
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    if (!json.table || !json.table.rows) return [];
+    return json.table.rows.map((row: any) => {
+      const r = row.c;
+      return {
+        id: String(r[0]?.v || '').trim(),
+        title: String(r[1]?.v || '').trim(),
+        message: String(r[2]?.v || '').trim()
+      };
+    });
+  } catch (e) {
+    console.error("Error fetching notifications:", e);
+    return [];
   }
 }
 
@@ -502,6 +529,9 @@ export default function App() {
   const [loginErrorMsg, setLoginErrorMsg] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [showNotice, setShowNotice] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotificationsPage, setShowNotificationsPage] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [borrowFormData, setBorrowFormData] = useState({
     name: '',
     id: '',
@@ -588,6 +618,8 @@ export default function App() {
         setSelectedBook(event.state.selectedBook || null);
         setSelectedPayment(event.state.selectedPayment || null);
         setSelectedMemberProfile(event.state.selectedMemberProfile || null);
+        setShowNotificationsPage(!!event.state.showNotificationsPage);
+        setSelectedNotification(event.state.selectedNotification || null);
         setShowDonatePopup(!!event.state.showDonatePopup);
         setShowLoginError(!!event.state.showLoginError);
         setShowBorrowForm(!!event.state.showBorrowForm);
@@ -612,6 +644,8 @@ export default function App() {
       selectedBook,
       selectedPayment,
       selectedMemberProfile,
+      showNotificationsPage,
+      selectedNotification,
       showDonatePopup,
       showLoginError,
       showBorrowForm,
@@ -638,6 +672,8 @@ export default function App() {
         selectedBook,
         selectedPayment,
         selectedMemberProfile,
+        showNotificationsPage,
+        selectedNotification,
         showDonatePopup,
         showLoginError,
         showBorrowForm,
@@ -761,19 +797,21 @@ export default function App() {
 
   const loadInitialData = async () => {
     setIsLoading(true);
-    const [posts, donors, allBooks, projects, transactions, noticeData] = await Promise.all([
+    const [posts, donors, allBooks, projects, transactions, noticeData, notificationData] = await Promise.all([
       fetchHomePosts(),
       fetchAllDonors(),
       fetchBooks(),
       fetchDonationProjects(),
       fetchDonationTransactions(),
-      fetchNotice()
+      fetchNotice(),
+      fetchNotifications()
     ]);
     setHomePosts(posts);
     setDonorData(donors);
     setBooks(allBooks);
     setDonationProjects(projects);
     setDonationTransactions(transactions);
+    setNotifications(notificationData);
     
     if (noticeData && noticeData.title && noticeData.message) {
       setNotice(noticeData);
@@ -1374,9 +1412,24 @@ export default function App() {
                   isDarkMode ? "bg-slate-900" : "bg-slate-50"
                 )}>
                   <div className={cn(
-                    "text-center p-6 rounded-2xl border shadow-sm",
+                    "text-center p-6 rounded-2xl border shadow-sm relative",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                   )}>
+                    <div className="absolute top-4 right-4">
+                      <button 
+                        onClick={() => {
+                          setShowNotificationsPage(true);
+                          window.history.pushState({ page: 'notifications' }, '');
+                        }}
+                        className="relative p-2 bg-transparent rounded-full text-white active:scale-95 transition-all"
+                        style={{ backgroundColor: '#FFFFFF00' }}
+                      >
+                        <Bell className={cn("w-6 h-6", isDarkMode ? "text-white" : "text-slate-400")} />
+                        {notifications.some(n => n.id === currentUser.id && n.message) && (
+                          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
+                        )}
+                      </button>
+                    </div>
                     <div className="relative inline-block">
                       <img 
                         src={currentUser.photoId ? `https://lh3.googleusercontent.com/d/${currentUser.photoId}` : 'https://via.placeholder.com/100'} 
@@ -2325,6 +2378,94 @@ export default function App() {
           </OverlayPage>
         )}
       </AnimatePresence>
+
+        {showNotificationsPage && currentUser && (
+          <OverlayPage 
+            key="notifications-overlay" 
+            title="নোটিফিকেশন" 
+            onClose={() => window.history.back()} 
+            isDarkMode={isDarkMode}
+          >
+            <div className="space-y-3">
+              {(() => {
+                const myNotifications = notifications.filter(n => n.id === currentUser.id && n.message);
+                if (myNotifications.length === 0) {
+                  return <div className="text-center p-10 opacity-50">কোনো নোটিফিকেশন পাওয়া যায়নি</div>;
+                }
+                return myNotifications.map((n, idx) => (
+                  <button 
+                    key={`notif-list-${idx}`}
+                    onClick={() => {
+                      setSelectedNotification(n);
+                      window.history.pushState({ ...window.history.state, selectedNotification: n }, '');
+                    }}
+                    className={cn(
+                      "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                    )}
+                  >
+                    <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
+                      <Bell className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold truncate">{n.title}</h4>
+                      <p className="text-xs opacity-60 truncate">{n.message}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 opacity-30" />
+                  </button>
+                ));
+              })()}
+            </div>
+
+            {/* Full Screen Notification Detail */}
+            <AnimatePresence>
+              {selectedNotification && (
+                <motion.div 
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  className={cn(
+                    "fixed inset-0 z-[5000] flex flex-col",
+                    isDarkMode ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-900"
+                  )}
+                >
+                  <div className={cn(
+                    "flex items-center gap-4 p-4 border-b",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                  )}>
+                    <button 
+                      onClick={() => window.history.back()}
+                      className="p-2 rounded-xl active:scale-90 transition-transform"
+                    >
+                      <ArrowLeft className="w-6 h-6" />
+                    </button>
+                    <h2 className="text-lg font-bold">বিস্তারিত নোটিফিকেশন</h2>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6">
+                    <div className="flex flex-col items-center text-center space-y-6 max-w-lg mx-auto">
+                      <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+                        <Bell className="w-10 h-10 text-emerald-500" />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <h3 className="text-2xl font-bold text-emerald-500">{selectedNotification.title}</h3>
+                        <div className="h-1 w-20 bg-emerald-500/20 mx-auto rounded-full" />
+                      </div>
+                      
+                      <div className={cn(
+                        "w-full p-6 rounded-3xl text-lg leading-relaxed shadow-sm border",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        {selectedNotification.message}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </OverlayPage>
+        )}
 
       {/* Invoice Modal - Outside main AnimatePresence to stay on top of background pages */}
       <AnimatePresence>
