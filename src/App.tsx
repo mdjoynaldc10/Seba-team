@@ -828,7 +828,7 @@ export default function App() {
     }
     if (isNaN(date.getTime())) return dateValue;
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${date.getDate().toString().padStart(2, '0')} ${months[date.getMonth()]}, ${date.getFullYear()}`;
+    return `${date.getDate()} ${months[date.getMonth()]}, ${date.getFullYear()}`;
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1802,7 +1802,7 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="p-2 rounded-lg bg-emerald-500 text-white">
                         <span className="block text-white/80 mb-1">গ্রহণের তারিখ</span>
-                        <span className="font-bold">{book.date || 'N/A'}</span>
+                        <span className="font-bold">{formatDate(book.date)}</span>
                       </div>
                       <div className="p-2 rounded-lg bg-emerald-500 text-white">
                         <span className="block text-white/80 mb-1">ধরণ</span>
