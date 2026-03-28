@@ -104,6 +104,11 @@ interface DonationTransaction {
   method: string;
 }
 
+interface Notice {
+  title: string;
+  message: string;
+}
+
 // --- Sheets Logic ---
 const HOME_SHEET_ID = '1YBSs5w0E5ujQBhCXkO4wtmVWbeEd66O7LJbaMXZAKEE';
 const MEMBER_SHEET_ID = '1pJ5Tg-ihE1TQT4VO9wus52o9Rbm7Iv5ck5XMdjvlino';
@@ -120,9 +125,10 @@ const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'S
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
+    if (!json.table || !json.table.rows) return [];
     return json.table.rows.map((row: any) => {
       const r = row.c;
       return {
@@ -135,6 +141,24 @@ async function fetchHomePosts(): Promise<HomePost[]> {
   } catch (e) {
     console.error("Error fetching home posts:", e);
     return [];
+  }
+}
+
+async function fetchNotice(): Promise<Notice | null> {
+  try {
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
+    const r = json.table.rows[0].c;
+    if (!r || !r[0]?.v || !r[1]?.v) return null;
+    return {
+      title: String(r[0]?.v || '').trim(),
+      message: String(r[1]?.v || '').trim()
+    };
+  } catch (e) {
+    console.error("Error fetching notice:", e);
+    return null;
   }
 }
 
@@ -177,7 +201,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
     const promises = MEMBER_SHEETS.map(async (sheet) => {
       const q = encodeURIComponent(`SELECT * WHERE D = '${id}' AND G CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (json.table.rows.length) {
@@ -214,7 +238,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${s}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -282,7 +306,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = MEMBER_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${s}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -319,13 +343,12 @@ async function searchMembers(phone: string): Promise<Member[]> {
 async function fetchAllMembers(): Promise<Member[]> {
   try {
     const fetchPromises = MEMBER_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
           if (!json.table || !json.table.rows) return [];
-          // Skip the first row (header)
-          return json.table.rows.slice(1).map((row: any) => {
+          return json.table.rows.map((row: any) => {
             const r = row.c;
             if (!r || !r[0]?.v) return null;
             return {
@@ -477,6 +500,8 @@ export default function App() {
   const [isRequestSent, setIsRequestSent] = useState(false);
   const [showLoginError, setShowLoginError] = useState(false);
   const [loginErrorMsg, setLoginErrorMsg] = useState('');
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [showNotice, setShowNotice] = useState(false);
   const [borrowFormData, setBorrowFormData] = useState({
     name: '',
     id: '',
@@ -566,6 +591,7 @@ export default function App() {
         setShowDonatePopup(!!event.state.showDonatePopup);
         setShowLoginError(!!event.state.showLoginError);
         setShowBorrowForm(!!event.state.showBorrowForm);
+        setShowNotice(!!event.state.showNotice);
         setTimeout(() => {
           isInternalNavigation.current = false;
         }, 50);
@@ -588,7 +614,8 @@ export default function App() {
       selectedMemberProfile,
       showDonatePopup,
       showLoginError,
-      showBorrowForm
+      showBorrowForm,
+      showNotice
     }, '');
 
     window.addEventListener('popstate', handlePopState);
@@ -613,10 +640,11 @@ export default function App() {
         selectedMemberProfile,
         showDonatePopup,
         showLoginError,
-        showBorrowForm
+        showBorrowForm,
+        showNotice
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showDonatePopup, showLoginError, showBorrowForm]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
   const touchStartX = useRef(0);
@@ -733,18 +761,28 @@ export default function App() {
 
   const loadInitialData = async () => {
     setIsLoading(true);
-    const [posts, donors, allBooks, projects, transactions] = await Promise.all([
+    const [posts, donors, allBooks, projects, transactions, noticeData] = await Promise.all([
       fetchHomePosts(),
       fetchAllDonors(),
       fetchBooks(),
       fetchDonationProjects(),
-      fetchDonationTransactions()
+      fetchDonationTransactions(),
+      fetchNotice()
     ]);
     setHomePosts(posts);
     setDonorData(donors);
     setBooks(allBooks);
     setDonationProjects(projects);
     setDonationTransactions(transactions);
+    
+    if (noticeData && noticeData.title && noticeData.message) {
+      setNotice(noticeData);
+      setShowNotice(true);
+      // Play notification sound
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+      audio.play().catch(e => console.log("Audio play failed:", e));
+    }
+    
     setIsLoading(false);
   };
 
@@ -1424,6 +1462,56 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {/* Notice Modal */}
+        <AnimatePresence>
+          {showNotice && notice && (
+            <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => window.history.back()}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className={cn(
+                  "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10 overflow-hidden",
+                  isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
+                )}
+              >
+                {/* Decorative background element */}
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
+                
+                <div className="flex flex-col items-center text-center space-y-4 relative z-10">
+                  <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-2">
+                    <AlertCircle className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  
+                  <h3 className="text-2xl font-bold text-emerald-500">{notice.title}</h3>
+                  
+                  <div className={cn(
+                    "w-full p-4 rounded-2xl text-sm leading-relaxed",
+                    isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
+                  )}>
+                    {notice.message}
+                  </div>
+                  
+                  <button 
+                    onClick={() => window.history.back()}
+                    className="w-full py-3 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <X className="w-5 h-5" />
+                    বন্ধ করুন
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Donate Popup */}
       <AnimatePresence>
