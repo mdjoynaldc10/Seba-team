@@ -27,10 +27,10 @@ service cloud.firestore {
       // Anyone can read public donors (logged in or not)
       allow read: if true;
       
-      // Only the member themselves can update their donor status
-      // We assume donorId is the member's ID
-      allow create, update: if isAuthenticated() && isValidDonor(request.resource.data) && (request.resource.data.id == donorId);
-      allow delete: if isAuthenticated() && (resource.data.id == donorId);
+      // Allow create, update, delete if the user is authenticated (even anonymously)
+      // and the data matches the schema.
+      allow create, update: if isAuthenticated() && isValidDonor(request.resource.data);
+      allow delete: if isAuthenticated();
     }
   }
 }

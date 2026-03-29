@@ -36,8 +36,9 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 
 // --- Types ---
 interface Member {
@@ -499,6 +500,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
+  const [isTogglingBlood, setIsTogglingBlood] = useState(false);
   const [publicDonors, setPublicDonors] = useState<Donor[]>([]);
   const [paymentData, setPaymentData] = useState<Payment[]>([]);
   const [donorData, setDonorData] = useState<Donor[]>([]);
@@ -729,6 +731,9 @@ export default function App() {
   useEffect(() => {
     loadInitialData();
 
+    // Silent anonymous login to Firebase for Firestore access
+    signInAnonymously(auth).catch(err => console.error("Firebase Auth Error:", err));
+
     // Load saved user from localStorage
     const savedUser = localStorage.getItem('seba_user');
     const savedPayments = localStorage.getItem('seba_payments');
@@ -780,8 +785,10 @@ export default function App() {
   }, [currentUser]);
 
   const toggleBloodDonation = async () => {
-    if (!currentUser) return;
+    if (!currentUser || isTogglingBlood) return;
+    setIsTogglingBlood(true);
     const newState = !bloodDonationEnabled;
+    const path = `publicDonors/${currentUser.id}`;
     try {
       if (newState) {
         await setDoc(doc(db, 'publicDonors', currentUser.id), {
@@ -799,7 +806,19 @@ export default function App() {
       setBloodDonationEnabled(newState);
     } catch (error) {
       console.error("Error toggling blood donation:", error);
-      alert("Error updating status. Please try again.");
+      const errInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        operationType: newState ? 'write' : 'delete',
+        path,
+        auth: {
+          uid: auth.currentUser?.uid,
+          isAnonymous: auth.currentUser?.isAnonymous
+        }
+      };
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check if your domain is authorized in Firebase.`);
+      throw new Error(JSON.stringify(errInfo));
+    } finally {
+      setIsTogglingBlood(false);
     }
   };
 
@@ -1675,14 +1694,15 @@ export default function App() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
-                    icon={<Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
+                    icon={isTogglingBlood ? <Loader2 className="w-5 h-5 animate-spin text-red-500" /> : <Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
                     label="Blood Donation" 
                     onClick={toggleBloodDonation} 
                     isDarkMode={isDarkMode}
                     rightElement={
                       <div className={cn(
                         "w-10 h-5 rounded-full relative transition-colors", 
-                        bloodDonationEnabled ? "bg-red-500" : "bg-slate-300"
+                        bloodDonationEnabled ? "bg-red-500" : "bg-slate-300",
+                        isTogglingBlood && "opacity-50"
                       )}>
                         <div className={cn(
                           "absolute top-1 w-3 h-3 bg-white rounded-full transition-all", 
