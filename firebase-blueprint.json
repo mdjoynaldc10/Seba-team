@@ -14,12 +14,47 @@
         "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
       },
       "required": ["id", "name", "group", "district", "phone", "enabled"]
+    },
+    "tictactoe_games": {
+      "title": "TicTacToe Game",
+      "description": "State of a TicTacToe game",
+      "type": "object",
+      "properties": {
+        "board": { "type": "array", "items": { "type": ["string", "null"] } },
+        "isXNext": { "type": "boolean" },
+        "winner": { "type": ["string", "null"] },
+        "winningLine": { "type": ["array", "null"], "items": { "type": "number" } },
+        "player1Id": { "type": "string" },
+        "player2Id": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["board", "isXNext", "player1Id", "player2Id"]
+    },
+    "post_reactions": {
+      "title": "Post Reaction",
+      "description": "Love reaction on a homepage post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "Encoded post ID" },
+        "userId": { "type": "string", "description": "User ID who reacted" },
+        "userName": { "type": "string", "description": "User Name who reacted" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Reaction timestamp" }
+      },
+      "required": ["postId", "userId", "userName"]
     }
   },
   "firestore": {
     "/publicDonors/{donorId}": {
       "schema": "publicDonors",
       "description": "Collection of members who opted-in for public blood donation"
+    },
+    "/tictactoe_games/{gameId}": {
+      "schema": "tictactoe_games",
+      "description": "Real-time TicTacToe games between members"
+    },
+    "/post_reactions/{reactionId}": {
+      "schema": "post_reactions",
+      "description": "Collection of reactions on homepage posts"
     }
   }
 }

@@ -28,7 +28,8 @@ import {
   Copy,
   Phone,
   Mail,
-  Bell
+  Bell,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -37,7 +38,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth } from './firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 
 // --- Types ---
@@ -74,6 +75,13 @@ interface HomePost {
   date: string;
   content: string;
   photoId?: string;
+}
+
+interface PostReaction {
+  postId: string;
+  userId: string;
+  userName: string;
+  createdAt: any;
 }
 
 interface Book {
@@ -493,7 +501,117 @@ const BookImage = ({ book, isDarkMode, className }: { book: Book, isDarkMode: bo
   );
 };
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+};
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "Something went wrong.";
+      try {
+        const parsed = JSON.parse(this.state.error.message);
+        if (parsed.error) {
+          errorMessage = `Firestore Error: ${parsed.error} during ${parsed.operationType} on ${parsed.path}`;
+        }
+      } catch (e) {
+        errorMessage = this.state.error.message || String(this.state.error);
+      }
+
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50">
+          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-red-100">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <X className="w-8 h-8" />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 mb-2">দুঃখিত, একটি সমস্যা হয়েছে</h1>
+            <p className="text-slate-600 mb-6 text-sm leading-relaxed">
+              {errorMessage}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all"
+            >
+              আবার চেষ্টা করুন
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
@@ -509,6 +627,7 @@ export default function App() {
   const [donationProjects, setDonationProjects] = useState<DonationProject[]>([]);
   const [donationTransactions, setDonationTransactions] = useState<DonationTransaction[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
@@ -529,6 +648,11 @@ export default function App() {
   const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
   const [isDonorSubmitting, setIsDonorSubmitting] = useState(false);
   const [donorFormMsg, setDonorFormMsg] = useState<{ text: string, type: 'success' | 'error' | 'warning' | null }>({ text: '', type: null });
+  
+  // Post Reactions State
+  const [viewingReactorsForPostId, setViewingReactorsForPostId] = useState<string | null>(null);
+  const [reactorsList, setReactorsList] = useState<{ name: string }[]>([]);
+  const [isFetchingReactors, setIsFetchingReactors] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showBorrowForm, setShowBorrowForm] = useState(false);
@@ -732,7 +856,9 @@ export default function App() {
     loadInitialData();
 
     // Silent anonymous login to Firebase for Firestore access
-    signInAnonymously(auth).catch(err => console.error("Firebase Auth Error:", err));
+    signInAnonymously(auth)
+      .then(() => setIsAuthReady(true))
+      .catch(err => console.error("Firebase Auth Error:", err));
 
     // Load saved user from localStorage
     const savedUser = localStorage.getItem('seba_user');
@@ -751,6 +877,7 @@ export default function App() {
 
   // Listen for public donors from Firebase
   useEffect(() => {
+    if (!isAuthReady) return;
     const unsubscribe = onSnapshot(collection(db, 'publicDonors'), (snapshot) => {
       const donors: Donor[] = [];
       snapshot.forEach((doc) => {
@@ -766,23 +893,27 @@ export default function App() {
         }
       });
       setPublicDonors(donors);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'publicDonors');
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAuthReady]);
 
   // Sync current user's donation status from Firebase
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && isAuthReady) {
       const unsubscribe = onSnapshot(doc(db, 'publicDonors', currentUser.id), (doc) => {
         if (doc.exists()) {
           setBloodDonationEnabled(doc.data().enabled);
         } else {
           setBloodDonationEnabled(false);
         }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `publicDonors/${currentUser.id}`);
       });
       return () => unsubscribe();
     }
-  }, [currentUser]);
+  }, [currentUser, isAuthReady]);
 
   const toggleBloodDonation = async () => {
     if (!currentUser || isTogglingBlood) return;
@@ -799,24 +930,14 @@ export default function App() {
           phone: currentUser.phone,
           enabled: true,
           updatedAt: new Date().toISOString()
-        });
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, `publicDonors/${currentUser.id}`));
       } else {
-        await deleteDoc(doc(db, 'publicDonors', currentUser.id));
+        await deleteDoc(doc(db, 'publicDonors', currentUser.id))
+          .catch(err => handleFirestoreError(err, OperationType.DELETE, `publicDonors/${currentUser.id}`));
       }
       setBloodDonationEnabled(newState);
     } catch (error) {
       console.error("Error toggling blood donation:", error);
-      const errInfo = {
-        error: error instanceof Error ? error.message : String(error),
-        operationType: newState ? 'write' : 'delete',
-        path,
-        auth: {
-          uid: auth.currentUser?.uid,
-          isAnonymous: auth.currentUser?.isAnonymous
-        }
-      };
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check if your domain is authorized in Firebase.`);
-      throw new Error(JSON.stringify(errInfo));
     } finally {
       setIsTogglingBlood(false);
     }
@@ -925,6 +1046,21 @@ export default function App() {
     }
     
     setIsLoading(false);
+  };
+
+  const showReactors = async (postId: string) => {
+    setViewingReactorsForPostId(postId);
+    setIsFetchingReactors(true);
+    try {
+      const q = query(collection(db, 'post_reactions'), where('postId', '==', postId));
+      const snapshot = await getDocs(q);
+      const list = snapshot.docs.map(doc => ({ name: doc.data().userName }));
+      setReactorsList(list);
+    } catch (error) {
+      console.error("Error fetching reactors:", error);
+    } finally {
+      setIsFetchingReactors(false);
+    }
   };
 
   const isSpecialMember = (member: Member | null) => {
@@ -1265,6 +1401,14 @@ export default function App() {
                       alt="Post"
                     />
                   )}
+                  
+                  <PostReactionSection 
+                    postId={encodeURIComponent(post.title + post.date)}
+                    currentUser={currentUser}
+                    isDarkMode={isDarkMode}
+                    onViewReactors={() => showReactors(encodeURIComponent(post.title + post.date))}
+                    isAuthReady={isAuthReady}
+                  />
                 </div>
               ))
             )}
@@ -2420,7 +2564,7 @@ export default function App() {
 
         {showTicTacToe && (
           <OverlayPage key="tictactoe-overlay" title="TicTacToe Game" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <TicTacToeGame isDarkMode={isDarkMode} />
+            <TicTacToeGame isDarkMode={isDarkMode} allMembers={allMembers} isAuthReady={isAuthReady} />
           </OverlayPage>
         )}
 
@@ -2869,6 +3013,143 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Post Reactors Modal */}
+      <AnimatePresence>
+        {viewingReactorsForPostId && (
+          <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={cn(
+                "w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl border",
+                isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"
+              )}
+            >
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+                  Reactors
+                </h3>
+                <button 
+                  onClick={() => setViewingReactorsForPostId(null)}
+                  className="p-2 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+                {isFetchingReactors ? (
+                  <div className="flex justify-center p-10">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                  </div>
+                ) : reactorsList.length === 0 ? (
+                  <div className="text-center py-10 opacity-50 font-medium">
+                    এখনো কেউ রিঅ্যাক্ট দেয়নি
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {reactorsList.map((reactor, i) => (
+                      <div 
+                        key={i} 
+                        className={cn(
+                          "p-3 rounded-xl flex items-center gap-3 font-bold",
+                          isDarkMode ? "bg-slate-800" : "bg-slate-50"
+                        )}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">
+                          {reactor.name.charAt(0)}
+                        </div>
+                        {reactor.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function PostReactionSection({ postId, currentUser, isDarkMode, onViewReactors, isAuthReady }: { 
+  postId: string, 
+  currentUser: Member | null, 
+  isDarkMode: boolean,
+  onViewReactors: () => void,
+  isAuthReady: boolean
+}) {
+  const [reactions, setReactions] = useState<PostReaction[]>([]);
+  const [isReacting, setIsReacting] = useState(false);
+
+  useEffect(() => {
+    if (!postId || !isAuthReady) return;
+    const q = query(collection(db, 'post_reactions'), where('postId', '==', postId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data() as PostReaction);
+      setReactions(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `post_reactions?postId=${postId}`);
+    });
+    return () => unsubscribe();
+  }, [postId, isAuthReady]);
+
+  const hasReacted = currentUser && reactions.some(r => r.userId === currentUser.id);
+
+  const toggleReact = async () => {
+    if (!currentUser) {
+      alert("রিঅ্যাক্ট দিতে লগইন করুন");
+      return;
+    }
+    
+    setIsReacting(true);
+    const reactId = `${postId}_${currentUser.id}`;
+    
+    try {
+      if (hasReacted) {
+        await deleteDoc(doc(db, 'post_reactions', reactId))
+          .catch(err => handleFirestoreError(err, OperationType.DELETE, `post_reactions/${reactId}`));
+      } else {
+        await setDoc(doc(db, 'post_reactions', reactId), {
+          postId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          createdAt: serverTimestamp()
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, `post_reactions/${reactId}`));
+      }
+    } catch (error) {
+      console.error("Error toggling react:", error);
+    } finally {
+      setIsReacting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
+      <div className="flex items-center gap-1.5">
+        <button 
+          onClick={toggleReact}
+          disabled={isReacting}
+          className={cn(
+            "p-2 rounded-full transition-all active:scale-90",
+            hasReacted ? "bg-red-500/10 text-red-500" : "hover:bg-slate-100 text-slate-400"
+          )}
+        >
+          <Heart className={cn("w-5 h-5", hasReacted && "fill-red-500")} />
+        </button>
+        <span className="text-sm font-bold opacity-70">{reactions.length}</span>
+      </div>
+      
+      <button 
+        onClick={onViewReactors}
+        className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-all active:scale-90"
+      >
+        <Eye className="w-5 h-5" />
+      </button>
     </div>
   );
 }
@@ -2942,13 +3223,37 @@ function OverlayPage({ title, onClose, children, isDarkMode }: { title: string, 
   );
 }
 
-function TicTacToeGame({ isDarkMode }: { isDarkMode: boolean }) {
+function WinEffect() {
+  return (
+    <motion.div
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: [0, 1.2, 1], opacity: 1 }}
+      exit={{ scale: 0, opacity: 0 }}
+      className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg z-20"
+    >
+      WINNER!
+    </motion.div>
+  );
+}
+
+function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: boolean, allMembers: Member[], isAuthReady: boolean }) {
   const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
-  const [gameMode, setGameMode] = useState<'PvP' | 'PvE'>('PvE');
+  const [gameMode, setGameMode] = useState<'PvP' | 'PvE' | 'vs-member'>('PvE');
   const [difficulty, setDifficulty] = useState<'Medium' | 'Hard'>('Medium');
   const [winner, setWinner] = useState<string | null>(null);
   const [winningLine, setWinningLine] = useState<number[] | null>(null);
+  const [showWinEffect, setShowWinEffect] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Member IDs for vs-member mode
+  const [p1Id, setP1Id] = useState('');
+  const [p2Id, setP2Id] = useState('');
+  const [p1Info, setP1Info] = useState<Member | null>(null);
+  const [p2Info, setP2Info] = useState<Member | null>(null);
+  const [scores, setScores] = useState({ X: 0, O: 0 });
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const calculateWinner = (squares: (string | null)[]) => {
     const lines = [
@@ -2965,19 +3270,126 @@ function TicTacToeGame({ isDarkMode }: { isDarkMode: boolean }) {
     return null;
   };
 
-  const handleClick = (i: number) => {
+  // Sync with Firestore for vs-member mode
+  useEffect(() => {
+    if (gameMode === 'vs-member' && gameId && isAuthReady) {
+      const unsubscribe = onSnapshot(doc(db, 'tictactoe_games', gameId), (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          setBoard(data.board);
+          setIsXNext(data.isXNext);
+          setWinner(data.winner);
+          setWinningLine(data.winningLine);
+          
+          if (data.winner && data.winner !== 'Draw' && !showWinEffect) {
+            setShowWinEffect(true);
+            setScores(prev => ({
+              ...prev,
+              [data.winner]: prev[data.winner as keyof typeof prev] + 1
+            }));
+            setTimeout(() => setShowWinEffect(false), 2000);
+          }
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `tictactoe_games/${gameId}`);
+      });
+      return () => unsubscribe();
+    }
+  }, [gameMode, gameId, isAuthReady]);
+
+  const connectGame = async () => {
+    setError(null);
+    if (!p1Id || !p2Id) {
+      setError("উভয় প্লেয়ারের আইডি দিন");
+      return;
+    }
+
+    setIsConnecting(true);
+    
+    let members = allMembers;
+    if (members.length === 0) {
+      try {
+        members = await fetchAllMembers();
+      } catch (e) {
+        console.error("Failed to fetch members", e);
+      }
+    }
+
+    const m1 = members.find(m => m.id === p1Id);
+    const m2 = members.find(m => m.id === p2Id);
+
+    if (!m1 || !m2) {
+      setError("সঠিক আইডি দিন");
+      setIsConnecting(false);
+      return;
+    }
+
+    setP1Info(m1);
+    setP2Info(m2);
+
+    const id = [p1Id, p2Id].sort().join('_');
+    setGameId(id);
+    
+    try {
+      const gameDoc = doc(db, 'tictactoe_games', id);
+      // Initialize game if it doesn't exist
+      await setDoc(gameDoc, {
+        board: Array(9).fill(null),
+        isXNext: true,
+        winner: null,
+        winningLine: null,
+        player1Id: p1Id,
+        player2Id: p2Id,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `tictactoe_games/${id}`));
+      setIsConnecting(false);
+    } catch (error) {
+      console.error("Error connecting game:", error);
+      setIsConnecting(false);
+      alert("কানেক্ট করতে সমস্যা হয়েছে");
+    }
+  };
+
+  const handleClick = async (i: number) => {
     if (winner || board[i]) return;
+    
     const newBoard = [...board];
     newBoard[i] = isXNext ? 'X' : 'O';
-    setBoard(newBoard);
-    setIsXNext(!isXNext);
     
     const winInfo = calculateWinner(newBoard);
+    let currentWinner = null;
+    let currentWinningLine = null;
+    
     if (winInfo) {
-      setWinner(winInfo.winner);
-      setWinningLine(winInfo.line);
+      currentWinner = winInfo.winner;
+      currentWinningLine = winInfo.line;
+      setShowWinEffect(true);
+      setScores(prev => ({
+        ...prev,
+        [currentWinner]: prev[currentWinner as keyof typeof prev] + 1
+      }));
+      setTimeout(() => setShowWinEffect(false), 2000);
     } else if (!newBoard.includes(null)) {
-      setWinner('Draw');
+      currentWinner = 'Draw';
+    }
+
+    if (gameMode === 'vs-member' && gameId) {
+      try {
+        await setDoc(doc(db, 'tictactoe_games', gameId), {
+          board: newBoard,
+          isXNext: !isXNext,
+          winner: currentWinner,
+          winningLine: currentWinningLine,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `tictactoe_games/${gameId}`));
+      } catch (error) {
+        console.error("Error updating game:", error);
+      }
+    } else {
+      setBoard(newBoard);
+      setIsXNext(!isXNext);
+      setWinner(currentWinner);
+      setWinningLine(currentWinningLine);
     }
   };
 
@@ -3050,29 +3462,154 @@ function TicTacToeGame({ isDarkMode }: { isDarkMode: boolean }) {
     return moves[bestMove];
   };
 
-  const resetGame = () => {
-    setBoard(Array(9).fill(null));
-    setIsXNext(true);
-    setWinner(null);
-    setWinningLine(null);
+  const resetGame = async () => {
+    if (gameMode === 'vs-member' && gameId) {
+      try {
+        await setDoc(doc(db, 'tictactoe_games', gameId), {
+          board: Array(9).fill(null),
+          isXNext: true,
+          winner: null,
+          winningLine: null,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (error) {
+        console.error("Error resetting game:", error);
+      }
+    } else {
+      setBoard(Array(9).fill(null));
+      setIsXNext(true);
+      setWinner(null);
+      setWinningLine(null);
+    }
+    setShowWinEffect(false);
   };
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex gap-2 mb-4 w-full">
+    <div className="flex flex-col items-center relative min-h-[500px]">
+      {/* Opponent Info (Top Left) */}
+      {gameMode === 'vs-member' && p2Info && gameId && (
+        <div className="absolute top-0 left-0 flex items-center gap-3 p-2">
+          <div className="relative">
+            <div className={cn(
+              "w-12 h-12 rounded-full border-2 border-amber-500 flex items-center justify-center overflow-hidden",
+              isDarkMode ? "bg-slate-800" : "bg-slate-100"
+            )}>
+              {p2Info.photoId ? (
+                <img 
+                  src={`https://lh3.googleusercontent.com/d/${p2Info.photoId}`} 
+                  alt={p2Info.name} 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <User className="w-6 h-6 text-slate-400" />
+              )}
+            </div>
+            <AnimatePresence>
+              {winner === 'O' && showWinEffect && <WinEffect />}
+            </AnimatePresence>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold truncate max-w-[80px]">{p2Info.name}</span>
+            <span className="text-lg font-black text-amber-500">{scores.O}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Self Info (Top Right) */}
+      {gameMode === 'vs-member' && p1Info && gameId && (
+        <div className="absolute top-0 right-0 flex items-center gap-3 p-2 flex-row-reverse">
+          <div className="relative">
+            <div className={cn(
+              "w-12 h-12 rounded-full border-2 border-emerald-500 flex items-center justify-center overflow-hidden",
+              isDarkMode ? "bg-slate-800" : "bg-slate-100"
+            )}>
+              {p1Info.photoId ? (
+                <img 
+                  src={`https://lh3.googleusercontent.com/d/${p1Info.photoId}`} 
+                  alt={p1Info.name} 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <User className="w-6 h-6 text-slate-400" />
+              )}
+            </div>
+            <AnimatePresence>
+              {winner === 'X' && showWinEffect && <WinEffect />}
+            </AnimatePresence>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-xs font-bold truncate max-w-[80px]">{p1Info.name}</span>
+            <span className="text-lg font-black text-emerald-500">{scores.X}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 mb-4 w-full mt-20">
         <button 
-          onClick={() => { setGameMode('PvE'); resetGame(); }}
-          className={cn("flex-1 py-2 rounded-xl text-sm font-bold transition-all", gameMode === 'PvE' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          onClick={() => { setGameMode('PvE'); resetGame(); setError(null); }}
+          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'PvE' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
         >
           Vs Computer
         </button>
         <button 
-          onClick={() => { setGameMode('PvP'); resetGame(); }}
-          className={cn("flex-1 py-2 rounded-xl text-sm font-bold transition-all", gameMode === 'PvP' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          onClick={() => { setGameMode('PvP'); resetGame(); setError(null); }}
+          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'PvP' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
         >
           Vs Friend
         </button>
+        <button 
+          onClick={() => { setGameMode('vs-member'); resetGame(); setError(null); }}
+          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'vs-member' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+        >
+          Vs Seba member
+        </button>
       </div>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full p-3 mb-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold text-center"
+        >
+          {error}
+        </motion.div>
+      )}
+
+      {gameMode === 'vs-member' && !gameId && (
+        <div className="w-full space-y-3 mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold opacity-60">আপনার আইডি (X)</label>
+              <input 
+                type="text" 
+                value={p1Id}
+                onChange={(e) => setP1Id(e.target.value)}
+                placeholder="ID 1"
+                className={cn("w-full h-10 px-3 rounded-xl text-sm font-bold border focus:ring-2 focus:ring-emerald-500 outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200")}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold opacity-60">বিপরীত আইডি (O)</label>
+              <input 
+                type="text" 
+                value={p2Id}
+                onChange={(e) => setP2Id(e.target.value)}
+                placeholder="ID 2"
+                className={cn("w-full h-10 px-3 rounded-xl text-sm font-bold border focus:ring-2 focus:ring-emerald-500 outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200")}
+              />
+            </div>
+          </div>
+          <button 
+            onClick={connectGame}
+            disabled={isConnecting}
+            className="w-full h-10 bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+          >
+            {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : "কানেক্ট করুন"}
+          </button>
+        </div>
+      )}
 
       {gameMode === 'PvE' && (
         <div className="flex gap-2 mb-6 w-full">
@@ -3097,9 +3634,15 @@ function TicTacToeGame({ isDarkMode }: { isDarkMode: boolean }) {
             key={i}
             onClick={() => handleClick(i)}
             className={cn(
-              "w-20 h-20 text-3xl font-bold rounded-2xl flex items-center justify-center transition-all active:scale-90",
-              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-100 border-slate-200",
-              winningLine?.includes(i) ? "bg-emerald-500 text-white" : (square === 'X' ? "text-emerald-500" : "text-amber-500")
+              "w-20 h-20 text-3xl font-bold rounded-2xl flex items-center justify-center transition-all active:scale-90 border-2",
+              gameMode === 'vs-member' 
+                ? "bg-emerald-500 border-emerald-400" 
+                : (isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-100 border-slate-200"),
+              winningLine?.includes(i) ? "bg-emerald-600 text-white scale-105" : (
+                gameMode === 'vs-member'
+                  ? (square === 'X' ? "text-white" : "text-black")
+                  : (square === 'X' ? "text-emerald-500" : "text-amber-500")
+              )
             )}
           >
             {square}

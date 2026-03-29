@@ -24,13 +24,29 @@ service cloud.firestore {
 
     // Public Donors Collection
     match /publicDonors/{donorId} {
-      // Anyone can read public donors (logged in or not)
       allow read: if true;
-      
-      // Allow create, update, delete if the user is authenticated (even anonymously)
-      // and the data matches the schema.
       allow create, update: if isAuthenticated() && isValidDonor(request.resource.data);
       allow delete: if isAuthenticated();
+    }
+
+    // TicTacToe Games Collection
+    match /tictactoe_games/{gameId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Post Reactions Collection
+    match /post_reactions/{reactionId} {
+      // Allow everyone to read reactions to see counts
+      allow read: if true;
+      
+      // Allow authenticated users to create reactions
+      // We check that they are authenticated and providing the required fields
+      allow create: if isAuthenticated() 
+        && request.resource.data.keys().hasAll(['postId', 'userId', 'userName', 'createdAt']);
+      
+      // Allow authenticated users to delete reactions
+      // We trust the client logic for now, or we can add a check that the reactionId ends with their userId
+      allow delete: if isAuthenticated() && reactionId.endsWith("_" + resource.data.userId);
     }
   }
 }
