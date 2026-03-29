@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+       return request.auth != null;
+    }
+    function isOwner(userId) {
+       return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+       return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function hasRequiredFields(fields) {
+       return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidReaction(data) {
+      return hasRequiredFields(['postId', 'userId', 'userName', 'timestamp']) &&
+             hasOnlyAllowedFields(['postId', 'userId', 'userName', 'timestamp']) &&
+             data.postId is string && data.postId.size() > 0 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /reactions/{reactionId} {
+      // Allow any authenticated user to read reactions (to count and see names)
+      allow read: if isAuthenticated();
+      
+      // Allow creation if authenticated, valid, and the user is setting their own userId
+      allow create: if isAuthenticated() && 
+                      isValidReaction(request.resource.data) && 
+                      request.resource.data.userId == request.auth.uid &&
+                      reactionId == request.resource.data.postId + "_" + request.auth.uid;
+      
+      // Only the owner can delete their reaction
+      allow delete: if isDocOwner();
+      
+      // Updates are not allowed for reactions (unreact = delete)
+      allow update: if false;
+    }
+  }
+}

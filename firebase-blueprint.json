@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "Reaction": {
+      "title": "Reaction",
+      "description": "A user's reaction to a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "The unique ID of the post" },
+        "userId": { "type": "string", "description": "The ID of the user who reacted" },
+        "userName": { "type": "string", "description": "The name of the user who reacted" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the reaction occurred" }
+      },
+      "required": ["postId", "userId", "userName", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/reactions/{reactionId}": {
+      "schema": "Reaction",
+      "description": "User reactions to posts"
+    }
+  }
+}

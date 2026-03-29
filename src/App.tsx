@@ -496,6 +496,10 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
+  const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('bloodDonationEnabled');
+    return saved === 'true';
+  });
   const [paymentData, setPaymentData] = useState<Payment[]>([]);
   const [donorData, setDonorData] = useState<Donor[]>([]);
   const [homePosts, setHomePosts] = useState<HomePost[]>([]);
@@ -741,9 +745,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem('bloodDonationEnabled', bloodDonationEnabled.toString());
+  }, [bloodDonationEnabled]);
+
+  useEffect(() => {
     setIsSearchingDonors(true);
     const timer = setTimeout(() => {
       let result = [...donorData];
+
+      // Add current user if blood donation is enabled
+      if (currentUser && bloodDonationEnabled) {
+        const userAsDonor: Donor = {
+          name: currentUser.name,
+          group: currentUser.bloodGroup,
+          district: currentUser.area,
+          thana: '',
+          phone: currentUser.phone
+        };
+        // Check if user is already in donorData to avoid duplicates
+        if (!donorData.some(d => d.phone === currentUser.phone)) {
+          result.unshift(userAsDonor);
+        }
+      }
 
       // Text search
       if (bloodSearchQuery.trim()) {
@@ -772,7 +795,7 @@ export default function App() {
       setIsSearchingDonors(false);
     }, 400); // Simulate system search delay for better UX
     return () => clearTimeout(timer);
-  }, [bloodSearchQuery, selectedBloodGroup, donorData]);
+  }, [bloodSearchQuery, selectedBloodGroup, donorData, currentUser, bloodDonationEnabled]);
 
   const handleJoinDonorSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1436,7 +1459,7 @@ export default function App() {
                     )}
                   >
                     <option value="সব">সব গ্রুপ</option>
-                    {Array.from(new Set(donorData.map(d => d.group))).filter(Boolean).sort().map(g => (
+                    {Array.from(new Set([...donorData, ...(currentUser && bloodDonationEnabled ? [{group: currentUser.bloodGroup}] : [])].map(d => d.group))).filter(Boolean).sort().map(g => (
                       <option key={g} value={g}>{g}</option>
                     ))}
                   </select>
@@ -1460,7 +1483,9 @@ export default function App() {
                       <h3 className="font-bold text-lg">{donor.name}</h3>
                       <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
                     </div>
-                    <p className="text-sm opacity-80 mb-1"><strong>ঠিকানা:</strong> {donor.district}, {donor.thana}</p>
+                    <p className="text-sm opacity-80 mb-1">
+                      <strong>ঠিকানা:</strong> {donor.district}{donor.thana ? `, ${donor.thana}` : ''}
+                    </p>
                     <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {donor.phone}</p>
                     <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">
                       কল করুন
@@ -1601,6 +1626,23 @@ export default function App() {
                     label="Play TicTacToe" 
                     onClick={() => setShowTicTacToe(true)} 
                     isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
+                    icon={<Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
+                    label="Blood Donation" 
+                    onClick={() => setBloodDonationEnabled(!bloodDonationEnabled)} 
+                    isDarkMode={isDarkMode}
+                    rightElement={
+                      <div className={cn(
+                        "w-10 h-5 rounded-full relative transition-colors", 
+                        bloodDonationEnabled ? "bg-red-500" : "bg-slate-300"
+                      )}>
+                        <div className={cn(
+                          "absolute top-1 w-3 h-3 bg-white rounded-full transition-all", 
+                          bloodDonationEnabled ? "right-1" : "left-1"
+                        )} />
+                      </div>
+                    }
                   />
                   <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
