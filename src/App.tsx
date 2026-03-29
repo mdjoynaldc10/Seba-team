@@ -552,6 +552,13 @@ export default function App() {
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000); // Update every 1 second
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (currentUser) {
       setBorrowFormData(prev => ({
         ...prev,
@@ -685,7 +692,12 @@ export default function App() {
   }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const pullDistance = useRef(0);
+  const [pullOffset, setPullOffset] = useState(0);
   const bloodTabRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef(0);
 
@@ -895,6 +907,27 @@ export default function App() {
     setShowTicTacToe(false);
   };
 
+  const toBengaliDigits = (num: number) => {
+    const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return num.toString().padStart(2, '0').split('').map(d => bengaliDigits[parseInt(d)] || d).join('');
+  };
+
+  const parseDate = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    let date: Date;
+    if (typeof dateValue === 'string') {
+      const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
+      if (match) {
+        date = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+      } else {
+        date = new Date(dateValue);
+      }
+    } else {
+      date = new Date(dateValue);
+    }
+    return isNaN(date.getTime()) ? null : date;
+  };
+
   const formatDate = (dateValue: any) => {
     if (!dateValue) return 'তথ্য নেই';
     let date: Date;
@@ -967,19 +1000,49 @@ export default function App() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    
+    const currentY = e.touches[0].clientY;
+    const diffY = currentY - touchStartY.current;
+    
+    // Only pull if at the top of the page
+    if (diffY > 0 && window.scrollY === 0) {
+      // Apply resistance
+      const offset = Math.min(diffY * 0.4, 100);
+      setPullOffset(offset);
+      pullDistance.current = offset;
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    const diffX = touchStartX.current - e.changedTouches[0].clientX;
     const tabs: ('home' | 'books' | 'members' | 'blood' | 'profile')[] = ['home', 'books', 'members', 'blood', 'profile'];
     const currentIndex = tabs.indexOf(activeTab);
 
-    if (Math.abs(diff) > 100) {
-      if (diff > 0 && currentIndex < tabs.length - 1) {
+    // Horizontal swipe
+    if (Math.abs(diffX) > 100 && Math.abs(e.changedTouches[0].clientY - touchStartY.current) < 50) {
+      if (diffX > 0 && currentIndex < tabs.length - 1) {
         setActiveTab(tabs[currentIndex + 1]);
-      } else if (diff < 0 && currentIndex > 0) {
+      } else if (diffX < 0 && currentIndex > 0) {
         setActiveTab(tabs[currentIndex - 1]);
       }
+    }
+
+    // Pull to refresh
+    if (pullDistance.current >= 80) {
+      setIsRefreshing(true);
+      loadInitialData().then(() => {
+        setIsRefreshing(false);
+        setPullOffset(0);
+        pullDistance.current = 0;
+      });
+    } else {
+      setPullOffset(0);
+      pullDistance.current = 0;
     }
   };
 
@@ -989,8 +1052,25 @@ export default function App() {
       isDarkMode ? "bg-slate-900 text-slate-50" : "bg-slate-50 text-slate-900"
     )}
     onTouchStart={handleTouchStart}
+    onTouchMove={handleTouchMove}
     onTouchEnd={handleTouchEnd}
     >
+      {/* Pull to Refresh Indicator */}
+      <div 
+        className="fixed top-0 left-0 w-full flex justify-center z-[100] pointer-events-none transition-transform duration-200"
+        style={{ transform: `translateY(${pullOffset}px)` }}
+      >
+        <div className={cn(
+          "w-10 h-10 rounded-full flex items-center justify-center shadow-lg",
+          isDarkMode ? "bg-slate-800 text-emerald-500" : "bg-white text-emerald-500"
+        )}>
+          {isRefreshing ? (
+            <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+            <ArrowLeft className={cn("w-6 h-6 transition-transform", pullOffset > 70 ? "rotate-90" : "rotate-[-90deg]")} />
+          )}
+        </div>
+      </div>
       {/* Global Loader */}
       <AnimatePresence>
         {isGlobalLoading && (
@@ -1972,41 +2052,100 @@ export default function App() {
 
         {showBorrowedBooksPage && currentUser && (
           <OverlayPage key="borrowed-books-overlay" title="গৃহীত বইসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {(() => {
                 const userBooks = books.filter(b => b.recipientId === currentUser.id);
                 if (userBooks.length === 0) {
                   return <div className="text-center p-10 opacity-50">কোনো গৃহীত বই পাওয়া যায়নি</div>;
                 }
-                return userBooks.map((book, idx) => (
-                  <div 
-                    key={`user-book-${idx}-${book.name}`}
-                    className={cn(
-                      "p-4 rounded-xl border",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                    )}
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500">
-                        <BookOpen className="w-5 h-5" />
+                return userBooks.map((book, idx) => {
+                  const borrowDate = parseDate(book.date);
+                  const returnDate = parseDate(book.returnableDate);
+                  
+                  let progress = 0;
+                  let isOverdue = false;
+                  let timeText = '';
+
+                  if (borrowDate && returnDate) {
+                    const total = returnDate.getTime() - borrowDate.getTime();
+                    const elapsed = currentTime.getTime() - borrowDate.getTime();
+                    progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+                    isOverdue = currentTime > returnDate;
+
+                    if (isOverdue) {
+                      const diff = currentTime.getTime() - returnDate.getTime();
+                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                      timeText = `${toBengaliDigits(days)} দিন: ${toBengaliDigits(hours)} ঘন্টা: ${toBengaliDigits(minutes)} মিনিট: ${toBengaliDigits(seconds)} সেকেন্ড`;
+                    } else {
+                      const diff = returnDate.getTime() - currentTime.getTime();
+                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                      timeText = `${toBengaliDigits(days)} দিন: ${toBengaliDigits(hours)} ঘন্টা: ${toBengaliDigits(minutes)} মিনিট: ${toBengaliDigits(seconds)} সেকেন্ড`;
+                    }
+                  }
+
+                  return (
+                    <div 
+                      key={`user-book-${idx}-${book.name}`}
+                      className="bg-emerald-500 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden"
+                    >
+                      {/* Background Pattern */}
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                      
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <h4 className="text-lg font-bold leading-tight mb-1">{book.name}</h4>
+                            <p className="text-sm text-white/80 italic">{book.author}</p>
+                          </div>
+                          <div className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                            {book.category || 'অন্যান্য'}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-5">
+                          <div>
+                            <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">গ্রহণ তারিখ</span>
+                            <span className="text-sm font-bold">{formatDate(book.date)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">ফেরতযোগ্য তারিখ</span>
+                            <span className="text-sm font-bold">{formatDate(book.returnableDate)}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 mb-2">
+                          <div className="flex flex-col gap-1">
+                            <span className={cn("text-[10px] uppercase tracking-widest font-bold", isOverdue ? "text-red-200" : "text-white/70")}>
+                              {isOverdue ? "সময় অতিবাহিত হয়েছে" : "সময় বাকি আছে"}
+                            </span>
+                            <span className={cn("text-sm font-bold", isOverdue ? "text-red-100" : "text-white")}>
+                              {timeText}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold">{book.name}</h4>
-                        <p className="text-xs opacity-60">{book.author}</p>
+
+                      {/* Progress Bar at Bottom */}
+                      <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/10 overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress}%` }}
+                          className={cn(
+                            "h-full transition-all duration-1000",
+                            isOverdue ? "bg-red-500" : "bg-white",
+                            (progress >= 100 || isOverdue) ? "opacity-30" : "opacity-100"
+                          )}
+                        />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded-lg bg-emerald-500 text-white">
-                        <span className="block text-white/80 mb-1">গ্রহণের তারিখ</span>
-                        <span className="font-bold">{formatDate(book.date)}</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-emerald-500 text-white">
-                        <span className="block text-white/80 mb-1">ধরণ</span>
-                        <span className="font-bold">{book.category || 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-                ));
+                  );
+                });
               })()}
             </div>
           </OverlayPage>
