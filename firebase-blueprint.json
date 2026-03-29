@@ -1,22 +1,25 @@
 {
   "entities": {
-    "Reaction": {
-      "title": "Reaction",
-      "description": "A user's reaction to a post",
+    "publicDonors": {
+      "title": "Public Donors",
+      "description": "Members who have enabled blood donation publicly",
       "type": "object",
       "properties": {
-        "postId": { "type": "string", "description": "The unique ID of the post" },
-        "userId": { "type": "string", "description": "The ID of the user who reacted" },
-        "userName": { "type": "string", "description": "The name of the user who reacted" },
-        "timestamp": { "type": "string", "format": "date-time", "description": "When the reaction occurred" }
+        "id": { "type": "string", "description": "Member ID" },
+        "name": { "type": "string", "description": "Member Name" },
+        "group": { "type": "string", "description": "Blood Group" },
+        "district": { "type": "string", "description": "Area/District" },
+        "phone": { "type": "string", "description": "Phone Number" },
+        "enabled": { "type": "boolean", "description": "Whether donation is enabled" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
       },
-      "required": ["postId", "userId", "userName", "timestamp"]
+      "required": ["id", "name", "group", "district", "phone", "enabled"]
     }
   },
   "firestore": {
-    "/reactions/{reactionId}": {
-      "schema": "Reaction",
-      "description": "User reactions to posts"
+    "/publicDonors/{donorId}": {
+      "schema": "publicDonors",
+      "description": "Collection of members who opted-in for public blood donation"
     }
   }
 }

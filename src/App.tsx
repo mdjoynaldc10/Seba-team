@@ -36,6 +36,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
+import { db } from './firebase';
+import { doc, setDoc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
 
 // --- Types ---
 interface Member {
@@ -496,10 +498,8 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
-  const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('bloodDonationEnabled');
-    return saved === 'true';
-  });
+  const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
+  const [publicDonors, setPublicDonors] = useState<Donor[]>([]);
   const [paymentData, setPaymentData] = useState<Payment[]>([]);
   const [donorData, setDonorData] = useState<Donor[]>([]);
   const [homePosts, setHomePosts] = useState<HomePost[]>([]);
@@ -744,29 +744,76 @@ export default function App() {
     }
   }, []);
 
+  // Listen for public donors from Firebase
   useEffect(() => {
-    localStorage.setItem('bloodDonationEnabled', bloodDonationEnabled.toString());
-  }, [bloodDonationEnabled]);
+    const unsubscribe = onSnapshot(collection(db, 'publicDonors'), (snapshot) => {
+      const donors: Donor[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.enabled) {
+          donors.push({
+            name: data.name,
+            group: data.group,
+            district: data.district,
+            thana: '',
+            phone: data.phone
+          });
+        }
+      });
+      setPublicDonors(donors);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync current user's donation status from Firebase
+  useEffect(() => {
+    if (currentUser) {
+      const unsubscribe = onSnapshot(doc(db, 'publicDonors', currentUser.id), (doc) => {
+        if (doc.exists()) {
+          setBloodDonationEnabled(doc.data().enabled);
+        } else {
+          setBloodDonationEnabled(false);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
+
+  const toggleBloodDonation = async () => {
+    if (!currentUser) return;
+    const newState = !bloodDonationEnabled;
+    try {
+      if (newState) {
+        await setDoc(doc(db, 'publicDonors', currentUser.id), {
+          id: currentUser.id,
+          name: currentUser.name,
+          group: currentUser.bloodGroup,
+          district: currentUser.area,
+          phone: currentUser.phone,
+          enabled: true,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await deleteDoc(doc(db, 'publicDonors', currentUser.id));
+      }
+      setBloodDonationEnabled(newState);
+    } catch (error) {
+      console.error("Error toggling blood donation:", error);
+      alert("Error updating status. Please try again.");
+    }
+  };
 
   useEffect(() => {
     setIsSearchingDonors(true);
     const timer = setTimeout(() => {
       let result = [...donorData];
 
-      // Add current user if blood donation is enabled
-      if (currentUser && bloodDonationEnabled) {
-        const userAsDonor: Donor = {
-          name: currentUser.name,
-          group: currentUser.bloodGroup,
-          district: currentUser.area,
-          thana: '',
-          phone: currentUser.phone
-        };
-        // Check if user is already in donorData to avoid duplicates
-        if (!donorData.some(d => d.phone === currentUser.phone)) {
-          result.unshift(userAsDonor);
+      // Add public donors from Firebase
+      publicDonors.forEach(pd => {
+        if (!result.some(d => d.phone === pd.phone)) {
+          result.unshift(pd);
         }
-      }
+      });
 
       // Text search
       if (bloodSearchQuery.trim()) {
@@ -795,7 +842,7 @@ export default function App() {
       setIsSearchingDonors(false);
     }, 400); // Simulate system search delay for better UX
     return () => clearTimeout(timer);
-  }, [bloodSearchQuery, selectedBloodGroup, donorData, currentUser, bloodDonationEnabled]);
+  }, [bloodSearchQuery, selectedBloodGroup, donorData, publicDonors]);
 
   const handleJoinDonorSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1459,7 +1506,7 @@ export default function App() {
                     )}
                   >
                     <option value="সব">সব গ্রুপ</option>
-                    {Array.from(new Set([...donorData, ...(currentUser && bloodDonationEnabled ? [{group: currentUser.bloodGroup}] : [])].map(d => d.group))).filter(Boolean).sort().map(g => (
+                    {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
                       <option key={g} value={g}>{g}</option>
                     ))}
                   </select>
@@ -1630,7 +1677,7 @@ export default function App() {
                   <ProfileMenuLink 
                     icon={<Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
                     label="Blood Donation" 
-                    onClick={() => setBloodDonationEnabled(!bloodDonationEnabled)} 
+                    onClick={toggleBloodDonation} 
                     isDarkMode={isDarkMode}
                     rightElement={
                       <div className={cn(

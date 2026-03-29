@@ -1,55 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
+    
     // Helper Functions
-    // ===============================================================
     function isAuthenticated() {
-       return request.auth != null;
+      return request.auth != null;
     }
+    
     function isOwner(userId) {
-       return isAuthenticated() && request.auth.uid == userId;
-    }
-    function isDocOwner() {
-       return isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-    function hasRequiredFields(fields) {
-       return request.resource.data.keys().hasAll(fields);
-    }
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-    function isValidReaction(data) {
-      return hasRequiredFields(['postId', 'userId', 'userName', 'timestamp']) &&
-             hasOnlyAllowedFields(['postId', 'userId', 'userName', 'timestamp']) &&
-             data.postId is string && data.postId.size() > 0 &&
-             data.userId is string && data.userId.size() > 0 &&
-             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
-             data.timestamp is timestamp;
+    // Public Donors Validation
+    function isValidDonor(data) {
+      return data.keys().hasAll(['id', 'name', 'group', 'district', 'phone', 'enabled']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.name is string && data.name.size() > 0 &&
+             data.group is string && data.group.size() > 0 &&
+             data.district is string && data.district.size() > 0 &&
+             data.phone is string && data.phone.size() > 0 &&
+             data.enabled is bool;
     }
 
-    // ===============================================================
-    // Rules
-    // ===============================================================
-    match /reactions/{reactionId} {
-      // Allow any authenticated user to read reactions (to count and see names)
-      allow read: if isAuthenticated();
+    // Public Donors Collection
+    match /publicDonors/{donorId} {
+      // Anyone can read public donors (logged in or not)
+      allow read: if true;
       
-      // Allow creation if authenticated, valid, and the user is setting their own userId
-      allow create: if isAuthenticated() && 
-                      isValidReaction(request.resource.data) && 
-                      request.resource.data.userId == request.auth.uid &&
-                      reactionId == request.resource.data.postId + "_" + request.auth.uid;
-      
-      // Only the owner can delete their reaction
-      allow delete: if isDocOwner();
-      
-      // Updates are not allowed for reactions (unreact = delete)
-      allow update: if false;
+      // Only the member themselves can update their donor status
+      // We assume donorId is the member's ID
+      allow create, update: if isAuthenticated() && isValidDonor(request.resource.data) && (request.resource.data.id == donorId);
+      allow delete: if isAuthenticated() && (resource.data.id == donorId);
     }
   }
 }
