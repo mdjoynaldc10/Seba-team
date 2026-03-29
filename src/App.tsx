@@ -83,6 +83,7 @@ interface Book {
   date: string;
   recipientId: string;
   address: string;
+  returnableDate: string;
   imageUrl?: string;
 }
 
@@ -210,7 +211,8 @@ async function fetchBooks(): Promise<Book[]> {
               recipient: String(c[6]?.v || '').trim(),
               date: String(c[7]?.v || '').trim(),
               recipientId: String(c[8]?.v || '').trim(),
-              address: String(c[9]?.v || '').trim()
+              address: String(c[9]?.v || '').trim(),
+              returnableDate: String(c[10]?.v || '').trim()
             };
           }).filter(Boolean);
         })
@@ -905,6 +907,62 @@ export default function App() {
     if (isNaN(date.getTime())) return dateValue;
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${date.getDate()} ${months[date.getMonth()]}, ${date.getFullYear()}`;
+  };
+
+  const getDuration = (startDateValue: any) => {
+    if (!startDateValue) return null;
+    let startDate: Date;
+    if (typeof startDateValue === 'string') {
+      const match = startDateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
+      startDate = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(startDateValue);
+    } else {
+      startDate = new Date(startDateValue);
+    }
+    if (isNaN(startDate.getTime())) return null;
+
+    const now = new Date();
+    let years = now.getFullYear() - startDate.getFullYear();
+    let months = now.getMonth() - startDate.getMonth();
+    let days = now.getDate() - startDate.getDate();
+
+    if (days < 0) {
+      months--;
+      const lastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      days += lastMonth.getDate();
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    const totalMonths = years * 12 + months;
+    if (totalMonths === 0 && days === 0) return "আজ";
+    
+    let result = "";
+    if (totalMonths > 0) result += `${totalMonths} মাস `;
+    if (days > 0) result += `${days} দিন`;
+    return result.trim();
+  };
+
+  const getExtraDays = (returnableDateValue: any) => {
+    if (!returnableDateValue) return null;
+    let returnableDate: Date;
+    if (typeof returnableDateValue === 'string') {
+      const match = returnableDateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
+      returnableDate = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(returnableDateValue);
+    } else {
+      returnableDate = new Date(returnableDateValue);
+    }
+    if (isNaN(returnableDate.getTime())) return null;
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    returnableDate.setHours(0, 0, 0, 0);
+
+    const diffTime = now.getTime() - returnableDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays > 0 ? diffDays : 0;
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -2254,20 +2312,70 @@ export default function App() {
 
         {selectedBook && (
           <OverlayPage key="book-overlay" title="বই গ্রহীতার তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-3 pb-20">
+            <div className="space-y-4 pb-24">
               <div className="flex justify-center mb-6">
                 <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-32 h-44 shadow-xl" />
               </div>
-              <InfoItem label="বইয়ের নাম" value={selectedBook.name} isDarkMode={isDarkMode} />
-              <InfoItem label="লেখক" value={selectedBook.author} isDarkMode={isDarkMode} />
-              <InfoItem label="ধরণ" value={selectedBook.category} isDarkMode={isDarkMode} />
-              <InfoItem label="স্ট্যাটাস" value={selectedBook.status} isDarkMode={isDarkMode} />
-              <div className="h-px bg-slate-200 dark:bg-slate-700 my-4" />
-              <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider">গ্রহীতার তথ্য</h3>
-              <InfoItem label="গ্রহীতা" value={selectedBook.recipient || 'N/A'} isDarkMode={isDarkMode} />
-              <InfoItem label="আইডি নং" value={selectedBook.recipientId || 'N/A'} isDarkMode={isDarkMode} />
-              <InfoItem label="তারিখ" value={formatDate(selectedBook.date)} isDarkMode={isDarkMode} />
-              <InfoItem label="ঠিকানা" value={selectedBook.address || 'N/A'} isDarkMode={isDarkMode} />
+              
+              <div className="space-y-3">
+                <InfoItem label="বইয়ের নাম" value={selectedBook.name} isDarkMode={isDarkMode} />
+                <InfoItem label="লেখক" value={selectedBook.author} isDarkMode={isDarkMode} />
+                <InfoItem label="ধরণ" value={selectedBook.category} isDarkMode={isDarkMode} />
+                <InfoItem label="স্ট্যাটাস" value={selectedBook.status} isDarkMode={isDarkMode} />
+              </div>
+
+              {selectedBook.recipient && (
+                <div className="mt-8">
+                  <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-3">গ্রহীতার তথ্য</h3>
+                  <div className="bg-emerald-500 rounded-3xl p-6 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden">
+                    {/* Duration Badge */}
+                    <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold">
+                      {getDuration(selectedBook.date)}
+                    </div>
+
+                    <div className="space-y-4 relative z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold">গ্রহীতা</p>
+                          <h4 className="text-xl font-bold">{selectedBook.recipient}</h4>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div>
+                          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-1">আইডি নং</p>
+                          <p className="font-bold">{selectedBook.recipientId}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-1">গ্রহণের তারিখ</p>
+                          <p className="font-bold">{formatDate(selectedBook.date)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-1">ফেরতযোগ্য তারিখ</p>
+                          <p className="font-bold">{formatDate(selectedBook.returnableDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-1">ঠিকানা</p>
+                          <p className="font-bold truncate">{selectedBook.address}</p>
+                        </div>
+                      </div>
+
+                      {getExtraDays(selectedBook.returnableDate) > 0 && (
+                        <div className="mt-4 pt-4 border-t border-white/20 flex items-center gap-2 text-amber-200">
+                          <AlertCircle className="w-4 h-4" />
+                          <p className="text-xs font-bold">অতিরিক্ত {getExtraDays(selectedBook.returnableDate)} দিন অতিবাহিত হয়েছে</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Background Pattern */}
+                    <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Floating Borrow Button */}
