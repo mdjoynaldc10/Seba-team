@@ -202,14 +202,10 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
     // 2. Try registration sheets (including Sheet1 which is common)
     const regPromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(MEMBER_SHEET_ID, s, id, phone, 'registration'));
     
-    // 3. Try Home sheet just in case
-    const homePromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(HOME_SHEET_ID, s, id, phone, 'registration'));
-    
-    // 4. Try the new member sheet
-    const newPromises = MEMBER_SHEETS.map(s => fetchMemberFromSheet(NEW_MEMBER_SHEET_ID, s, id, phone, 'standard'));
+    // 3. Try the new member sheet (always uses registration mapping)
     const newRegPromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(NEW_MEMBER_SHEET_ID, s, id, phone, 'registration'));
 
-    const results = await Promise.all([...standardPromises, ...regPromises, ...homePromises, ...newPromises, ...newRegPromises]);
+    const results = await Promise.all([...standardPromises, ...regPromises, ...newRegPromises]);
     return results.find(m => m !== null) || null;
   } catch (e) {
     console.error("Error logging in member:", e);
@@ -383,10 +379,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
   try {
     const allSheets = [
       ...MEMBER_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: HOME_SHEET_ID, name: s })),
-      ...MEMBER_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s }))
+      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s }))
     ];
     
     // Remove duplicate sheet/id pairs
@@ -406,6 +399,15 @@ async function searchMembers(phone: string): Promise<Member[]> {
         return json.table.rows.map((row: any) => {
           const d = row.c;
           if (!d) return null;
+          
+          const name = String(d[1]?.v || '').trim();
+          const bloodGroup = String(d[0]?.v || '').trim();
+          
+          // Skip header rows
+          if (name.toLowerCase() === 'name' || name.includes('নাম') || 
+              bloodGroup.toLowerCase().includes('blood') || 
+              bloodGroup.toLowerCase().includes('রক্তের')) return null;
+
           // Try to detect mapping by checking column count or specific values
           if (d.length >= 11 && d[3]?.v && d[6]?.v) {
             return {
@@ -419,8 +421,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
               email: String(d[7]?.v || '').trim(),
               joiningDate: String(d[8]?.v || '').trim(),
               photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0],
-              access: String(d[10]?.v || '').trim(),
-              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+              access: String(d[10]?.v || '').trim()
             };
           } else if (d.length >= 6 && d[4]?.v && d[5]?.v) {
             return {
@@ -434,8 +435,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
               email: '',
               joiningDate: '',
               photoId: undefined,
-              access: 'User',
-              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+              access: 'User'
             };
           }
           return null;
@@ -458,10 +458,7 @@ async function fetchAllMembers(): Promise<Member[]> {
   try {
     const allSheets = [
       ...MEMBER_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: HOME_SHEET_ID, name: s })),
-      ...MEMBER_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s })),
-      ...REGISTRATION_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s }))
+      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s }))
     ];
     
     const uniqueSheets = Array.from(new Set(allSheets.map(s => `${s.id}|${s.name}`)))
@@ -480,6 +477,14 @@ async function fetchAllMembers(): Promise<Member[]> {
           const r = row.c;
           if (!r || (!r[0]?.v && !r[1]?.v)) return null;
           
+          const name = String(r[1]?.v || '').trim();
+          const bloodGroup = String(r[0]?.v || '').trim();
+
+          // Skip header rows
+          if (name.toLowerCase() === 'name' || name.includes('নাম') || 
+              bloodGroup.toLowerCase().includes('blood') || 
+              bloodGroup.toLowerCase().includes('রক্তের')) return null;
+          
           if (r.length >= 11 && r[3]?.v) {
             return {
               name: String(r[0]?.v || '').trim(),
@@ -492,8 +497,7 @@ async function fetchAllMembers(): Promise<Member[]> {
               email: String(r[7]?.v || '').trim(),
               joiningDate: String(r[8]?.v || '').trim(),
               photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
-              access: String(r[10]?.v || '').trim(),
-              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+              access: String(r[10]?.v || '').trim()
             };
           } else if (r.length >= 6 && r[4]?.v) {
             return {
@@ -507,8 +511,7 @@ async function fetchAllMembers(): Promise<Member[]> {
               email: '',
               joiningDate: '',
               photoId: undefined,
-              access: 'User',
-              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+              access: 'User'
             };
           }
           return null;

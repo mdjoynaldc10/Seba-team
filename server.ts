@@ -85,6 +85,49 @@ async function findEmptyRow() {
 }
 
 // API Routes
+app.get("/api/proxy", async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Missing url parameter" });
+  }
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+    res.send(text);
+  } catch (error: any) {
+    console.error("Proxy error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/proxy", multer().any(), async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Missing url parameter" });
+  }
+  try {
+    const formData = new URLSearchParams();
+    if (req.body) {
+      Object.entries(req.body).forEach(([key, value]) => {
+        formData.append(key, String(value));
+      });
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+    const text = await response.text();
+    res.send(text);
+  } catch (error: any) {
+    console.error("Proxy POST error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/health", (req, res) => {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
     return res.status(500).json({ status: "error", message: "Google API credentials missing in environment" });
