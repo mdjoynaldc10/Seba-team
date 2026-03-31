@@ -41,12 +41,53 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Reaction timestamp" }
       },
       "required": ["postId", "userId", "userName"]
+    },
+    "bloodDonors": {
+      "title": "Blood Donor",
+      "description": "Donor registration details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "group": { "type": "string" },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "phone": { "type": "string" },
+        "uid": { "type": "string" },
+        "isVisible": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "group", "district", "phone", "uid", "isVisible"]
+    },
+    "users": {
+      "title": "User Profile",
+      "description": "User account details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "isGoogleUser": { "type": "boolean" },
+        "phone": { "type": "string" },
+        "area": { "type": "string" },
+        "bloodGroup": { "type": "string" },
+        "dob": { "type": "string" }
+      },
+      "required": ["uid"]
     }
   },
   "firestore": {
     "/publicDonors/{donorId}": {
       "schema": "publicDonors",
       "description": "Collection of members who opted-in for public blood donation"
+    },
+    "/bloodDonors/{donorId}": {
+      "schema": "bloodDonors",
+      "description": "New collection for blood donor registration"
+    },
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile information"
     },
     "/tictactoe_games/{gameId}": {
       "schema": "tictactoe_games",

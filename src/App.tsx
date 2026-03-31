@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import { 
   Home, 
   Users, 
@@ -54,6 +54,7 @@ interface Member {
   joiningDate: string;
   photoId?: string;
   access: string;
+  isNewSheet?: boolean;
 }
 
 interface Payment {
@@ -134,13 +135,87 @@ const MEMBER_SHEET_ID = '1pJ5Tg-ihE1TQT4VO9wus52o9Rbm7Iv5ck5XMdjvlino';
 const BLOOD_SHEET_ID = '1dFO9EhpwS8yV_O98cFDCQje6jXEjnnT2aJ1zhH6slxs';
 const BOOKS_SHEET_ID = '1qevkZUndwH7v6QAwjDj56VDNR9dm1sRHYQU2X51MLig';
 const DONATION_SHEET_ID = '1NnAsCeuP7Z1D4HKVqV4HjRPys0TJ2NXrpmmryzCEfvg';
+const NEW_MEMBER_SHEET_ID = '1Rk4crZ8HN2DFqWeualTwxjJmtFTs8G_jonYa5lsHodI';
 
 const MEMBER_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
+const REGISTRATION_SHEETS = ['Sheet1', 'Registration', 'Form Responses 1'];
 const PAYMENT_SHEETS = ['Sheet11', 'Sheet12', 'Sheet13', 'Sheet14', 'Sheet15', 'Sheet16', 'Sheet17', 'Sheet18', 'Sheet19', 'Sheet20'];
 const BLOOD_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"];
 const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6", "Sheet7", "Sheet8"];
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
+
+async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
+  const idCol = mapping === 'standard' ? 'D' : 'E';
+  const phoneCol = mapping === 'standard' ? 'G' : 'F';
+  const q = encodeURIComponent(`SELECT * WHERE ${idCol} = '${id}' AND ${phoneCol} CONTAINS '${phone}'`);
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
+  
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    if (json.table.rows.length) {
+      const r = json.table.rows[0].c;
+      if (mapping === 'standard') {
+        return {
+          name: String(r[0]?.v || '').trim(),
+          designation: String(r[1]?.v || '').trim(),
+          area: String(r[2]?.v || '').trim(),
+          id: String(r[3]?.v || '').trim(),
+          dob: String(r[4]?.v || '').trim(),
+          bloodGroup: String(r[5]?.v || '').trim(),
+          phone: String(r[6]?.v || '').trim(),
+          email: String(r[7]?.v || '').trim(),
+          joiningDate: String(r[8]?.v || '').trim(),
+          photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
+          access: String(r[10]?.v || '').trim(),
+          isNewSheet: sheetId === NEW_MEMBER_SHEET_ID
+        };
+      } else {
+        // Registration Mapping: A:BG, B:Name, C:Dist, D:City, E:User, F:Phone
+        return {
+          name: String(r[1]?.v || '').trim(),
+          designation: 'Member',
+          area: `${r[2]?.v || ''}, ${r[3]?.v || ''}`.trim().replace(/^, |, $/g, ''),
+          id: String(r[4]?.v || '').trim(),
+          dob: '',
+          bloodGroup: String(r[0]?.v || '').trim(),
+          phone: String(r[5]?.v || '').trim(),
+          email: '',
+          joiningDate: new Date().toLocaleDateString(),
+          photoId: undefined,
+          access: 'User',
+          isNewSheet: sheetId === NEW_MEMBER_SHEET_ID
+        };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function loginMember(id: string, phone: string): Promise<Member | null> {
+  try {
+    // 1. Try standard member sheets
+    const standardPromises = MEMBER_SHEETS.map(s => fetchMemberFromSheet(MEMBER_SHEET_ID, s, id, phone, 'standard'));
+    
+    // 2. Try registration sheets (including Sheet1 which is common)
+    const regPromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(MEMBER_SHEET_ID, s, id, phone, 'registration'));
+    
+    // 3. Try Home sheet just in case
+    const homePromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(HOME_SHEET_ID, s, id, phone, 'registration'));
+    
+    // 4. Try the new member sheet
+    const newPromises = MEMBER_SHEETS.map(s => fetchMemberFromSheet(NEW_MEMBER_SHEET_ID, s, id, phone, 'standard'));
+    const newRegPromises = REGISTRATION_SHEETS.map(s => fetchMemberFromSheet(NEW_MEMBER_SHEET_ID, s, id, phone, 'registration'));
+
+    const results = await Promise.all([...standardPromises, ...regPromises, ...homePromises, ...newPromises, ...newRegPromises]);
+    return results.find(m => m !== null) || null;
+  } catch (e) {
+    console.error("Error logging in member:", e);
+    return null;
+  }
+}
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
@@ -236,43 +311,6 @@ async function fetchBooks(): Promise<Book[]> {
   }
 }
 
-async function loginMember(id: string, phone: string): Promise<Member | null> {
-  try {
-    const promises = MEMBER_SHEETS.map(async (sheet) => {
-      const q = encodeURIComponent(`SELECT * WHERE D = '${id}' AND G CONTAINS '${phone}'`);
-      try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}&tq=${q}`);
-        const text = await res.text();
-        const json = JSON.parse(text.substring(47).slice(0, -2));
-        if (json.table.rows.length) {
-          const r = json.table.rows[0].c;
-          return {
-            name: String(r[0]?.v || '').trim(),
-            designation: String(r[1]?.v || '').trim(),
-            area: String(r[2]?.v || '').trim(),
-            id: String(r[3]?.v || '').trim(),
-            dob: String(r[4]?.v || '').trim(),
-            bloodGroup: String(r[5]?.v || '').trim(),
-            phone: String(r[6]?.v || '').trim(),
-            email: String(r[7]?.v || '').trim(),
-            joiningDate: String(r[8]?.v || '').trim(),
-            photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
-            access: String(r[10]?.v || '').trim()
-          };
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
-    });
-    const results = await Promise.all(promises);
-    return results.find(m => m !== null) || null;
-  } catch (e) {
-    console.error("Error logging in member:", e);
-    return null;
-  }
-}
-
 async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]> {
   try {
     const promises = PAYMENT_SHEETS.map(async (s) => {
@@ -343,29 +381,65 @@ async function fetchAllDonors(): Promise<Donor[]> {
 
 async function searchMembers(phone: string): Promise<Member[]> {
   try {
-    const fetchPromises = MEMBER_SHEETS.map(async (s) => {
-      const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}'`);
+    const allSheets = [
+      ...MEMBER_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: HOME_SHEET_ID, name: s })),
+      ...MEMBER_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s }))
+    ];
+    
+    // Remove duplicate sheet/id pairs
+    const uniqueSheets = Array.from(new Set(allSheets.map(s => `${s.id}|${s.name}`)))
+      .map(s => {
+        const [id, name] = s.split('|');
+        return { id, name };
+      });
+
+    const fetchPromises = uniqueSheets.map(async (s) => {
+      const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
         return json.table.rows.map((row: any) => {
           const d = row.c;
-          return {
-            name: String(d[0]?.v || '').trim(),
-            designation: String(d[1]?.v || '').trim(),
-            area: String(d[2]?.v || '').trim(),
-            id: String(d[3]?.v || '').trim(),
-            dob: String(d[4]?.v || '').trim(),
-            bloodGroup: String(d[5]?.v || '').trim(),
-            phone: String(d[6]?.v || '').trim(),
-            email: String(d[7]?.v || '').trim(),
-            joiningDate: String(d[8]?.v || '').trim(),
-            photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0],
-            access: String(d[10]?.v || '').trim()
-          };
-        });
+          if (!d) return null;
+          // Try to detect mapping by checking column count or specific values
+          if (d.length >= 11 && d[3]?.v && d[6]?.v) {
+            return {
+              name: String(d[0]?.v || '').trim(),
+              designation: String(d[1]?.v || '').trim(),
+              area: String(d[2]?.v || '').trim(),
+              id: String(d[3]?.v || '').trim(),
+              dob: String(d[4]?.v || '').trim(),
+              bloodGroup: String(d[5]?.v || '').trim(),
+              phone: String(d[6]?.v || '').trim(),
+              email: String(d[7]?.v || '').trim(),
+              joiningDate: String(d[8]?.v || '').trim(),
+              photoId: (d[9]?.v?.match(/[-\w]{25,}/) || [])[0],
+              access: String(d[10]?.v || '').trim(),
+              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+            };
+          } else if (d.length >= 6 && d[4]?.v && d[5]?.v) {
+            return {
+              name: String(d[1]?.v || '').trim(),
+              designation: 'Member',
+              area: `${d[2]?.v || ''}, ${d[3]?.v || ''}`.trim().replace(/^, |, $/g, ''),
+              id: String(d[4]?.v || '').trim(),
+              dob: '',
+              bloodGroup: String(d[0]?.v || '').trim(),
+              phone: String(d[5]?.v || '').trim(),
+              email: '',
+              joiningDate: '',
+              photoId: undefined,
+              access: 'User',
+              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+            };
+          }
+          return null;
+        }).filter(Boolean);
       } catch (e) {
         return [];
       }
@@ -382,15 +456,31 @@ async function searchMembers(phone: string): Promise<Member[]> {
 
 async function fetchAllMembers(): Promise<Member[]> {
   try {
-    const fetchPromises = MEMBER_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
-        .then(res => res.text())
-        .then(text => {
-          const json = JSON.parse(text.substring(47).slice(0, -2));
-          if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any) => {
-            const r = row.c;
-            if (!r || !r[0]?.v) return null;
+    const allSheets = [
+      ...MEMBER_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: HOME_SHEET_ID, name: s })),
+      ...MEMBER_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s })),
+      ...REGISTRATION_SHEETS.map(s => ({ id: NEW_MEMBER_SHEET_ID, name: s }))
+    ];
+    
+    const uniqueSheets = Array.from(new Set(allSheets.map(s => `${s.id}|${s.name}`)))
+      .map(s => {
+        const [id, name] = s.split('|');
+        return { id, name };
+      });
+
+    const fetchPromises = uniqueSheets.map(async (s) => {
+      try {
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
+        const text = await res.text();
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        if (!json.table || !json.table.rows) return [];
+        return json.table.rows.map((row: any) => {
+          const r = row.c;
+          if (!r || (!r[0]?.v && !r[1]?.v)) return null;
+          
+          if (r.length >= 11 && r[3]?.v) {
             return {
               name: String(r[0]?.v || '').trim(),
               designation: String(r[1]?.v || '').trim(),
@@ -402,11 +492,31 @@ async function fetchAllMembers(): Promise<Member[]> {
               email: String(r[7]?.v || '').trim(),
               joiningDate: String(r[8]?.v || '').trim(),
               photoId: (r[9]?.v?.match(/[-\w]{25,}/) || [])[0],
-              access: String(r[10]?.v || '').trim()
+              access: String(r[10]?.v || '').trim(),
+              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
             };
-          }).filter(Boolean);
-        })
-    );
+          } else if (r.length >= 6 && r[4]?.v) {
+            return {
+              name: String(r[1]?.v || '').trim(),
+              designation: 'Member',
+              area: `${r[2]?.v || ''}, ${r[3]?.v || ''}`.trim().replace(/^, |, $/g, ''),
+              id: String(r[4]?.v || '').trim(),
+              dob: '',
+              bloodGroup: String(r[0]?.v || '').trim(),
+              phone: String(r[5]?.v || '').trim(),
+              email: '',
+              joiningDate: '',
+              photoId: undefined,
+              access: 'User',
+              isNewSheet: s.id === NEW_MEMBER_SHEET_ID
+            };
+          }
+          return null;
+        }).filter(Boolean);
+      } catch (e) {
+        return [];
+      }
+    });
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat();
     // Remove duplicates by ID
@@ -552,11 +662,8 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 };
 
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+class ErrorBoundary extends Component<any, any> {
+  state = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
@@ -599,7 +706,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 
@@ -1084,6 +1191,51 @@ function AppContent() {
     const payments = await fetchPaymentHistory(member.id, member.phone);
     setMemberProfilePayments(payments);
     setIsProfileLoading(false);
+  };
+
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [regFormData, setRegFormData] = useState({
+    bloodGroup: '',
+    name: '',
+    district: '',
+    city: '',
+    username: '',
+    contactNo: ''
+  });
+  const [regStatus, setRegStatus] = useState<{ text: string, type: 'success' | 'error' | 'loading' | null }>({ text: '', type: null });
+
+  const handleRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegStatus({ text: 'অপেক্ষা করুন...', type: 'loading' });
+
+    try {
+      // Check for uniqueness
+      const members = await fetchAllMembers();
+      const isUsernameTaken = members.some(m => m.id.toLowerCase() === regFormData.username.toLowerCase());
+      const isPhoneTaken = members.some(m => m.phone.includes(regFormData.contactNo));
+
+      if (isUsernameTaken) {
+        setRegStatus({ text: 'এই ইউজারনেমটি ইতিমধ্যে ব্যবহার করা হয়েছে।', type: 'error' });
+        return;
+      }
+      if (isPhoneTaken) {
+        setRegStatus({ text: 'এই ফোন নম্বরটি ইতিমধ্যে নিবন্ধিত হয়েছে।', type: 'error' });
+        return;
+      }
+
+      const scriptURL = 'https://script.google.com/macros/s/AKfycbxJ0IvF83hCSCxoJBG3AGUP1Cd7_UakmIqPABtYbxMxUKMUX8hkjdLKH_wgL8Ry9iM/exec';
+      const formData = new FormData();
+      Object.entries(regFormData).forEach(([key, value]) => formData.append(key, String(value)));
+
+      const response = await fetch(scriptURL, { method: 'POST', body: formData });
+      // Google Apps Script usually returns a redirect or success
+      setRegStatus({ text: 'সফলভাবে নিবন্ধিত হয়েছে!', type: 'success' });
+      setRegFormData({ bloodGroup: '', name: '', district: '', city: '', username: '', contactNo: '' });
+      // Refresh members list
+      fetchAllMembers().then(setAllMembers);
+    } catch (error) {
+      setRegStatus({ text: 'দুঃখিত! আবার চেষ্টা করুন।', type: 'error' });
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1586,7 +1738,7 @@ function AppContent() {
                       )}
                       <div>
                         <h4 className="font-bold">{m.name}</h4>
-                        <p className="text-xs opacity-70">{m.designation}</p>
+                        {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
                       </div>
                     </button>
                   ));
@@ -1616,7 +1768,7 @@ function AppContent() {
                       )}
                       <div>
                         <h4 className="font-bold">{m.name}</h4>
-                        <p className="text-xs opacity-70">{m.designation}</p>
+                        {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
                       </div>
                     </div>
                   ));
@@ -1712,34 +1864,183 @@ function AppContent() {
           {/* Profile Tab */}
           <div className="w-1/5 h-full overflow-y-auto p-4 pt-0 max-w-2xl mx-auto">
             {!currentUser ? (
-              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 py-10">
                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
                   <User className="w-10 h-10 text-emerald-500" />
                 </div>
-                <h3 className="text-xl font-bold">লগইন করুন</h3>
-                <form onSubmit={handleLogin} className="w-full space-y-4">
-                  <input 
-                    name="id"
-                    type="text" 
-                    placeholder="আইডি" 
-                    className={cn(
-                      "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                    )}
-                  />
-                  <input 
-                    name="phone"
-                    type="text" 
-                    placeholder="ফোন নম্বর" 
-                    className={cn(
-                      "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                    )}
-                  />
-                  <button type="submit" className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
-                    লগইন
-                  </button>
-                </form>
+                
+                {!showRegistration ? (
+                  <>
+                    <h3 className="text-xl font-bold">লগইন করুন</h3>
+                    <form onSubmit={handleLogin} className="w-full space-y-4">
+                      <input 
+                        name="id"
+                        type="text" 
+                        placeholder="ইউজারনেম / আইডি" 
+                        className={cn(
+                          "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                        )}
+                        required
+                      />
+                      <input 
+                        name="phone"
+                        type="text" 
+                        placeholder="ফোন নম্বর" 
+                        className={cn(
+                          "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                        )}
+                        required
+                      />
+                      <button type="submit" className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
+                        লগইন
+                      </button>
+                    </form>
+                    <button 
+                      onClick={() => setShowRegistration(true)}
+                      className="text-emerald-500 font-bold text-sm"
+                    >
+                      নিবন্ধন নেই? এখানে নিবন্ধন করুন
+                    </button>
+                  </>
+                ) : (
+                  <div className={cn(
+                    "w-full p-6 rounded-3xl border text-left space-y-4",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-xl"
+                  )}>
+                    <h2 className="text-xl font-bold text-center mb-4">নিবন্ধন ফর্ম</h2>
+                    <form onSubmit={handleRegistration} className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold opacity-60 ml-1">রক্তের গ্রুপ</label>
+                        <select 
+                          required
+                          value={regFormData.bloodGroup}
+                          onChange={(e) => setRegFormData({...regFormData, bloodGroup: e.target.value})}
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors appearance-none",
+                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                          )}
+                        >
+                          <option value="">নির্বাচন করুন</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold opacity-60 ml-1">নাম</label>
+                        <input 
+                          required
+                          type="text" 
+                          placeholder="আপনার পূর্ণ নাম"
+                          value={regFormData.name}
+                          onChange={(e) => setRegFormData({...regFormData, name: e.target.value})}
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">জেলা</label>
+                          <input 
+                            required
+                            type="text" 
+                            placeholder="জেলার নাম"
+                            value={regFormData.district}
+                            onChange={(e) => setRegFormData({...regFormData, district: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">শহর</label>
+                          <input 
+                            required
+                            type="text" 
+                            placeholder="উপজেলার নাম"
+                            value={regFormData.city}
+                            onChange={(e) => setRegFormData({...regFormData, city: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold opacity-60 ml-1">ইউজারনেম / username</label>
+                        <input 
+                          required
+                          type="text" 
+                          placeholder="ইউজার নাম (উদাঃ abc123)"
+                          value={regFormData.username}
+                          onChange={(e) => setRegFormData({...regFormData, username: e.target.value})}
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                          )}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold opacity-60 ml-1">কন্টাক্ট নাম্বার / Contact No</label>
+                        <input 
+                          required
+                          type="tel" 
+                          placeholder="18XXXXXXXX"
+                          value={regFormData.contactNo}
+                          onChange={(e) => setRegFormData({...regFormData, contactNo: e.target.value})}
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                          )}
+                        />
+                      </div>
+
+                      <button 
+                        type="submit" 
+                        disabled={regStatus.type === 'loading'}
+                        className={cn(
+                          "w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2",
+                          regStatus.type === 'loading' && "opacity-70 cursor-not-allowed"
+                        )}
+                      >
+                        {regStatus.type === 'loading' && <Loader2 className="w-5 h-5 animate-spin" />}
+                        নিবন্ধন করুন
+                      </button>
+
+                      {regStatus.text && (
+                        <p className={cn(
+                          "text-center text-sm font-bold",
+                          regStatus.type === 'success' ? "text-emerald-500" : "text-red-500"
+                        )}>
+                          {regStatus.text}
+                        </p>
+                      )}
+
+                      <button 
+                        type="button"
+                        onClick={() => setShowRegistration(false)}
+                        className="w-full text-center text-slate-500 font-bold text-sm pt-2"
+                      >
+                        ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন
+                      </button>
+                    </form>
+                  </div>
+                )}
 
                 <div className="w-full pt-6 space-y-2">
                   <ProfileMenuLink 
@@ -1808,7 +2109,7 @@ function AppContent() {
                       />
                     </div>
                     <h2 className="text-2xl font-bold mt-4 mb-1">{currentUser.name}</h2>
-                    <p className="text-slate-500 font-medium">{currentUser.designation}</p>
+                    {!currentUser.isNewSheet && <p className="text-slate-500 font-medium">{currentUser.designation}</p>}
                   </div>
                 </div>
 
@@ -2116,13 +2417,13 @@ function AppContent() {
           <OverlayPage key="info-overlay" title="ব্যবহারকারীর তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-3">
               <InfoItem label="নাম" value={currentUser.name} isDarkMode={isDarkMode} />
-              <InfoItem label="পদবী" value={currentUser.designation} isDarkMode={isDarkMode} />
+              {!currentUser.isNewSheet && <InfoItem label="পদবী" value={currentUser.designation} isDarkMode={isDarkMode} />}
               <InfoItem label="এলাকা" value={currentUser.area} isDarkMode={isDarkMode} />
               <InfoItem label="আইডি" value={currentUser.id} isDarkMode={isDarkMode} />
-              <InfoItem label="জন্ম তারিখ" value={formatDate(currentUser.dob)} isDarkMode={isDarkMode} />
+              {!currentUser.isNewSheet && <InfoItem label="জন্ম তারিখ" value={formatDate(currentUser.dob)} isDarkMode={isDarkMode} />}
               <InfoItem label="রক্তের গ্রুপ" value={currentUser.bloodGroup} isDarkMode={isDarkMode} />
               <InfoItem label="ফোন" value={currentUser.phone} isDarkMode={isDarkMode} />
-              <InfoItem label="ইমেইল" value={currentUser.email} isDarkMode={isDarkMode} />
+              {!currentUser.isNewSheet && <InfoItem label="ইমেইল" value={currentUser.email} isDarkMode={isDarkMode} />}
               <InfoItem label="যোগদানের তারিখ" value={currentUser.joiningDate} isDarkMode={isDarkMode} />
             </div>
           </OverlayPage>
@@ -2431,7 +2732,7 @@ function AppContent() {
                   )}
                   <div>
                     <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
-                    <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>
+                    {!selectedMemberProfile.isNewSheet && <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>}
                   </div>
                   
                   {/* Call and Mail Buttons - Iconic */}
@@ -2443,13 +2744,15 @@ function AppContent() {
                     >
                       <Phone className="w-6 h-6" />
                     </a>
-                    <a 
-                      href={`mailto:${selectedMemberProfile.email}`} 
-                      className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/30 active:scale-90 transition-all border-2 border-white/20"
-                      title="Mail"
-                    >
-                      <Mail className="w-6 h-6" />
-                    </a>
+                    {!selectedMemberProfile.isNewSheet && (
+                      <a 
+                        href={`mailto:${selectedMemberProfile.email}`} 
+                        className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/30 active:scale-90 transition-all border-2 border-white/20"
+                        title="Mail"
+                      >
+                        <Mail className="w-6 h-6" />
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -2501,8 +2804,8 @@ function AppContent() {
                       <InfoItem label="এলাকা" value={selectedMemberProfile.area} isDarkMode={isDarkMode} />
                       <InfoItem label="রক্তের গ্রুপ" value={selectedMemberProfile.bloodGroup} isDarkMode={isDarkMode} />
                       <InfoItem label="ফোন" value={selectedMemberProfile.phone} isDarkMode={isDarkMode} />
-                      <InfoItem label="ইমেইল" value={selectedMemberProfile.email} isDarkMode={isDarkMode} />
-                      <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />
+                      {!selectedMemberProfile.isNewSheet && <InfoItem label="ইমেইল" value={selectedMemberProfile.email} isDarkMode={isDarkMode} />}
+                      {!selectedMemberProfile.isNewSheet && <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />}
                       <InfoItem label="যোগদানের তারিখ" value={selectedMemberProfile.joiningDate} isDarkMode={isDarkMode} />
                     </div>
                   </div>
