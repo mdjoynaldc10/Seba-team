@@ -750,14 +750,10 @@ function AppContent() {
   const [showDonatePopup, setShowDonatePopup] = useState(false);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
-  const [showJoinDonorForm, setShowJoinDonorForm] = useState(false);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [isDonorFabVisible, setIsDonorFabVisible] = useState(true);
-  const [isDonorSubmitting, setIsDonorSubmitting] = useState(false);
-  const [donorFormMsg, setDonorFormMsg] = useState<{ text: string, type: 'success' | 'error' | 'warning' | null }>({ text: '', type: null });
   
   // Post Reactions State
   const [viewingReactorsForPostId, setViewingReactorsForPostId] = useState<string | null>(null);
@@ -862,7 +858,6 @@ function AppContent() {
         setShowDonationProjectsPage(!!event.state.showDonationProjectsPage);
         setSelectedDonationProject(event.state.selectedDonationProject || null);
         setIsMenuOpen(!!event.state.isMenuOpen);
-        setShowJoinDonorForm(!!event.state.showJoinDonorForm);
         setShowTicTacToe(!!event.state.showTicTacToe);
         setSelectedBook(event.state.selectedBook || null);
         setSelectedPayment(event.state.selectedPayment || null);
@@ -888,7 +883,6 @@ function AppContent() {
       showDonationProjectsPage,
       selectedDonationProject,
       isMenuOpen,
-      showJoinDonorForm,
       showTicTacToe,
       selectedBook,
       selectedPayment,
@@ -916,7 +910,6 @@ function AppContent() {
         showDonationProjectsPage,
         selectedDonationProject,
         isMenuOpen,
-        showJoinDonorForm,
         showTicTacToe,
         selectedBook,
         selectedPayment,
@@ -929,7 +922,7 @@ function AppContent() {
         showNotice
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showJoinDonorForm, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -943,20 +936,9 @@ function AppContent() {
 
   const handleBloodScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const st = e.currentTarget.scrollTop;
-    // Hide the FAB when scrolled down from the top
-    if (st > 10) {
-      setIsDonorFabVisible(false);
-    } else {
-      setIsDonorFabVisible(true);
-    }
     lastScrollTop.current = st <= 0 ? 0 : st;
   };
 
-  useEffect(() => {
-    if (activeTab === 'blood' && bloodTabRef.current) {
-      setIsDonorFabVisible(bloodTabRef.current.scrollTop <= 10);
-    }
-  }, [activeTab]);
 
   useEffect(() => {
     localStorage.setItem('seba_dark_mode', String(isDarkMode));
@@ -1094,40 +1076,6 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [bloodSearchQuery, selectedBloodGroup, donorData, publicDonors]);
 
-  const handleJoinDonorSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const contactNo = formData.get('ContactNo') as string;
-    
-    const joinedList = JSON.parse(localStorage.getItem('joinedDonors') || "[]");
-    if (joinedList.includes(contactNo)) {
-      setDonorFormMsg({ text: "আপনি আগে থেকেই Joined আছেন!", type: 'warning' });
-      return;
-    }
-
-    setIsDonorSubmitting(true);
-    setDonorFormMsg({ text: "আপনার তথ্য সংরক্ষণ করা হচ্ছে...", type: null });
-
-    try {
-      const scriptURL = 'https://script.google.com/macros/s/AKfycbw7SvFWNmwKLwz-9IUJH3yXhl8Dgt52j4hlRpv-2AW0QRXNEcoNMcLPuMikC6pX6518/exec';
-      await fetch(scriptURL, { method: 'POST', body: formData });
-      
-      joinedList.push(contactNo);
-      localStorage.setItem('joinedDonors', JSON.stringify(joinedList));
-      
-      setDonorFormMsg({ text: "ধন্যবাদ! আপনার তথ্য সফলভাবে সংরক্ষণ করা হয়েছে।", type: 'success' });
-      (e.target as HTMLFormElement).reset();
-      
-      setTimeout(() => {
-        setShowJoinDonorForm(false);
-        setDonorFormMsg({ text: '', type: null });
-      }, 2000);
-    } catch (error) {
-      setDonorFormMsg({ text: "দুঃখিত! আবার চেষ্টা করুন।", type: 'error' });
-    } finally {
-      setIsDonorSubmitting(false);
-    }
-  };
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -1283,7 +1231,6 @@ function AppContent() {
     setShowInfoPage(false);
     setShowPaymentPage(false);
     setShowBorrowedBooksPage(false);
-    setShowJoinDonorForm(false);
     setShowTicTacToe(false);
   };
 
@@ -1845,16 +1792,25 @@ function AppContent() {
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                   )}>
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg">{donor.name}</h3>
+                      <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
                       <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
                     </div>
                     <p className="text-sm opacity-80 mb-1">
-                      <strong>ঠিকানা:</strong> {donor.district}{donor.thana ? `, ${donor.thana}` : ''}
+                      <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
                     </p>
-                    <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {donor.phone}</p>
-                    <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">
-                      কল করুন
-                    </a>
+                    <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {currentUser ? donor.phone : 'লুকানো'}</p>
+                    {currentUser ? (
+                      <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
+                        কল করুন
+                      </a>
+                    ) : (
+                      <button 
+                        onClick={() => setActiveTab('profile')}
+                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                      >
+                        বিস্তারিত দেখতে লগইন করুন
+                      </button>
+                    )}
                   </div>
                 ))}
                 {filteredDonors.length === 0 && (
@@ -2385,21 +2341,6 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* FAB for joining as donor - Moved outside transformed container for visibility */}
-        <AnimatePresence>
-          {activeTab === 'blood' && isDonorFabVisible && (
-            <motion.button
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setShowJoinDonorForm(true)}
-              className="fixed bottom-[85px] right-6 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-2xl flex items-center justify-center z-[2000] transition-all"
-            >
-              <Plus className="w-8 h-8" />
-            </motion.button>
-          )}
-        </AnimatePresence>
       </main>
 
       {/* Bottom Nav */}
@@ -2874,139 +2815,6 @@ function AppContent() {
           </OverlayPage>
         )}
 
-        {showJoinDonorForm && (
-          <OverlayPage key="join-donor-overlay" title="রক্তদাতা হিসেবে যোগ দিন" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-6 pb-10">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold mb-2">রক্তদাতা হিসেবে যোগ দিন</h2>
-                <p className="text-xs text-slate-900 dark:text-white font-medium">সতর্কবার্তা: উন্মুক্ত তথ্য, ব্যাক্তিগত নাম্বার না দিয়ে অভিভাবক অথবা কাছের কারো নাম্বার দিন।</p>
-              </div>
-
-              <form onSubmit={handleJoinDonorSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Blood Group</label>
-                  <select 
-                    name="BloodGroup" 
-                    required
-                    className={cn(
-                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                    )}
-                  >
-                    <option value="">আপনার রক্তের গ্রুপ সিলেক্ট করুন...</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Name</label>
-                  <input 
-                    type="text" 
-                    name="Name" 
-                    placeholder="সম্পূর্ণ নাম লিখুন (বাংলায়)..." 
-                    required
-                    className={cn(
-                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                    )}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">District</label>
-                  <input 
-                    type="text" 
-                    name="District" 
-                    placeholder="জেলার নাম লিখুন (বাংলায়)..." 
-                    required
-                    className={cn(
-                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                    )}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">City</label>
-                  <input 
-                    type="text" 
-                    name="City" 
-                    placeholder="শহর/উপজেলার নাম লিখুন (বাংলায়)..." 
-                    required
-                    className={cn(
-                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                    )}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Contact No.</label>
-                  <input 
-                    type="tel" 
-                    name="ContactNo" 
-                    id="contactField"
-                    placeholder="01XXXXXXXXX" 
-                    required
-                    className={cn(
-                      "w-full h-12 px-4 rounded-[15px] border border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all",
-                      isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                    )}
-                  />
-                </div>
-
-                <div className="pt-4 flex flex-col gap-3">
-                  <button 
-                    type="submit" 
-                    disabled={isDonorSubmitting}
-                    className="w-full h-14 bg-black hover:bg-emerald-700 text-white rounded-[30px] font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-70"
-                  >
-                    {isDonorSubmitting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" /> সংরক্ষণ করা হচ্ছে...
-                      </>
-                    ) : (
-                      "যোগ দিন"
-                    )}
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setShowJoinDonorForm(false);
-                      setActiveTab('blood');
-                    }}
-                    className="w-full h-14 bg-black hover:bg-emerald-700 text-white rounded-[30px] font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
-                  >
-                    ডোনার খুঁজুন
-                  </button>
-                </div>
-              </form>
-
-              {donorFormMsg.text && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    "p-4 rounded-xl text-center text-sm font-medium",
-                    donorFormMsg.type === 'success' ? "bg-emerald-100 text-emerald-600" :
-                    donorFormMsg.type === 'error' ? "bg-red-100 text-red-600" :
-                    donorFormMsg.type === 'warning' ? "bg-amber-100 text-amber-600" :
-                    "bg-slate-100 text-slate-600"
-                  )}
-                >
-                  {donorFormMsg.text}
-                </motion.div>
-              )}
-            </div>
-          </OverlayPage>
-        )}
 
         {selectedBook && (
           <OverlayPage key="book-overlay" title="বই গ্রহীতার তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
