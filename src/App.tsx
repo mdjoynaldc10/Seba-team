@@ -29,12 +29,7 @@ import {
   Phone,
   Mail,
   Bell,
-  Edit,
-  CreditCard,
-  Trash,
-  MoreVertical,
-  UserPlus,
-  PlusCircle
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -141,6 +136,15 @@ const BLOOD_SHEET_ID = '1dFO9EhpwS8yV_O98cFDCQje6jXEjnnT2aJ1zhH6slxs';
 const BOOKS_SHEET_ID = '1qevkZUndwH7v6QAwjDj56VDNR9dm1sRHYQU2X51MLig';
 const DONATION_SHEET_ID = '1NnAsCeuP7Z1D4HKVqV4HjRPys0TJ2NXrpmmryzCEfvg';
 const NEW_MEMBER_SHEET_ID = '1Rk4crZ8HN2DFqWeualTwxjJmtFTs8G_jonYa5lsHodI';
+
+const DATABASE_LINKS = [
+  { name: 'Home Sheet', id: HOME_SHEET_ID, description: 'নোটিশ, নোটিফিকেশন এবং হোম পেজ ডাটা' },
+  { name: 'Member Sheet', id: MEMBER_SHEET_ID, description: 'সকল সদস্যদের তথ্য এবং পেমেন্ট ডাটা' },
+  { name: 'Blood Donor Sheet', id: BLOOD_SHEET_ID, description: 'রক্তদাতাদের তালিকা এবং তথ্য' },
+  { name: 'Books Sheet', id: BOOKS_SHEET_ID, description: 'বইয়ের তালিকা এবং গ্রহীতাদের তথ্য' },
+  { name: 'Donation Sheet', id: DONATION_SHEET_ID, description: 'ডোনেশন প্রজেক্ট এবং ডোনারদের তথ্য' },
+  { name: 'New Member Sheet', id: NEW_MEMBER_SHEET_ID, description: 'নতুন সদস্যদের রেজিস্ট্রেশন ডাটা' },
+];
 
 const MEMBER_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 const REGISTRATION_SHEETS = ['Sheet1', 'Registration', 'Form Responses 1'];
@@ -329,26 +333,8 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
         return [];
       }
     });
-
-    // Fetch from Firestore too
-    const firestorePayments: Payment[] = [];
-    try {
-      const q = query(collection(db, 'member_payments'), where('memberId', '==', id));
-      const snapshot = await getDocs(q);
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        firestorePayments.push({
-          amount: Number(data.amount),
-          reason: data.reason,
-          date: data.date
-        });
-      });
-    } catch (e) {
-      console.error("Error fetching firestore payments:", e);
-    }
-
     const results = await Promise.all(promises);
-    return [...results.flat(), ...firestorePayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return results.flat();
   } catch (e) {
     console.error("Error fetching payment history:", e);
     return [];
@@ -544,29 +530,9 @@ async function fetchAllMembers(): Promise<Member[]> {
       }
     });
     const allResults = await Promise.all(fetchPromises);
-    const sheetMembers = allResults.flat() as Member[];
-
-    // Fetch from Firestore too
-    const firestoreMembers: Member[] = [];
-    try {
-      const snapshot = await getDocs(collection(db, 'members'));
-      snapshot.forEach(doc => {
-        firestoreMembers.push(doc.data() as Member);
-      });
-    } catch (e) {
-      console.error("Error fetching firestore members:", e);
-    }
-
-    // Combine and remove duplicates by ID (Firestore takes precedence)
-    const memberMap = new Map<string, Member>();
-    sheetMembers.forEach(m => {
-      if (m && m.id) memberMap.set(m.id, m);
-    });
-    firestoreMembers.forEach(m => {
-      if (m && m.id) memberMap.set(m.id, m);
-    });
-
-    return Array.from(memberMap.values());
+    const flatResults = allResults.flat();
+    // Remove duplicates by ID
+    return Array.from(new Map(flatResults.map(m => [m.id, m])).values());
   } catch (e) {
     console.error("Error fetching all members:", e);
     return [];
@@ -793,8 +759,9 @@ function AppContent() {
   const [showDonatePopup, setShowDonatePopup] = useState(false);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
+  const [showDatabasePage, setShowDatabasePage] = useState(false);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
-  const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books'>('info');
+  const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books' | 'database'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   
@@ -810,15 +777,6 @@ function AppContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
-
-  // Admin Features State
-  const [isMemberMenuOpen, setIsMemberMenuOpen] = useState(false);
-  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
-  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [editMemberForm, setEditMemberForm] = useState<Partial<Member>>({});
-  const [addPaymentForm, setAddPaymentForm] = useState({ amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
-  const [addMemberForm, setAddMemberForm] = useState({ name: '', id: '', phone: '', area: '', bloodGroup: '', designation: 'Member', joiningDate: new Date().toISOString().split('T')[0] });
   const [borrowFormData, setBorrowFormData] = useState({
     name: '',
     id: '',
@@ -908,6 +866,7 @@ function AppContent() {
         setSelectedDonationProject(event.state.selectedDonationProject || null);
         setIsMenuOpen(!!event.state.isMenuOpen);
         setShowTicTacToe(!!event.state.showTicTacToe);
+        setShowDatabasePage(!!event.state.showDatabasePage);
         setSelectedBook(event.state.selectedBook || null);
         setSelectedPayment(event.state.selectedPayment || null);
         setSelectedMemberProfile(event.state.selectedMemberProfile || null);
@@ -933,6 +892,7 @@ function AppContent() {
       selectedDonationProject,
       isMenuOpen,
       showTicTacToe,
+      showDatabasePage,
       selectedBook,
       selectedPayment,
       selectedMemberProfile,
@@ -960,6 +920,7 @@ function AppContent() {
         selectedDonationProject,
         isMenuOpen,
         showTicTacToe,
+        showDatabasePage,
         selectedBook,
         selectedPayment,
         selectedMemberProfile,
@@ -971,7 +932,7 @@ function AppContent() {
         showNotice
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1224,82 +1185,6 @@ function AppContent() {
     }
   };
 
-  const handleEditMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMemberProfile) return;
-    setIsLoading(true);
-    try {
-      await setDoc(doc(db, 'members', selectedMemberProfile.id), {
-        ...selectedMemberProfile,
-        ...editMemberForm,
-        updatedBy: currentUser?.id,
-        updatedAt: serverTimestamp()
-      });
-      alert('সদস্যের তথ্য সফলভাবে আপডেট করা হয়েছে!');
-      setShowEditMemberModal(false);
-      setSelectedMemberProfile({ ...selectedMemberProfile, ...editMemberForm } as Member);
-      fetchAllMembers().then(setAllMembers);
-    } catch (error) {
-      console.error("Error updating member:", error);
-      alert('দুঃখিত! আবার চেষ্টা করুন।');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAddPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMemberProfile) return;
-    setIsLoading(true);
-    try {
-      const paymentId = `${selectedMemberProfile.id}_${Date.now()}`;
-      await setDoc(doc(db, 'member_payments', paymentId), {
-        ...addPaymentForm,
-        memberId: selectedMemberProfile.id,
-        addedBy: currentUser?.id,
-        addedAt: serverTimestamp()
-      });
-      alert('পেমেন্ট সফলভাবে যোগ করা হয়েছে!');
-      setShowAddPaymentModal(false);
-      const payments = await fetchPaymentHistory(selectedMemberProfile.id, selectedMemberProfile.phone);
-      setMemberProfilePayments(payments);
-    } catch (error) {
-      console.error("Error adding payment:", error);
-      alert('দুঃখিত! আবার চেষ্টা করুন।');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      // Check for uniqueness
-      const members = await fetchAllMembers();
-      if (members.some(m => m.id.toLowerCase() === addMemberForm.id.toLowerCase())) {
-        alert('এই আইডিটি ইতিমধ্যে ব্যবহার করা হয়েছে।');
-        return;
-      }
-      
-      await setDoc(doc(db, 'members', addMemberForm.id), {
-        ...addMemberForm,
-        access: 'Member',
-        addedBy: currentUser?.id,
-        addedAt: serverTimestamp()
-      });
-      alert('নতুন সদস্য সফলভাবে যোগ করা হয়েছে!');
-      setShowAddMemberModal(false);
-      setAddMemberForm({ name: '', id: '', phone: '', area: '', bloodGroup: '', designation: 'Member', joiningDate: new Date().toISOString().split('T')[0] });
-      fetchAllMembers().then(setAllMembers);
-    } catch (error) {
-      console.error("Error adding member:", error);
-      alert('দুঃখিত! আবার চেষ্টা করুন।');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -1343,6 +1228,7 @@ function AppContent() {
     setShowPaymentPage(false);
     setShowBorrowedBooksPage(false);
     setShowTicTacToe(false);
+    setShowDatabasePage(false);
   };
 
   const toBengaliDigits = (num: number) => {
@@ -1625,17 +1511,6 @@ function AppContent() {
               ))
             )}
           </div>
-
-          {/* Admin Floating Button for Adding Member */}
-          {activeTab === 'members' && isSpecialMember(currentUser) && !selectedMemberProfile && (
-            <button
-              onClick={() => setShowAddMemberModal(true)}
-              className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-emerald-500 text-white shadow-2xl flex items-center justify-center z-50 active:scale-90 transition-transform"
-              title="নতুন সদস্য যোগ করুন"
-            >
-              <UserPlus className="w-7 h-7" />
-            </button>
-          )}
 
           {/* Books Tab */}
           <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto no-scrollbar">
@@ -2212,6 +2087,14 @@ function AppContent() {
                     onClick={() => setShowBorrowedBooksPage(true)} 
                     isDarkMode={isDarkMode}
                   />
+                  {isSpecialMember(currentUser) && (
+                    <ProfileMenuLink 
+                      icon={<Database className="w-5 h-5" />} 
+                      label="Database" 
+                      onClick={() => setShowDatabasePage(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
                   <ProfileMenuLink 
                     icon={<Gamepad2 className="w-5 h-5" />} 
                     label="Play TicTacToe" 
@@ -2334,200 +2217,6 @@ function AppContent() {
             </div>
           )}
         </AnimatePresence>
-
-        {/* Admin Modals */}
-        {showEditMemberModal && selectedMemberProfile && (
-          <OverlayPage key="edit-member-overlay" title="সদস্যের তথ্য এডিট" onClose={() => setShowEditMemberModal(false)} isDarkMode={isDarkMode}>
-            <form onSubmit={handleEditMember} className="space-y-4 pb-24">
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">নাম</label>
-                  <input 
-                    type="text" 
-                    value={editMemberForm.name || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, name: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">পদবী</label>
-                  <input 
-                    type="text" 
-                    value={editMemberForm.designation || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, designation: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">এলাকা</label>
-                  <input 
-                    type="text" 
-                    value={editMemberForm.area || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, area: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">রক্তের গ্রুপ</label>
-                  <input 
-                    type="text" 
-                    value={editMemberForm.bloodGroup || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, bloodGroup: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">ফোন</label>
-                  <input 
-                    type="text" 
-                    value={editMemberForm.phone || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, phone: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">ইমেইল</label>
-                  <input 
-                    type="email" 
-                    value={editMemberForm.email || ''} 
-                    onChange={(e) => setEditMemberForm({...editMemberForm, email: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                  />
-                </div>
-              </div>
-              <button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform disabled:opacity-50"
-              >
-                {isLoading ? 'আপডেট হচ্ছে...' : 'তথ্য আপডেট করুন'}
-              </button>
-            </form>
-          </OverlayPage>
-        )}
-
-        {showAddPaymentModal && selectedMemberProfile && (
-          <OverlayPage key="add-payment-overlay" title="পেমেন্ট যোগ করুন" onClose={() => setShowAddPaymentModal(false)} isDarkMode={isDarkMode}>
-            <form onSubmit={handleAddPayment} className="space-y-4 pb-24">
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">টাকার পরিমাণ</label>
-                  <input 
-                    type="number" 
-                    value={addPaymentForm.amount} 
-                    onChange={(e) => setAddPaymentForm({...addPaymentForm, amount: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">কারণ</label>
-                  <input 
-                    type="text" 
-                    value={addPaymentForm.reason} 
-                    onChange={(e) => setAddPaymentForm({...addPaymentForm, reason: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">তারিখ</label>
-                  <input 
-                    type="date" 
-                    value={addPaymentForm.date} 
-                    onChange={(e) => setAddPaymentForm({...addPaymentForm, date: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-              </div>
-              <button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform disabled:opacity-50"
-              >
-                {isLoading ? 'যোগ হচ্ছে...' : 'পেমেন্ট যোগ করুন'}
-              </button>
-            </form>
-          </OverlayPage>
-        )}
-
-        {showAddMemberModal && (
-          <OverlayPage key="add-member-overlay" title="নতুন সদস্য যোগ করুন" onClose={() => setShowAddMemberModal(false)} isDarkMode={isDarkMode}>
-            <form onSubmit={handleAddMember} className="space-y-4 pb-24">
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">নাম</label>
-                  <input 
-                    type="text" 
-                    value={addMemberForm.name} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, name: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">আইডি</label>
-                  <input 
-                    type="text" 
-                    value={addMemberForm.id} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, id: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">ফোন</label>
-                  <input 
-                    type="text" 
-                    value={addMemberForm.phone} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, phone: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">এলাকা</label>
-                  <input 
-                    type="text" 
-                    value={addMemberForm.area} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, area: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">রক্তের গ্রুপ</label>
-                  <input 
-                    type="text" 
-                    value={addMemberForm.bloodGroup} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, bloodGroup: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold opacity-50 ml-1">যোগদানের তারিখ</label>
-                  <input 
-                    type="date" 
-                    value={addMemberForm.joiningDate} 
-                    onChange={(e) => setAddMemberForm({...addMemberForm, joiningDate: e.target.value})}
-                    className={cn("w-full p-3 rounded-xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}
-                    required
-                  />
-                </div>
-              </div>
-              <button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform disabled:opacity-50"
-              >
-                {isLoading ? 'যোগ হচ্ছে...' : 'সদস্য যোগ করুন'}
-              </button>
-            </form>
-          </OverlayPage>
-        )}
 
         {/* Donate Popup */}
       <AnimatePresence>
@@ -3050,6 +2739,19 @@ function AppContent() {
                   >
                     Books
                   </button>
+                  {isSpecialMember(currentUser) && isSpecialMember(selectedMemberProfile) && (
+                    <button 
+                      onClick={() => setActiveProfileTab('database')} 
+                      className={cn(
+                        "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                        activeProfileTab === 'database' 
+                          ? "bg-emerald-500 text-white shadow-md" 
+                          : "text-emerald-500/60 hover:text-emerald-500"
+                      )}
+                    >
+                      Database
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -3119,82 +2821,87 @@ function AppContent() {
                     })()}
                   </div>
                 )}
+
+                {activeProfileTab === 'database' && isSpecialMember(currentUser) && isSpecialMember(selectedMemberProfile) && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ডাটাবেস শীটসমূহ</h3>
+                    <div className="grid grid-cols-1 gap-3">
+                      {DATABASE_LINKS.map((link, idx) => (
+                        <div 
+                          key={`db-link-${idx}`} 
+                          className={cn(
+                            "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                              <Database className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm truncate">{link.name}</h4>
+                              <p className="text-[10px] opacity-60 line-clamp-1">{link.description}</p>
+                            </div>
+                          </div>
+                          <a 
+                            href={`https://docs.google.com/spreadsheets/d/${link.id}/edit`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            শীট ওপেন করুন
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Admin Floating Menu for Member Profile */}
-            {isSpecialMember(currentUser) && (
-              <div className="fixed bottom-6 right-6 z-[6000]">
-                <AnimatePresence>
-                  {isMemberMenuOpen && (
-                    <div className="flex flex-col gap-3 mb-3 items-center">
-                      <motion.button
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 20, opacity: 0 }}
-                        onClick={() => {
-                          setEditMemberForm(selectedMemberProfile);
-                          setShowEditMemberModal(true);
-                          setIsMemberMenuOpen(false);
-                        }}
-                        className="w-12 h-12 rounded-full bg-blue-500 text-white shadow-lg flex items-center justify-center"
-                        title="তথ্য এডিট করুন"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </motion.button>
-                      <motion.button
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 20, opacity: 0 }}
-                        onClick={() => {
-                          setAddPaymentForm({ amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
-                          setShowAddPaymentModal(true);
-                          setIsMemberMenuOpen(false);
-                        }}
-                        className="w-12 h-12 rounded-full bg-emerald-500 text-white shadow-lg flex items-center justify-center"
-                        title="পেমেন্ট যোগ করুন"
-                      >
-                        <CreditCard className="w-5 h-5" />
-                      </motion.button>
-                      <motion.button
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 20, opacity: 0 }}
-                        onClick={() => {
-                          if (confirm('আপনি কি এই সদস্যকে মুছে ফেলতে চান?')) {
-                            deleteDoc(doc(db, 'members', selectedMemberProfile.id)).then(() => {
-                              alert('সদস্যকে মুছে ফেলা হয়েছে।');
-                              setSelectedMemberProfile(null);
-                              fetchAllMembers().then(setAllMembers);
-                            });
-                          }
-                          setIsMemberMenuOpen(false);
-                        }}
-                        className="w-12 h-12 rounded-full bg-red-500 text-white shadow-lg flex items-center justify-center"
-                        title="সদস্য মুছুন"
-                      >
-                        <Trash className="w-5 h-5" />
-                      </motion.button>
-                    </div>
-                  )}
-                </AnimatePresence>
-                <button
-                  onClick={() => setIsMemberMenuOpen(!isMemberMenuOpen)}
-                  className={cn(
-                    "w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90",
-                    isMemberMenuOpen ? "bg-slate-800 text-white rotate-45" : "bg-emerald-500 text-white"
-                  )}
-                >
-                  <Plus className="w-8 h-8" />
-                </button>
-              </div>
-            )}
           </OverlayPage>
         )}
 
         {showTicTacToe && (
           <OverlayPage key="tictactoe-overlay" title="TicTacToe Game" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <TicTacToeGame isDarkMode={isDarkMode} allMembers={allMembers} isAuthReady={isAuthReady} />
+          </OverlayPage>
+        )}
+
+        {showDatabasePage && isSpecialMember(currentUser) && (
+          <OverlayPage key="database-overlay" title="ডাটাবেস শীটসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-4 pb-10">
+              <div className="grid grid-cols-1 gap-3">
+                {DATABASE_LINKS.map((link, idx) => (
+                  <div 
+                    key={`db-link-main-${idx}`} 
+                    className={cn(
+                      "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                        <Database className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-sm truncate">{link.name}</h4>
+                        <p className="text-[10px] opacity-60 line-clamp-1">{link.description}</p>
+                      </div>
+                    </div>
+                    <a 
+                      href={`https://docs.google.com/spreadsheets/d/${link.id}/edit`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      শীট ওপেন করুন
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
           </OverlayPage>
         )}
 
