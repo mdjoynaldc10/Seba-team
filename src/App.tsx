@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Component } from 'react';
+import React, { useState, useEffect, useRef, Component, useCallback } from 'react';
 import { 
   Home, 
   Users, 
@@ -29,7 +29,9 @@ import {
   Phone,
   Mail,
   Bell,
-  Database
+  Database,
+  MapPin,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -127,6 +129,13 @@ interface Notification {
   id: string;
   title: string;
   message: string;
+}
+
+interface Bookshelf {
+  district: string;
+  address: string;
+  pinCode: string;
+  mapLocation: string;
 }
 
 // --- Sheets Logic ---
@@ -312,6 +321,36 @@ async function fetchBooks(): Promise<Book[]> {
     return allResults.flat();
   } catch (err) {
     console.error("Error fetching books:", err);
+    return [];
+  }
+}
+
+async function fetchBookshelves(): Promise<Bookshelf[]> {
+  const SHEETS = ['Sheet9', 'Sheet10'];
+  try {
+    const fetchPromises = SHEETS.map(name =>
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+        .then(res => res.text())
+        .then(text => {
+          const temp = text.substring(47).slice(0, -2);
+          const json = JSON.parse(temp);
+          if (!json.table || !json.table.rows) return [];
+          return json.table.rows.map((row: any) => {
+            const c = row.c;
+            if (!c || !c[1]?.v) return null;
+            return {
+              district: String(c[0]?.v || '').trim(),
+              address: String(c[1]?.v || '').trim(),
+              pinCode: String(c[2]?.v || '').trim(),
+              mapLocation: String(c[3]?.v || '').trim()
+            };
+          }).filter(Boolean);
+        })
+    );
+    const allResults = await Promise.all(fetchPromises);
+    return allResults.flat() as Bookshelf[];
+  } catch (err) {
+    console.error("Error fetching bookshelves:", err);
     return [];
   }
 }
@@ -730,6 +769,67 @@ export default function App() {
   );
 }
 
+function BookshelfPage({ 
+  onClose, 
+  isDarkMode, 
+  bookshelves 
+}: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  bookshelves: Bookshelf[] 
+}) {
+  return (
+    <OverlayPage title="Find Bookshelf" onClose={onClose} isDarkMode={isDarkMode}>
+      <div className="space-y-4">
+        {bookshelves.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 opacity-50">
+            <MapPin className="w-12 h-12 mb-2" />
+            <p>কোনো বুকশেলফ পাওয়া যায়নি</p>
+          </div>
+        ) : (
+          bookshelves.map((shelf, idx) => (
+            <motion.div 
+              key={idx}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className={cn(
+                "p-5 rounded-2xl border-2 transition-all",
+                "bg-[#FFFFFF00] border-emerald-500/50 hover:border-emerald-500"
+              )}
+            >
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <h3 className="font-bold text-emerald-500 text-lg">{shelf.district}</h3>
+                  </div>
+                  <p className="text-emerald-600/80 text-sm mb-1 leading-relaxed">
+                    <span className="font-bold">Address:</span> {shelf.address}
+                  </p>
+                  <p className="text-emerald-600/80 text-sm">
+                    <span className="font-bold">PIN Code:</span> {shelf.pinCode}
+                  </p>
+                </div>
+                <a 
+                  href={shelf.mapLocation} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  Go
+                </a>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+    </OverlayPage>
+  );
+}
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
@@ -760,6 +860,8 @@ function AppContent() {
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showDatabasePage, setShowDatabasePage] = useState(false);
+  const [showBookshelfPage, setShowBookshelfPage] = useState(false);
+  const [bookshelves, setBookshelves] = useState<Bookshelf[]>([]);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books' | 'database'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
@@ -793,6 +895,43 @@ function AppContent() {
   const [isSearchingDonors, setIsSearchingDonors] = useState(false);
   const [bookSearchQuery, setBookSearchQuery] = useState('');
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
+
+  const closeAllOverlays = useCallback(() => {
+    setShowInfoPage(false);
+    setShowPaymentPage(false);
+    setShowBorrowedBooksPage(false);
+    setShowDonationProjectsPage(false);
+    setShowTicTacToe(false);
+    setShowDatabasePage(false);
+    setShowBookshelfPage(false);
+    setSelectedMemberProfile(null);
+    setSelectedBook(null);
+    setSelectedPayment(null);
+    setShowNotificationsPage(false);
+    setSelectedNotification(null);
+    setShowDonatePopup(false);
+    setShowLoginError(false);
+    setShowBorrowForm(false);
+    setShowNotice(false);
+  }, []);
+
+  useEffect(() => {
+    closeAllOverlays();
+  }, [activeTab, closeAllOverlays]);
+
+  const isAnyOverlayOpen = showInfoPage || showPaymentPage || showBorrowedBooksPage || 
+    showDonationProjectsPage || showTicTacToe || showDatabasePage || showBookshelfPage || 
+    selectedMemberProfile !== null || selectedBook !== null || selectedPayment !== null || 
+    showNotificationsPage || selectedNotification !== null || showDonatePopup || 
+    showBorrowForm || showNotice;
+
+  useEffect(() => {
+    if (isAnyOverlayOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [isAnyOverlayOpen]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -862,6 +1001,7 @@ function AppContent() {
         setShowInfoPage(!!event.state.showInfoPage);
         setShowPaymentPage(!!event.state.showPaymentPage);
         setShowBorrowedBooksPage(!!event.state.showBorrowedBooksPage);
+        setShowBookshelfPage(!!event.state.showBookshelfPage);
         setShowDonationProjectsPage(!!event.state.showDonationProjectsPage);
         setSelectedDonationProject(event.state.selectedDonationProject || null);
         setIsMenuOpen(!!event.state.isMenuOpen);
@@ -888,6 +1028,7 @@ function AppContent() {
       showInfoPage, 
       showPaymentPage, 
       showBorrowedBooksPage, 
+      showBookshelfPage,
       showDonationProjectsPage,
       selectedDonationProject,
       isMenuOpen,
@@ -916,6 +1057,7 @@ function AppContent() {
         showInfoPage, 
         showPaymentPage, 
         showBorrowedBooksPage, 
+        showBookshelfPage,
         showDonationProjectsPage,
         selectedDonationProject,
         isMenuOpen,
@@ -932,7 +1074,7 @@ function AppContent() {
         showNotice
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1122,7 +1264,7 @@ function AppContent() {
     return member.access === 'Admin';
   };
 
-  const isVerifiedMember = (member: Member | null) => {
+const isVerifiedMember = (member: Member | null) => {
     if (!member || !member.designation) return false;
     const verifiedDesignations = ['Member', 'Founder', 'Founder & Member', 'Developer'];
     return verifiedDesignations.includes(member.designation);
@@ -1329,12 +1471,13 @@ function AppContent() {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isAnyOverlayOpen) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isRefreshing) return;
+    if (isRefreshing || isAnyOverlayOpen) return;
     
     const currentY = e.touches[0].clientY;
     const diffY = currentY - touchStartY.current;
@@ -1349,6 +1492,7 @@ function AppContent() {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isAnyOverlayOpen) return;
     const diffX = touchStartX.current - e.changedTouches[0].clientX;
     const tabs: ('home' | 'books' | 'members' | 'blood' | 'profile')[] = ['home', 'books', 'members', 'blood', 'profile'];
     const currentIndex = tabs.indexOf(activeTab);
@@ -2106,6 +2250,21 @@ function AppContent() {
                     icon={<BookOpen className="w-5 h-5" />} 
                     label="Borrowed Books" 
                     onClick={() => setShowBorrowedBooksPage(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
+                    icon={<MapPin className="w-5 h-5" />} 
+                    label="Find Bookshelf" 
+                    onClick={() => {
+                      setShowBookshelfPage(true);
+                      if (bookshelves.length === 0) {
+                        setIsLoading(true);
+                        fetchBookshelves().then(data => {
+                          setBookshelves(data);
+                          setIsLoading(false);
+                        });
+                      }
+                    }} 
                     isDarkMode={isDarkMode}
                   />
                   {isSpecialMember(currentUser) && (
@@ -3103,6 +3262,14 @@ function AppContent() {
               </button>
             </div>
           </OverlayPage>
+        )}
+
+        {showBookshelfPage && (
+          <BookshelfPage 
+            onClose={() => window.history.back()} 
+            isDarkMode={isDarkMode} 
+            bookshelves={bookshelves} 
+          />
         )}
       </AnimatePresence>
 
