@@ -13,7 +13,7 @@ import {
   ArrowLeft, 
   Info, 
   FileText, 
-  CheckCircle2,
+  BadgeCheck,
   AlertCircle,
   Loader2,
   BookOpen,
@@ -1122,6 +1122,12 @@ function AppContent() {
     return member.access === 'Admin';
   };
 
+  const isVerifiedMember = (member: Member | null) => {
+    if (!member || !member.designation) return false;
+    const verifiedDesignations = ['Member', 'Founder', 'Founder & Member', 'Developer'];
+    return verifiedDesignations.includes(member.designation);
+  };
+
   useEffect(() => {
     if (activeTab === 'members' && isSpecialMember(currentUser) && allMembers.length === 0) {
       setIsLoading(true);
@@ -1683,7 +1689,12 @@ function AppContent() {
                         </div>
                       )}
                       <div>
-                        <h4 className="font-bold">{m.name}</h4>
+                        <div className="flex items-center gap-1">
+                          <h4 className="font-bold">{m.name}</h4>
+                          {isVerifiedMember(m) && (
+                            <BadgeCheck className="w-4 h-4 text-white fill-emerald-500" />
+                          )}
+                        </div>
                         {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
                       </div>
                     </button>
@@ -1713,7 +1724,12 @@ function AppContent() {
                         </div>
                       )}
                       <div>
-                        <h4 className="font-bold">{m.name}</h4>
+                        <div className="flex items-center gap-1">
+                          <h4 className="font-bold">{m.name}</h4>
+                          {isVerifiedMember(m) && (
+                            <BadgeCheck className="w-4 h-4 text-white fill-emerald-500" />
+                          )}
+                        </div>
                         {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
                       </div>
                     </div>
@@ -2063,7 +2079,12 @@ function AppContent() {
                         alt={currentUser.name}
                       />
                     </div>
-                    <h2 className="text-2xl font-bold mt-4 mb-1">{currentUser.name}</h2>
+                      <div className="flex items-center justify-center gap-1.5 mt-4 mb-1">
+                        <h2 className="text-2xl font-bold">{currentUser.name}</h2>
+                        {isVerifiedMember(currentUser) && (
+                          <BadgeCheck className="w-6 h-6 text-white fill-emerald-500" />
+                        )}
+                      </div>
                     {!currentUser.isNewSheet && <p className="text-slate-500 font-medium">{currentUser.designation}</p>}
                   </div>
                 </div>
@@ -2679,7 +2700,12 @@ function AppContent() {
                     </div>
                   )}
                   <div>
-                    <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="text-xl font-bold">{selectedMemberProfile.name}</h2>
+                      {isVerifiedMember(selectedMemberProfile) && (
+                        <BadgeCheck className="w-5 h-5 text-white fill-emerald-500" />
+                      )}
+                    </div>
                     {!selectedMemberProfile.isNewSheet && <p className="text-sm text-emerald-500 font-bold">{selectedMemberProfile.designation}</p>}
                   </div>
                   
