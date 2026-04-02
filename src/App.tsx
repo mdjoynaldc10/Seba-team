@@ -1816,6 +1816,10 @@ function AppContent() {
   };
 
   const printViaIframe = (content: string) => {
+    // Detect PWA or Mobile
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     // Remove existing iframe if any
     const oldIframe = document.getElementById('print-iframe');
     if (oldIframe) {
@@ -1826,10 +1830,10 @@ function AppContent() {
     const iframe = document.createElement('iframe');
     iframe.id = 'print-iframe';
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '-9999px';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
     iframe.style.border = '0';
     iframe.style.zIndex = '-1';
     document.body.appendChild(iframe);
@@ -1844,14 +1848,36 @@ function AppContent() {
       setTimeout(() => {
         try {
           iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
+          const printResult = iframe.contentWindow?.print();
+          
+          // In some PWA/Mobile environments, print() might return undefined or false if it fails to open
+          // If it's a PWA or Mobile, we also trigger a direct download as a fallback
+          if (isStandalone || isMobile) {
+            const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Seba_Foundation_Report_${new Date().getTime()}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            // Also try to open in new tab
+            setTimeout(() => window.open(url, '_blank'), 500);
+          }
         } catch (e) {
-          console.error('Iframe print failed, falling back to window.open', e);
+          console.error('Iframe print failed, falling back to direct download', e);
           const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Seba_Foundation_Report_${new Date().getTime()}.html`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
           window.open(url, '_blank');
         }
-      }, 1000);
+      }, 800);
     }
   };
 
