@@ -1265,9 +1265,7 @@ function AppContent() {
   };
 
 const isVerifiedMember = (member: Member | null) => {
-    if (!member || !member.designation) return false;
-    const verifiedDesignations = ['Member', 'Founder', 'Founder & Member', 'Developer'];
-    return verifiedDesignations.includes(member.designation);
+    return !!member;
   };
 
   useEffect(() => {
@@ -2544,7 +2542,16 @@ const isVerifiedMember = (member: Member | null) => {
         {showInfoPage && currentUser && (
           <OverlayPage key="info-overlay" title="ব্যবহারকারীর তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-3">
-              <InfoItem label="নাম" value={currentUser.name} isDarkMode={isDarkMode} />
+              <div className={cn(
+                "p-4 rounded-xl border flex items-center justify-between",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+              )}>
+                <div>
+                  <label className="text-[10px] text-slate-400 block uppercase tracking-wider font-bold mb-1">নাম</label>
+                  <b className="text-base">{currentUser.name}</b>
+                </div>
+                {isVerifiedMember(currentUser) && <BadgeCheck className="w-5 h-5 text-white fill-emerald-500" />}
+              </div>
               {!currentUser.isNewSheet && <InfoItem label="পদবী" value={currentUser.designation} isDarkMode={isDarkMode} />}
               <InfoItem label="এলাকা" value={currentUser.area} isDarkMode={isDarkMode} />
               <InfoItem label="আইডি" value={currentUser.id} isDarkMode={isDarkMode} />
@@ -2717,7 +2724,10 @@ const isVerifiedMember = (member: Member | null) => {
                         <User className="w-5 h-5" />
                       </div>
                       <div>
-                        <span className="block font-bold">{t.donorName || 'Anonymous'}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="block font-bold">{t.donorName || 'Anonymous'}</span>
+                          {t.donorName && <BadgeCheck className="w-3.5 h-3.5 text-white fill-emerald-500" />}
+                        </div>
                         <span className="text-[11px] opacity-60">{formatDate(t.date)}</span>
                       </div>
                     </div>
@@ -2946,7 +2956,16 @@ const isVerifiedMember = (member: Member | null) => {
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ব্যক্তিগত তথ্য</h3>
                     <div className="grid grid-cols-1 gap-2">
-                      <InfoItem label="আইডি" value={selectedMemberProfile.id} isDarkMode={isDarkMode} />
+                      <div className={cn(
+                        "p-4 rounded-xl border flex items-center justify-between",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block uppercase tracking-wider font-bold mb-1">আইডি</label>
+                          <b className="text-base">{selectedMemberProfile.id}</b>
+                        </div>
+                        {isVerifiedMember(selectedMemberProfile) && <BadgeCheck className="w-5 h-5 text-white fill-emerald-500" />}
+                      </div>
                       <InfoItem label="এলাকা" value={selectedMemberProfile.area} isDarkMode={isDarkMode} />
                       <InfoItem label="রক্তের গ্রুপ" value={selectedMemberProfile.bloodGroup} isDarkMode={isDarkMode} />
                       <InfoItem label="ফোন" value={selectedMemberProfile.phone} isDarkMode={isDarkMode} />
@@ -3382,7 +3401,13 @@ const isVerifiedMember = (member: Member | null) => {
                 </div>
                 
                 <div className="space-y-3">
-                  <InvoiceRow label="নাম" value={currentUser.name} />
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-xs text-slate-400">নাম:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-bold text-slate-700">{currentUser.name}</span>
+                      {isVerifiedMember(currentUser) && <BadgeCheck className="w-3.5 h-3.5 text-white fill-emerald-500" />}
+                    </div>
+                  </div>
                   <InvoiceRow label="আইডি" value={currentUser.id} />
                   <InvoiceRow label="ফোন" value={currentUser.phone} />
                   <InvoiceRow label="তারিখ" value={formatDate(selectedPayment.date)} />
@@ -3841,7 +3866,10 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
             </AnimatePresence>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold truncate max-w-[80px]">{p2Info.name}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-bold truncate max-w-[80px]">{p2Info.name}</span>
+              {isVerifiedMember(p2Info) && <BadgeCheck className="w-3 h-3 text-white fill-emerald-500" />}
+            </div>
             <span className="text-lg font-black text-amber-500">{scores.O}</span>
           </div>
         </div>
@@ -3871,7 +3899,10 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
             </AnimatePresence>
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-xs font-bold truncate max-w-[80px]">{p1Info.name}</span>
+            <div className="flex items-center gap-1">
+              {isVerifiedMember(p1Info) && <BadgeCheck className="w-3 h-3 text-white fill-emerald-500" />}
+              <span className="text-xs font-bold truncate max-w-[80px]">{p1Info.name}</span>
+            </div>
             <span className="text-lg font-black text-emerald-500">{scores.X}</span>
           </div>
         </div>
