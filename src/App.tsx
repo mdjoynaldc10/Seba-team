@@ -37,7 +37,9 @@ import {
   Palette,
   Layout,
   ToggleLeft,
-  Save
+  Save,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -139,6 +141,16 @@ interface AdvanceSettings {
   pdfTableHeadBg: string;
   pdfTableHeadText: string;
   pdfFontSize: number;
+  pdfLabelMemberName: string;
+  pdfLabelMemberId: string;
+  pdfLabelArea: string;
+  pdfLabelDesignation: string;
+  pdfLabelDate: string;
+  pdfLabelReason: string;
+  pdfLabelAmount: string;
+  pdfLabelTotal: string;
+  pdfLabelInvoiceTitle: string;
+  pdfLabelSubTitle: string;
   theme: {
     background: string;
     text: string;
@@ -949,6 +961,10 @@ function AppContent() {
   const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [advanceSettings, setAdvanceSettings] = useState<AdvanceSettings>({
     pdfTemplate: 'default',
     pdfHeaderText: 'পেমেন্ট হিস্টোরি',
@@ -957,6 +973,16 @@ function AppContent() {
     pdfTableHeadBg: '#10b981',
     pdfTableHeadText: '#ffffff',
     pdfFontSize: 14,
+    pdfLabelMemberName: 'সদস্যের নাম',
+    pdfLabelMemberId: 'আইডি নং',
+    pdfLabelArea: 'এলাকা',
+    pdfLabelDesignation: 'পদবী',
+    pdfLabelDate: 'তারিখ',
+    pdfLabelReason: 'বিবরণ',
+    pdfLabelAmount: 'পরিমাণ',
+    pdfLabelTotal: 'মোট পরিশোধিত',
+    pdfLabelInvoiceTitle: 'পেমেন্ট ইনভয়েস',
+    pdfLabelSubTitle: 'Seba Member Payment Record',
     theme: {
       background: '#f8fafc',
       text: '#1e293b',
@@ -1534,9 +1560,8 @@ function AppContent() {
     setShowAdvanceSettings(false);
   };
 
-  const handleDownloadFullHistory = () => {
-    if (!currentUser) return;
-    
+  const generatePDFContent = (title: string, data: Payment[]) => {
+    if (!currentUser) return '';
     const { 
       theme, 
       pdfTemplate, 
@@ -1545,132 +1570,200 @@ function AppContent() {
       pdfHeaderColor, 
       pdfTableHeadBg, 
       pdfTableHeadText, 
-      pdfFontSize 
+      pdfFontSize,
+      pdfLabelMemberName,
+      pdfLabelMemberId,
+      pdfLabelArea,
+      pdfLabelDesignation,
+      pdfLabelDate,
+      pdfLabelReason,
+      pdfLabelAmount,
+      pdfLabelTotal,
+      pdfLabelSubTitle
     } = advanceSettings;
 
-    const printContent = `
-      <html>
+    return `
+      <!DOCTYPE html>
+      <html lang="bn">
         <head>
-          <title>Payment History - ${currentUser.name}</title>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${title} - ${currentUser.name}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
             body { 
-              font-family: 'Inter', sans-serif; 
-              padding: 40px; 
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+              padding: 20px; 
               color: ${theme.text}; 
-              background-color: ${theme.background};
-              line-height: 1.5; 
+              background-color: white;
+              line-height: 1.4; 
               font-size: ${pdfFontSize}px;
+              margin: 0;
             }
+            .container { max-width: 800px; margin: 0 auto; }
             .header { 
               border-bottom: 2px solid ${pdfHeaderColor}; 
-              padding-bottom: 20px; 
-              margin-bottom: 30px; 
+              padding-bottom: 15px; 
+              margin-bottom: 20px; 
               display: flex; 
               justify-content: space-between; 
               align-items: center; 
             }
-            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 24px; }
+            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 22px; }
             .user-info { 
-              margin-bottom: 30px; 
-              background: ${isDarkMode ? 'rgba(255,255,255,0.05)' : '#f8fafc'}; 
-              padding: 20px; 
-              border-radius: 12px; 
+              margin-bottom: 20px; 
+              background: #f8fafc; 
+              padding: 15px; 
+              border-radius: 10px; 
+              border: 1px solid #e2e8f0;
             }
-            .user-info p { margin: 5px 0; font-size: 14px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            .user-info p { margin: 4px 0; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
             th { 
               background: ${pdfTableHeadBg}; 
               color: ${pdfTableHeadText}; 
-              font-weight: 700; 
+              font-weight: bold; 
               text-align: left; 
-              padding: 12px; 
+              padding: 10px; 
               font-size: 12px; 
-              text-transform: uppercase; 
-              letter-spacing: 0.05em; 
             }
-            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
-            .amount { font-weight: 700; color: ${theme.button}; }
-            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+            td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+            .amount { font-weight: bold; color: ${theme.button}; }
+            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
             
-            ${pdfTemplate === 'modern' ? `
-              .header { border-bottom: none; text-align: center; display: block; }
-              .user-info { text-align: center; background: transparent; border: 1px solid #e2e8f0; }
-              table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-              th { background: #f8fafc; color: #64748b; }
-            ` : ''}
-            
-            ${pdfTemplate === 'compact' ? `
-              body { padding: 20px; font-size: 12px; }
-              .header { margin-bottom: 15px; padding-bottom: 10px; }
-              .user-info { padding: 10px; margin-bottom: 15px; }
-              td, th { padding: 6px; font-size: 11px; }
-            ` : ''}
+            .print-controls {
+              position: fixed;
+              top: 10px;
+              right: 10px;
+              display: flex;
+              gap: 10px;
+              z-index: 9999;
+            }
+            .btn {
+              padding: 8px 16px;
+              border-radius: 6px;
+              border: none;
+              cursor: pointer;
+              font-weight: bold;
+              font-size: 12px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .btn-print { background: #10b981; color: white; }
+            .btn-close { background: #ef4444; color: white; }
 
             @media print {
-              body { padding: 0; }
-              .no-print { display: none; }
+              .print-controls { display: none !important; }
+              body { padding: 0; background: white; }
+              .container { max-width: 100%; }
+              .user-info { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
+              th { background: ${pdfTableHeadBg} !important; color: ${pdfTableHeadText} !important; -webkit-print-color-adjust: exact; }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div>
-              <h1>${pdfHeaderText}</h1>
-              <p style="margin-top: 5px; opacity: 0.7;">Seba Member Payment Record</p>
-            </div>
-            <div style="text-align: right;">
-              <p style="font-weight: bold; color: ${pdfHeaderColor};">SEBA APP</p>
-              <p style="font-size: 12px; opacity: 0.6;">${new Date().toLocaleDateString('bn-BD')}</p>
-            </div>
-          </div>
-          
-          <div class="user-info">
-            <p><strong>সদস্যের নাম:</strong> ${currentUser.name}</p>
-            <p><strong>আইডি নং:</strong> ${currentUser.id}</p>
-            <p><strong>এলাকা:</strong> ${currentUser.area}</p>
-            <p><strong>পদবী:</strong> ${currentUser.designation}</p>
+          <div class="print-controls">
+            <button class="btn btn-print" onclick="window.print()">প্রিন্ট / সেভ PDF</button>
+            <button class="btn btn-close" onclick="window.close()">বন্ধ করুন</button>
           </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th>তারিখ</th>
-                <th>বিবরণ</th>
-                <th style="text-align: right;">পরিমাণ</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${paymentData.map(p => `
+          <div class="container">
+            <div class="header">
+              <div>
+                <h1>${pdfHeaderText}</h1>
+                <p style="margin-top: 3px; opacity: 0.7; font-size: 12px;">${pdfLabelSubTitle}</p>
+              </div>
+              <div style="text-align: right;">
+                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0;">SEBA APP</p>
+                <p style="font-size: 11px; opacity: 0.6; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
+              </div>
+            </div>
+            
+            <div class="user-info">
+              <p><strong>${pdfLabelMemberName}:</strong> ${currentUser.name}</p>
+              <p><strong>${pdfLabelMemberId}:</strong> ${currentUser.id}</p>
+              <p><strong>${pdfLabelArea}:</strong> ${currentUser.area}</p>
+              <p><strong>${pdfLabelDesignation}:</strong> ${currentUser.designation}</p>
+            </div>
+
+            <table>
+              <thead>
                 <tr>
-                  <td>${formatDate(p.date)}</td>
-                  <td>${p.reason}</td>
-                  <td style="text-align: right;" class="amount">৳${p.amount.toLocaleString()}</td>
+                  <th>${pdfLabelDate}</th>
+                  <th>${pdfLabelReason}</th>
+                  <th style="text-align: right;">${pdfLabelAmount}</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${data.length > 0 ? data.map(p => `
+                  <tr>
+                    <td>${formatDate(p.date)}</td>
+                    <td>${p.reason}</td>
+                    <td style="text-align: right;" class="amount">৳${p.amount.toLocaleString()}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="3" style="text-align:center">কোনো তথ্য পাওয়া যায়নি</td></tr>'}
+              </tbody>
+            </table>
 
-          <div style="margin-top: 30px; text-align: right;">
-            <p style="font-size: 18px; font-weight: bold;">মোট পরিশোধিত: <span style="color: ${theme.button};">৳${paymentData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</span></p>
+            <div style="margin-top: 25px; text-align: right;">
+              <p style="font-size: 16px; font-weight: bold; margin: 0;">${pdfLabelTotal}: <span style="color: ${theme.button};">৳${data.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</span></p>
+            </div>
+
+            <div class="footer">
+              <p style="margin: 0;">${pdfFooterText}</p>
+              <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+            </div>
           </div>
 
-          <div class="footer">
-            <p>${pdfFooterText}</p>
-            <p>© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
-          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                try {
+                  window.print();
+                } catch (e) {
+                  console.error('Print failed', e);
+                }
+              }, 1000);
+            };
+          </script>
         </body>
       </html>
     `;
+  };
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
+  const handleDownloadFullHistory = () => {
+    const content = generatePDFContent(advanceSettings.pdfHeaderText || 'Full Payment History', paymentData);
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
+    }
+  };
+
+  const handleDownloadSingleTransaction = (payment: Payment) => {
+    const content = generatePDFContent(advanceSettings.pdfLabelInvoiceTitle || 'Payment Invoice', [payment]);
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
+    }
+  };
+
+  const handleDownloadFilteredHistory = () => {
+    let filtered = [...paymentData];
+    if (filterStartDate) {
+      filtered = filtered.filter(p => p.date >= filterStartDate);
+    }
+    if (filterEndDate) {
+      filtered = filtered.filter(p => p.date <= filterEndDate);
+    }
+    
+    const content = generatePDFContent('Filtered Payment History', filtered);
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
     }
   };
 
@@ -1697,16 +1790,23 @@ function AppContent() {
 
   const formatDate = (dateValue: any) => {
     if (!dateValue) return 'তথ্য নেই';
-    let date: Date;
-    if (typeof dateValue === 'string') {
-      const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
-      date = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(dateValue);
-    } else {
-      date = new Date(dateValue);
+    try {
+      let date: Date;
+      if (typeof dateValue === 'string') {
+        const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
+        date = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(dateValue);
+      } else {
+        date = new Date(dateValue);
+      }
+      if (isNaN(date.getTime())) return dateValue;
+      return date.toLocaleDateString('bn-BD', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    } catch (e) {
+      return dateValue;
     }
-    if (isNaN(date.getTime())) return dateValue;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${date.getDate()} ${months[date.getMonth()]}, ${date.getFullYear()}`;
   };
 
   const getDuration = (startDateValue: any) => {
@@ -2900,9 +3000,8 @@ function AppContent() {
                 <div className="text-center p-10 opacity-50">কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
               ) : (
                 paymentData.map((p, idx) => (
-                  <button 
+                  <div 
                     key={`payment-${idx}-${p.date}`} 
-                    onClick={() => setSelectedPayment(p)}
                     className={cn(
                       "w-full flex items-center justify-between p-4 rounded-xl border text-left",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -2917,15 +3016,34 @@ function AppContent() {
                         <span className="text-[11px] opacity-60">{formatDate(p.date)}</span>
                       </div>
                     </div>
-                    <div className="font-bold text-emerald-500">৳{p.amount}</div>
-                  </button>
+                    <div className="flex items-center gap-3">
+                      <div className="font-bold text-emerald-500">৳{p.amount}</div>
+                      <button 
+                        onClick={() => handleDownloadSingleTransaction(p)}
+                        className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 hover:bg-emerald-100 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 ))
               )}
             </div>
 
-            {/* Floating Download Button */}
+            {/* Floating Buttons */}
             {paymentData.length > 0 && (
-              <div className="fixed bottom-8 right-8 z-[3000]">
+              <div className="fixed bottom-8 right-8 z-[3000] flex flex-col gap-4">
+                <motion.button 
+                  initial={{ scale: 0, rotate: -45 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setIsFilterOpen(true)}
+                  className="w-14 h-14 bg-slate-800 text-white rounded-full shadow-2xl flex items-center justify-center transition-all hover:bg-slate-900 group"
+                  title="Filter History"
+                >
+                  <Filter className="w-6 h-6" />
+                </motion.button>
                 <motion.button 
                   initial={{ scale: 0, rotate: -45 }}
                   animate={{ scale: 1, rotate: 0 }}
@@ -2941,6 +3059,85 @@ function AppContent() {
             )}
           </OverlayPage>
         )}
+
+        {/* Filter Modal */}
+        <AnimatePresence>
+          {isFilterOpen && (
+            <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsFilterOpen(false)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className={cn(
+                  "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10 border",
+                  isDarkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-slate-100 text-slate-900"
+                )}
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold">ফিল্টার করুন</h3>
+                  <button onClick={() => setIsFilterOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold opacity-60 ml-1">শুরু তারিখ</label>
+                    <input 
+                      type="date"
+                      value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                      className={cn(
+                        "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold opacity-60 ml-1">শেষ তারিখ</label>
+                    <input 
+                      type="date"
+                      value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                      className={cn(
+                        "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                      )}
+                    />
+                  </div>
+
+                  <div className="pt-4 flex gap-3">
+                    <button 
+                      onClick={() => {
+                        setFilterStartDate('');
+                        setFilterEndDate('');
+                      }}
+                      className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold active:scale-95 transition-transform"
+                    >
+                      রিসেট
+                    </button>
+                    <button 
+                      onClick={() => {
+                        handleDownloadFilteredHistory();
+                        setIsFilterOpen(false);
+                      }}
+                      className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+                    >
+                      ডাউনলোড PDF
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {showDonationProjectsPage && (
           <OverlayPage key="donation-projects-overlay" title="ডোনেশন প্রজেক্ট" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
@@ -3013,25 +3210,77 @@ function AppContent() {
         {showAdvanceSettings && isDeveloper(currentUser) && (
           <OverlayPage key="advance-settings-overlay" title="Advance Settings" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-6 pb-24">
-              {/* PDF Template Settings */}
+              {/* PDF Settings */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> PDF Template Edit
-                </h3>
-                <div className={cn("p-4 rounded-2xl border space-y-4", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
-                  <div>
-                    <label className="text-xs font-bold opacity-60 block mb-2 uppercase">Template Style</label>
-                    <select 
-                      value={advanceSettings.pdfTemplate}
-                      onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTemplate: e.target.value})}
-                      className={cn("w-full p-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                    >
-                      <option value="default">Default Professional</option>
-                      <option value="modern">Modern Minimal</option>
-                      <option value="compact">Compact List</option>
-                    </select>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> PDF Customization
+                  </h3>
+                  <button 
+                    onClick={() => setShowPdfPreview(!showPdfPreview)}
+                    className="text-xs font-bold text-emerald-500 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-full"
+                  >
+                    {showPdfPreview ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    {showPdfPreview ? 'Hide Preview' : 'Live Preview'}
+                  </button>
+                </div>
 
+                {showPdfPreview && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn(
+                      "p-6 rounded-2xl border shadow-inner mb-4 overflow-hidden",
+                      isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                    )}
+                    style={{ fontSize: `${advanceSettings.pdfFontSize * 0.6}px` }}
+                  >
+                    <div className="bg-white text-slate-900 p-4 rounded shadow-sm min-h-[300px] flex flex-col">
+                      <div className="flex justify-between items-center border-b pb-2 mb-4" style={{ borderColor: advanceSettings.pdfHeaderColor }}>
+                        <div>
+                          <h4 className="font-bold m-0" style={{ color: advanceSettings.pdfHeaderColor, fontSize: '1.2em' }}>{advanceSettings.pdfHeaderText}</h4>
+                          <p className="text-[0.7em] opacity-60">{advanceSettings.pdfLabelSubTitle}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-[0.8em]" style={{ color: advanceSettings.pdfHeaderColor }}>SEBA APP</p>
+                          <p className="text-[0.6em] opacity-50">{new Date().toLocaleDateString('bn-BD')}</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-2 rounded mb-4 space-y-1">
+                        <p className="text-[0.7em]"><strong>{advanceSettings.pdfLabelMemberName}:</strong> John Doe</p>
+                        <p className="text-[0.7em]"><strong>{advanceSettings.pdfLabelMemberId}:</strong> SF-001</p>
+                      </div>
+
+                      <table className="w-full text-[0.7em] border-collapse">
+                        <thead>
+                          <tr style={{ background: advanceSettings.pdfTableHeadBg, color: advanceSettings.pdfTableHeadText }}>
+                            <th className="p-1 text-left">{advanceSettings.pdfLabelDate}</th>
+                            <th className="p-1 text-left">{advanceSettings.pdfLabelReason}</th>
+                            <th className="p-1 text-right">{advanceSettings.pdfLabelAmount}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b">
+                            <td className="p-1">01/01/2024</td>
+                            <td className="p-1">Monthly Fee</td>
+                            <td className="p-1 text-right font-bold" style={{ color: advanceSettings.theme.button }}>৳500</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <div className="mt-auto pt-4 text-right">
+                        <p className="font-bold">{advanceSettings.pdfLabelTotal}: <span style={{ color: advanceSettings.theme.button }}>৳500</span></p>
+                      </div>
+
+                      <div className="mt-4 pt-2 border-t text-center text-[0.6em] opacity-40">
+                        <p>{advanceSettings.pdfFooterText}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                <div className={cn("p-4 rounded-2xl border space-y-4", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Header Text</label>
@@ -3039,6 +3288,15 @@ function AppContent() {
                         type="text" 
                         value={advanceSettings.pdfHeaderText}
                         onChange={(e) => setAdvanceSettings({...advanceSettings, pdfHeaderText: e.target.value})}
+                        className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Sub-Title Text</label>
+                      <input 
+                        type="text" 
+                        value={advanceSettings.pdfLabelSubTitle}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfLabelSubTitle: e.target.value})}
                         className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                       />
                     </div>
@@ -3054,13 +3312,16 @@ function AppContent() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Header Color</label>
-                      <input 
-                        type="color" 
-                        value={advanceSettings.pdfHeaderColor}
-                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfHeaderColor: e.target.value})}
-                        className="w-full h-10 rounded-lg cursor-pointer"
-                      />
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Template</label>
+                      <select 
+                        value={advanceSettings.pdfTemplate}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTemplate: e.target.value})}
+                        className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      >
+                        <option value="default">Default</option>
+                        <option value="modern">Modern</option>
+                        <option value="compact">Compact</option>
+                      </select>
                     </div>
                     <div>
                       <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Font Size (px)</label>
@@ -3069,6 +3330,18 @@ function AppContent() {
                         value={advanceSettings.pdfFontSize}
                         onChange={(e) => setAdvanceSettings({...advanceSettings, pdfFontSize: parseInt(e.target.value)})}
                         className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Header Color</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.pdfHeaderColor}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfHeaderColor: e.target.value})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
                       />
                     </div>
                     <div>
@@ -3088,6 +3361,33 @@ function AppContent() {
                         onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTableHeadText: e.target.value})}
                         className="w-full h-10 rounded-lg cursor-pointer"
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <label className="text-xs font-bold opacity-60 block uppercase border-b pb-1">PDF Labels (Edit All Text)</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Member Name', key: 'pdfLabelMemberName' },
+                        { label: 'Member ID', key: 'pdfLabelMemberId' },
+                        { label: 'Area', key: 'pdfLabelArea' },
+                        { label: 'Designation', key: 'pdfLabelDesignation' },
+                        { label: 'Date', key: 'pdfLabelDate' },
+                        { label: 'Reason', key: 'pdfLabelReason' },
+                        { label: 'Amount', key: 'pdfLabelAmount' },
+                        { label: 'Total', key: 'pdfLabelTotal' },
+                        { label: 'Invoice Title', key: 'pdfLabelInvoiceTitle' }
+                      ].map((item) => (
+                        <div key={item.key}>
+                          <label className="text-[9px] font-bold opacity-40 block mb-0.5 uppercase">{item.label}</label>
+                          <input 
+                            type="text" 
+                            value={(advanceSettings as any)[item.key]}
+                            onChange={(e) => setAdvanceSettings({...advanceSettings, [item.key]: e.target.value})}
+                            className={cn("w-full p-2 rounded-lg border text-xs", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
