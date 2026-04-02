@@ -188,7 +188,8 @@ interface AdvanceSettings {
 
 // --- Helpers ---
 const isVerifiedMember = (member: Member | null) => {
-  return !!member;
+  if (!member) return false;
+  return !member.isNewSheet;
 };
 
 const isSpecialMember = (member: Member | null) => {
@@ -2174,7 +2175,7 @@ function AppContent() {
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
           <button onClick={() => setActiveTab('profile')} className="p-1">
-            {currentUser?.photoId ? (
+            {currentUser?.photoId && !currentUser.isNewSheet ? (
               <img 
                 src={`https://lh3.googleusercontent.com/d/${currentUser.photoId}`} 
                 className="w-8 h-8 rounded-full border-2 border-white/80 object-cover"
@@ -2424,7 +2425,7 @@ function AppContent() {
                         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                       )}
                     >
-                      {m.photoId ? (
+                      {m.photoId && !m.isNewSheet ? (
                         <img 
                           src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
                           className="w-14 h-14 rounded-lg object-cover"
@@ -2459,7 +2460,7 @@ function AppContent() {
                       "flex items-center gap-4 p-3 rounded-xl border",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                     )}>
-                      {m.photoId ? (
+                      {m.photoId && !m.isNewSheet ? (
                         <img 
                           src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
                           className="w-14 h-14 rounded-lg object-cover"
@@ -2829,7 +2830,7 @@ function AppContent() {
                     </div>
                     <div className="relative inline-block">
                       <img 
-                        src={currentUser.photoId ? `https://lh3.googleusercontent.com/d/${currentUser.photoId}` : 'https://via.placeholder.com/100'} 
+                        src={(currentUser.photoId && !currentUser.isNewSheet) ? `https://lh3.googleusercontent.com/d/${currentUser.photoId}` : 'https://via.placeholder.com/100'} 
                         className="w-24 h-24 rounded-full border-4 border-emerald-500 object-cover mx-auto"
                         alt={currentUser.name}
                       />
@@ -3938,7 +3939,7 @@ function AppContent() {
                 isDarkMode ? "bg-slate-900" : "bg-slate-50"
               )}>
                 <div className="flex flex-col items-center text-center space-y-3">
-                  {selectedMemberProfile.photoId ? (
+                  {selectedMemberProfile.photoId && !selectedMemberProfile.isNewSheet ? (
                     <img 
                       src={`https://lh3.googleusercontent.com/d/${selectedMemberProfile.photoId}`} 
                       className="w-24 h-24 rounded-2xl object-cover shadow-xl border-4 border-emerald-500/20"
@@ -4932,7 +4933,7 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
               "w-12 h-12 rounded-full border-2 border-amber-500 flex items-center justify-center overflow-hidden",
               isDarkMode ? "bg-slate-800" : "bg-slate-100"
             )}>
-              {p2Info.photoId ? (
+              {p2Info.photoId && !p2Info.isNewSheet ? (
                 <img 
                   src={`https://lh3.googleusercontent.com/d/${p2Info.photoId}`} 
                   alt={p2Info.name} 
@@ -4965,7 +4966,7 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
               "w-12 h-12 rounded-full border-2 border-emerald-500 flex items-center justify-center overflow-hidden",
               isDarkMode ? "bg-slate-800" : "bg-slate-100"
             )}>
-              {p1Info.photoId ? (
+              {p1Info.photoId && !p1Info.isNewSheet ? (
                 <img 
                   src={`https://lh3.googleusercontent.com/d/${p1Info.photoId}`} 
                   alt={p1Info.name} 
