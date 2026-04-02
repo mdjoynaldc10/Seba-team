@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -1746,11 +1747,6 @@ function AppContent() {
           </style>
         </head>
         <body>
-          <div class="print-controls">
-            <button class="btn btn-print" onclick="window.print()">প্রিন্ট / সেভ PDF</button>
-            <button class="btn btn-close" onclick="window.close()">বন্ধ করুন</button>
-          </div>
-
           <div class="container">
             <div class="header">
               <div>
@@ -1801,13 +1797,22 @@ function AppContent() {
 
           <script>
             window.onload = function() {
-              setTimeout(function() {
-                try {
-                  window.print();
-                } catch (e) {
-                  console.error('Print failed', e);
+              // Trigger print immediately
+              window.print();
+              
+              // For some mobile browsers, we might need to listen for afterprint to close
+              window.onafterprint = function() {
+                if (window.opener) {
+                  window.close();
                 }
-              }, 1000);
+              };
+              
+              // Fallback for browsers that don't support onafterprint
+              setTimeout(function() {
+                if (window.opener) {
+                  // Don't close immediately to allow print dialog to stay open
+                }
+              }, 2000);
             };
           </script>
         </body>
@@ -1815,18 +1820,102 @@ function AppContent() {
     `;
   };
 
+  const downloadAsPDF = async (content: string, filename: string) => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Create a temporary container to render the HTML
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '750px'; // Slightly narrower to ensure it fits well
+    container.innerHTML = content;
+    document.body.appendChild(container);
+
+    // Add some padding to the container itself for safety
+    const innerContainer = container.querySelector('.container') as HTMLElement;
+    if (innerContainer) {
+      innerContainer.style.padding = '20px';
+    }
+
+    // Remove print controls if they exist in the content
+    const controls = container.querySelector('.print-controls');
+    if (controls) controls.remove();
+
+    try {
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 800
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      // Standard margin (10mm on each side)
+      const margin = 10;
+      const contentWidth = pdfWidth - (2 * margin);
+      
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = contentWidth / imgWidth;
+      const finalImgWidth = imgWidth * ratio;
+      const finalImgHeight = imgHeight * ratio;
+
+      // Position with margin
+      pdf.addImage(imgData, 'JPEG', margin, margin, finalImgWidth, finalImgHeight);
+      
+      pdf.save(`${filename}.pdf`);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      // Fallback
+      const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
   const printViaIframe = (content: string) => {
     // Detect PWA or Mobile
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-    // Remove existing iframe if any
+    // For PWA and Mobile, opening a new window is often more reliable to trigger the system print service
+    if (isStandalone || isMobile) {
+      const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const printWindow = window.open(url, '_blank');
+      
+      // Fallback if window.open is blocked
+      if (!printWindow) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Invoice_${new Date().getTime()}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      return;
+    }
+
+    // Desktop/Browser fallback using hidden iframe
     const oldIframe = document.getElementById('print-iframe');
     if (oldIframe) {
       document.body.removeChild(oldIframe);
     }
 
-    // Create a new hidden iframe
     const iframe = document.createElement('iframe');
     iframe.id = 'print-iframe';
     iframe.style.position = 'fixed';
@@ -1844,51 +1933,28 @@ function AppContent() {
       doc.write(content);
       doc.close();
 
-      // Wait for content to load then print
       setTimeout(() => {
         try {
           iframe.contentWindow?.focus();
-          const printResult = iframe.contentWindow?.print();
-          
-          // In some PWA/Mobile environments, print() might return undefined or false if it fails to open
-          // If it's a PWA or Mobile, we also trigger a direct download as a fallback
-          if (isStandalone || isMobile) {
-            const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Seba_Foundation_Report_${new Date().getTime()}.html`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            
-            // Also try to open in new tab
-            setTimeout(() => window.open(url, '_blank'), 500);
-          }
+          iframe.contentWindow?.print();
         } catch (e) {
-          console.error('Iframe print failed, falling back to direct download', e);
+          console.error('Iframe print failed', e);
           const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `Seba_Foundation_Report_${new Date().getTime()}.html`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
           window.open(url, '_blank');
         }
-      }, 800);
+      }, 500);
     }
   };
 
   const handleDownloadFullHistory = () => {
     const content = generatePDFContent(advanceSettings.pdfHeaderText || 'Full Payment History', paymentData);
-    printViaIframe(content);
+    downloadAsPDF(content, `Full_History_${new Date().getTime()}`);
   };
 
   const handleDownloadSingleTransaction = (payment: Payment) => {
     const content = generatePDFContent(advanceSettings.pdfLabelInvoiceTitle || 'Payment Invoice', [payment]);
-    printViaIframe(content);
+    downloadAsPDF(content, `Invoice_${new Date().getTime()}`);
   };
 
   const handleDownloadFilteredHistory = () => {
@@ -1901,7 +1967,7 @@ function AppContent() {
     }
     
     const content = generatePDFContent('Filtered Payment History', filtered);
-    printViaIframe(content);
+    downloadAsPDF(content, `Filtered_History_${new Date().getTime()}`);
   };
 
   const toBengaliDigits = (num: number) => {
