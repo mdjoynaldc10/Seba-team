@@ -910,6 +910,73 @@ function BookshelfPage({
   );
 }
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!" };
+  if (hour >= 12 && hour < 16) return { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!" };
+  if (hour >= 16 && hour < 18) return { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!" };
+  if (hour >= 18 && hour < 22) return { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!" };
+  return { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!" };
+};
+
+const SplashScreen = React.memo(() => {
+  const greeting = getGreeting();
+  const [showLoadingBar, setShowLoadingBar] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowLoadingBar(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.8, ease: "easeInOut" }}
+      className="fixed inset-0 z-[9999] bg-emerald-500 flex flex-col items-center justify-center text-white p-6"
+    >
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.2, ease: "easeOut" }}
+        className="text-center space-y-4"
+      >
+        <div className="bg-white/20 p-6 rounded-full inline-block mb-4 backdrop-blur-sm">
+          <Heart className="w-12 h-12 text-white fill-white animate-pulse" />
+        </div>
+        <h1 className="text-4xl font-bold tracking-tight">{greeting.main}</h1>
+        <p className="text-lg opacity-90 font-medium">{greeting.sub}</p>
+      </motion.div>
+
+      <AnimatePresence>
+        {showLoadingBar && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="absolute bottom-12 left-0 right-0 px-12 space-y-3"
+          >
+            <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest opacity-80">
+              <span>Loading...</span>
+              <span>Please Wait</span>
+            </div>
+            <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: "0%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 3, ease: "linear" }}
+                className="h-full bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+});
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
@@ -928,6 +995,7 @@ function AppContent() {
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAppInitializing, setIsAppInitializing] = useState(true);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
   // Overlays
@@ -1275,7 +1343,25 @@ function AppContent() {
         console.error("Error parsing saved user data:", e);
       }
     }
-  }, []);
+
+    // Simulate app initialization
+    const timer = setTimeout(() => {
+      if (isAuthReady) {
+        setIsAppInitializing(false);
+      }
+    }, 4000); // Increased minimum time for stable experience
+    return () => clearTimeout(timer);
+  }, [isAuthReady]);
+
+  // Sync initialization with auth ready
+  useEffect(() => {
+    if (isAuthReady) {
+      const timer = setTimeout(() => {
+        setIsAppInitializing(false);
+      }, 1500); // Small buffer after auth is ready
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthReady]);
 
   // Listen for public donors from Firebase
   useEffect(() => {
@@ -1941,14 +2027,19 @@ function AppContent() {
   };
 
   return (
-    <div className={cn(
-      "flex flex-col h-screen overflow-hidden font-['Hind_Siliguri']",
-      isDarkMode ? "bg-slate-900 text-slate-50" : "bg-slate-50 text-slate-900"
-    )}
-    onTouchStart={handleTouchStart}
-    onTouchMove={handleTouchMove}
-    onTouchEnd={handleTouchEnd}
-    >
+    <>
+      <AnimatePresence mode="wait">
+        {isAppInitializing && <SplashScreen key="splash" />}
+      </AnimatePresence>
+
+      <div className={cn(
+        "flex flex-col h-screen overflow-hidden font-['Hind_Siliguri']",
+        isDarkMode ? "bg-slate-900 text-slate-50" : "bg-slate-50 text-slate-900"
+      )}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      >
       {/* Pull to Refresh Indicator */}
       <div 
         className="fixed top-0 left-0 w-full flex justify-center z-[100] pointer-events-none transition-transform duration-200"
@@ -4335,6 +4426,7 @@ function AppContent() {
       </AnimatePresence>
 
     </div>
+    </>
   );
 }
 
