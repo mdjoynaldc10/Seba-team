@@ -74,9 +74,24 @@
         "dob": { "type": "string" }
       },
       "required": ["uid"]
+    },
+    "settings": {
+      "title": "Global Settings",
+      "description": "Global application settings and customization",
+      "type": "object",
+      "properties": {
+        "advanceSettings": { "type": "object", "description": "Global advance settings object" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["advanceSettings"]
     }
   },
   "firestore": {
+    "/settings/{settingId}": {
+      "schema": "settings",
+      "description": "Global settings document"
+    },
     "/publicDonors/{donorId}": {
       "schema": "publicDonors",
       "description": "Collection of members who opted-in for public blood donation"

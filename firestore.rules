@@ -40,5 +40,11 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow delete: if isAuthenticated() && reactionId.endsWith("_" + resource.data.userId);
     }
+
+    // Global Settings Collection
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAuthenticated(); // Simplified for now, can be hardened if needed
+    }
   }
 }

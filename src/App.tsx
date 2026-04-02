@@ -31,7 +31,13 @@ import {
   Bell,
   Database,
   MapPin,
-  CheckCircle2
+  CheckCircle2,
+  Download,
+  Settings,
+  Palette,
+  Layout,
+  ToggleLeft,
+  Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -124,6 +130,68 @@ interface Notice {
   title: string;
   message: string;
 }
+
+interface AdvanceSettings {
+  pdfTemplate: string;
+  pdfHeaderText: string;
+  pdfFooterText: string;
+  pdfHeaderColor: string;
+  pdfTableHeadBg: string;
+  pdfTableHeadText: string;
+  pdfFontSize: number;
+  theme: {
+    background: string;
+    text: string;
+    button: string;
+    buttonText: string;
+  };
+  tabNames: {
+    home: string;
+    books: string;
+    members: string;
+    blood: string;
+    profile: string;
+  };
+  optionNames: {
+    information: string;
+    paymentHistory: string;
+    borrowedBooks: string;
+    findBookshelf: string;
+    database: string;
+    playTicTacToe: string;
+    bloodDonation: string;
+    darkMode: string;
+    donation: string;
+    facebookPage: string;
+    facebookGroup: string;
+    whatsAppChannel: string;
+    logout: string;
+  };
+  controls: {
+    admin: { [key: string]: boolean };
+    member: { [key: string]: boolean };
+  };
+}
+
+// --- Helpers ---
+const isVerifiedMember = (member: Member | null) => {
+  return !!member;
+};
+
+const isSpecialMember = (member: Member | null) => {
+  if (!member) return false;
+  return member.access === 'Admin';
+};
+
+const isAdmin = (member: Member | null) => {
+  if (!member) return false;
+  return member.access === 'Admin';
+};
+
+const isDeveloper = (member: Member | null) => {
+  if (!member) return false;
+  return member.designation === 'Developer';
+};
 
 interface Notification {
   id: string;
@@ -878,6 +946,64 @@ function AppContent() {
   const [showNotice, setShowNotice] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
+  const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [advanceSettings, setAdvanceSettings] = useState<AdvanceSettings>({
+    pdfTemplate: 'default',
+    pdfHeaderText: 'পেমেন্ট হিস্টোরি',
+    pdfFooterText: 'এই রিপোর্টটি সেবা অ্যাপ থেকে স্বয়ংক্রিয়ভাবে তৈরি করা হয়েছে।',
+    pdfHeaderColor: '#10b981',
+    pdfTableHeadBg: '#10b981',
+    pdfTableHeadText: '#ffffff',
+    pdfFontSize: 14,
+    theme: {
+      background: '#f8fafc',
+      text: '#1e293b',
+      button: '#10b981',
+      buttonText: '#ffffff'
+    },
+    tabNames: {
+      home: 'Home',
+      books: 'Books',
+      members: 'Members',
+      blood: 'Blood',
+      profile: 'Profile'
+    },
+    optionNames: {
+      information: 'Information',
+      paymentHistory: 'Payment History',
+      borrowedBooks: 'Borrowed Books',
+      findBookshelf: 'Find Bookshelf',
+      database: 'Database',
+      playTicTacToe: 'Play TicTacToe',
+      bloodDonation: 'Blood Donation',
+      darkMode: 'Dark Mode',
+      donation: 'Donation',
+      facebookPage: 'Facebook Page',
+      facebookGroup: 'Facebook Group',
+      whatsAppChannel: 'WhatsApp Channel',
+      logout: 'Logout'
+    },
+    controls: {
+      admin: { 
+        database: true, 
+        tictactoe: true, 
+        donation: true, 
+        bloodDonation: true,
+        borrowedBooks: true,
+        findBookshelf: true
+      },
+      member: { 
+        database: false, 
+        tictactoe: true, 
+        donation: true, 
+        bloodDonation: true,
+        borrowedBooks: true,
+        findBookshelf: true
+      }
+    }
+  });
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [borrowFormData, setBorrowFormData] = useState({
     name: '',
@@ -1016,6 +1142,8 @@ function AppContent() {
         setShowLoginError(!!event.state.showLoginError);
         setShowBorrowForm(!!event.state.showBorrowForm);
         setShowNotice(!!event.state.showNotice);
+        setShowAdvanceSettings(!!event.state.showAdvanceSettings);
+        setShowRegistration(!!event.state.showRegistration);
         setTimeout(() => {
           isInternalNavigation.current = false;
         }, 50);
@@ -1042,7 +1170,9 @@ function AppContent() {
       showDonatePopup,
       showLoginError,
       showBorrowForm,
-      showNotice
+      showNotice,
+      showAdvanceSettings,
+      showRegistration
     }, '');
 
     window.addEventListener('popstate', handlePopState);
@@ -1071,10 +1201,12 @@ function AppContent() {
         showDonatePopup,
         showLoginError,
         showBorrowForm,
-        showNotice
+        showNotice,
+        showAdvanceSettings,
+        showRegistration
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showRegistration]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1158,6 +1290,40 @@ function AppContent() {
       return () => unsubscribe();
     }
   }, [currentUser, isAuthReady]);
+
+  // Global Settings Sync
+  useEffect(() => {
+    if (!isAuthReady) return;
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.advanceSettings) {
+          setAdvanceSettings(data.advanceSettings);
+        }
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/global');
+    });
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
+  const handleSaveSettings = async () => {
+    if (!currentUser || !isDeveloper(currentUser)) return;
+    setIsSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'settings', 'global'), {
+        advanceSettings,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.id
+      });
+      alert('সেটিংস সফলভাবে সংরক্ষিত হয়েছে এবং সকল সদস্যদের জন্য আপডেট হয়েছে!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings/global');
+      alert('সেটিংস সংরক্ষণ করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const toggleBloodDonation = async () => {
     if (!currentUser || isTogglingBlood) return;
@@ -1259,15 +1425,6 @@ function AppContent() {
   };
 
 
-  const isSpecialMember = (member: Member | null) => {
-    if (!member) return false;
-    return member.access === 'Admin';
-  };
-
-const isVerifiedMember = (member: Member | null) => {
-    return !!member;
-  };
-
   useEffect(() => {
     if (activeTab === 'members' && isSpecialMember(currentUser) && allMembers.length === 0) {
       setIsLoading(true);
@@ -1286,7 +1443,6 @@ const isVerifiedMember = (member: Member | null) => {
     setIsProfileLoading(false);
   };
 
-  const [showRegistration, setShowRegistration] = useState(false);
   const [regFormData, setRegFormData] = useState({
     bloodGroup: '',
     name: '',
@@ -1375,6 +1531,147 @@ const isVerifiedMember = (member: Member | null) => {
     setShowBorrowedBooksPage(false);
     setShowTicTacToe(false);
     setShowDatabasePage(false);
+    setShowAdvanceSettings(false);
+  };
+
+  const handleDownloadFullHistory = () => {
+    if (!currentUser) return;
+    
+    const { 
+      theme, 
+      pdfTemplate, 
+      pdfHeaderText, 
+      pdfFooterText, 
+      pdfHeaderColor, 
+      pdfTableHeadBg, 
+      pdfTableHeadText, 
+      pdfFontSize 
+    } = advanceSettings;
+
+    const printContent = `
+      <html>
+        <head>
+          <title>Payment History - ${currentUser.name}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif; 
+              padding: 40px; 
+              color: ${theme.text}; 
+              background-color: ${theme.background};
+              line-height: 1.5; 
+              font-size: ${pdfFontSize}px;
+            }
+            .header { 
+              border-bottom: 2px solid ${pdfHeaderColor}; 
+              padding-bottom: 20px; 
+              margin-bottom: 30px; 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: center; 
+            }
+            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 24px; }
+            .user-info { 
+              margin-bottom: 30px; 
+              background: ${isDarkMode ? 'rgba(255,255,255,0.05)' : '#f8fafc'}; 
+              padding: 20px; 
+              border-radius: 12px; 
+            }
+            .user-info p { margin: 5px 0; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { 
+              background: ${pdfTableHeadBg}; 
+              color: ${pdfTableHeadText}; 
+              font-weight: 700; 
+              text-align: left; 
+              padding: 12px; 
+              font-size: 12px; 
+              text-transform: uppercase; 
+              letter-spacing: 0.05em; 
+            }
+            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+            .amount { font-weight: 700; color: ${theme.button}; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+            
+            ${pdfTemplate === 'modern' ? `
+              .header { border-bottom: none; text-align: center; display: block; }
+              .user-info { text-align: center; background: transparent; border: 1px solid #e2e8f0; }
+              table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+              th { background: #f8fafc; color: #64748b; }
+            ` : ''}
+            
+            ${pdfTemplate === 'compact' ? `
+              body { padding: 20px; font-size: 12px; }
+              .header { margin-bottom: 15px; padding-bottom: 10px; }
+              .user-info { padding: 10px; margin-bottom: 15px; }
+              td, th { padding: 6px; font-size: 11px; }
+            ` : ''}
+
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>${pdfHeaderText}</h1>
+              <p style="margin-top: 5px; opacity: 0.7;">Seba Member Payment Record</p>
+            </div>
+            <div style="text-align: right;">
+              <p style="font-weight: bold; color: ${pdfHeaderColor};">SEBA APP</p>
+              <p style="font-size: 12px; opacity: 0.6;">${new Date().toLocaleDateString('bn-BD')}</p>
+            </div>
+          </div>
+          
+          <div class="user-info">
+            <p><strong>সদস্যের নাম:</strong> ${currentUser.name}</p>
+            <p><strong>আইডি নং:</strong> ${currentUser.id}</p>
+            <p><strong>এলাকা:</strong> ${currentUser.area}</p>
+            <p><strong>পদবী:</strong> ${currentUser.designation}</p>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>তারিখ</th>
+                <th>বিবরণ</th>
+                <th style="text-align: right;">পরিমাণ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paymentData.map(p => `
+                <tr>
+                  <td>${formatDate(p.date)}</td>
+                  <td>${p.reason}</td>
+                  <td style="text-align: right;" class="amount">৳${p.amount.toLocaleString()}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="margin-top: 30px; text-align: right;">
+            <p style="font-size: 18px; font-weight: bold;">মোট পরিশোধিত: <span style="color: ${theme.button};">৳${paymentData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</span></p>
+          </div>
+
+          <div class="footer">
+            <p>${pdfFooterText}</p>
+            <p>© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
   };
 
   const toBengaliDigits = (num: number) => {
@@ -2022,7 +2319,15 @@ const isVerifiedMember = (member: Member | null) => {
                     "w-full p-6 rounded-3xl border text-left space-y-4",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-xl"
                   )}>
-                    <h2 className="text-xl font-bold text-center mb-4">নিবন্ধন ফর্ম</h2>
+                    <div className="flex items-center gap-4 mb-4">
+                      <button 
+                        onClick={() => setShowRegistration(false)}
+                        className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                      </button>
+                      <h2 className="text-xl font-bold">নিবন্ধন ফর্ম</h2>
+                    </div>
                     <form onSubmit={handleRegistration} className="space-y-4">
                       <div className="space-y-1">
                         <label className="text-xs font-bold opacity-60 ml-1">রক্তের গ্রুপ</label>
@@ -2234,99 +2539,123 @@ const isVerifiedMember = (member: Member | null) => {
                 <div className="space-y-2 px-1">
                   <ProfileMenuLink 
                     icon={<Info className="w-5 h-5" />} 
-                    label="Information" 
+                    label={advanceSettings.optionNames.information} 
                     onClick={() => setShowInfoPage(true)} 
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
                     icon={<FileText className="w-5 h-5" />} 
-                    label="Payment History" 
+                    label={advanceSettings.optionNames.paymentHistory} 
                     onClick={() => setShowPaymentPage(true)} 
                     isDarkMode={isDarkMode}
                   />
-                  <ProfileMenuLink 
-                    icon={<BookOpen className="w-5 h-5" />} 
-                    label="Borrowed Books" 
-                    onClick={() => setShowBorrowedBooksPage(true)} 
-                    isDarkMode={isDarkMode}
-                  />
-                  <ProfileMenuLink 
-                    icon={<MapPin className="w-5 h-5" />} 
-                    label="Find Bookshelf" 
-                    onClick={() => {
-                      setShowBookshelfPage(true);
-                      if (bookshelves.length === 0) {
-                        setIsLoading(true);
-                        fetchBookshelves().then(data => {
-                          setBookshelves(data);
-                          setIsLoading(false);
-                        });
-                      }
-                    }} 
-                    isDarkMode={isDarkMode}
-                  />
-                  {isSpecialMember(currentUser) && (
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.borrowedBooks) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.borrowedBooks)) && (
+                    <ProfileMenuLink 
+                      icon={<BookOpen className="w-5 h-5" />} 
+                      label={advanceSettings.optionNames.borrowedBooks} 
+                      onClick={() => setShowBorrowedBooksPage(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.findBookshelf) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.findBookshelf)) && (
+                    <ProfileMenuLink 
+                      icon={<MapPin className="w-5 h-5" />} 
+                      label={advanceSettings.optionNames.findBookshelf} 
+                      onClick={() => {
+                        setShowBookshelfPage(true);
+                        if (bookshelves.length === 0) {
+                          setIsLoading(true);
+                          fetchBookshelves().then(data => {
+                            setBookshelves(data);
+                            setIsLoading(false);
+                          });
+                        }
+                      }} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.database) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.database)) && (
                     <ProfileMenuLink 
                       icon={<Database className="w-5 h-5" />} 
-                      label="Database" 
+                      label={advanceSettings.optionNames.database} 
                       onClick={() => setShowDatabasePage(true)} 
                       isDarkMode={isDarkMode}
                     />
                   )}
-                  <ProfileMenuLink 
-                    icon={<Gamepad2 className="w-5 h-5" />} 
-                    label="Play TicTacToe" 
-                    onClick={() => setShowTicTacToe(true)} 
-                    isDarkMode={isDarkMode}
-                  />
-                  <ProfileMenuLink 
-                    icon={isTogglingBlood ? <Loader2 className="w-5 h-5 animate-spin text-red-500" /> : <Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
-                    label="Blood Donation" 
-                    onClick={toggleBloodDonation} 
-                    isDarkMode={isDarkMode}
-                    rightElement={
-                      <div className={cn(
-                        "w-10 h-5 rounded-full relative transition-colors", 
-                        bloodDonationEnabled ? "bg-red-500" : "bg-slate-300",
-                        isTogglingBlood && "opacity-50"
-                      )}>
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.tictactoe) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.tictactoe)) && (
+                    <ProfileMenuLink 
+                      icon={<Gamepad2 className="w-5 h-5" />} 
+                      label={advanceSettings.optionNames.playTicTacToe} 
+                      onClick={() => setShowTicTacToe(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.bloodDonation) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.bloodDonation)) && (
+                    <ProfileMenuLink 
+                      icon={isTogglingBlood ? <Loader2 className="w-5 h-5 animate-spin text-red-500" /> : <Heart className={cn("w-5 h-5", bloodDonationEnabled ? "text-red-500" : "text-slate-400")} />} 
+                      label={advanceSettings.optionNames.bloodDonation} 
+                      onClick={toggleBloodDonation} 
+                      isDarkMode={isDarkMode}
+                      rightElement={
                         <div className={cn(
-                          "absolute top-1 w-3 h-3 bg-white rounded-full transition-all", 
-                          bloodDonationEnabled ? "right-1" : "left-1"
-                        )} />
-                      </div>
-                    }
-                  />
+                          "w-10 h-5 rounded-full relative transition-colors", 
+                          bloodDonationEnabled ? "bg-red-500" : "bg-slate-300",
+                          isTogglingBlood && "opacity-50"
+                        )}>
+                          <div className={cn(
+                            "absolute top-1 w-3 h-3 bg-white rounded-full transition-all", 
+                            bloodDonationEnabled ? "right-1" : "left-1"
+                          )} />
+                        </div>
+                      }
+                    />
+                  )}
                   <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
-                    label="Dark Mode" 
+                    label={advanceSettings.optionNames.darkMode} 
                     onClick={() => setIsDarkMode(!isDarkMode)} 
                     isDarkMode={isDarkMode}
                     rightElement={<div className={cn("w-10 h-5 rounded-full relative transition-colors", isDarkMode ? "bg-emerald-500" : "bg-slate-300")}><div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", isDarkMode ? "right-1" : "left-1")} /></div>}
                   />
-                  <ProfileMenuLink 
-                    icon={<Heart className="w-5 h-5 text-red-500" />} 
-                    label="Donation" 
-                    onClick={() => setShowDonationProjectsPage(true)} 
-                    isDarkMode={isDarkMode}
-                  />
+                  {((isAdmin(currentUser) && advanceSettings.controls.admin.donation) || 
+                    (!isAdmin(currentUser) && advanceSettings.controls.member.donation)) && (
+                    <ProfileMenuLink 
+                      icon={<Heart className="w-5 h-5 text-red-500" />} 
+                      label={advanceSettings.optionNames.donation} 
+                      onClick={() => setShowDonationProjectsPage(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {isDeveloper(currentUser) && (
+                    <ProfileMenuLink 
+                      icon={<Settings className="w-5 h-5 text-slate-500" />} 
+                      label="Advance settings" 
+                      onClick={() => setShowAdvanceSettings(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
                   <ProfileMenuLink 
                     icon={<Facebook className="w-5 h-5" />} 
-                    label="Facebook Page" 
+                    label={advanceSettings.optionNames.facebookPage} 
                     onClick={() => window.open('https://www.facebook.com/profile.php?id=100071182715718', '_blank')} 
                     isDarkMode={isDarkMode}
                     rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
                   />
                   <ProfileMenuLink 
                     icon={<Facebook className="w-5 h-5" />} 
-                    label="Facebook Group" 
+                    label={advanceSettings.optionNames.facebookGroup} 
                     onClick={() => window.open('https://www.facebook.com/share/g/17BCSBMTA8/', '_blank')} 
                     isDarkMode={isDarkMode}
                     rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
                   />
                   <ProfileMenuLink 
                     icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
-                    label="WhatsApp Channel" 
+                    label={advanceSettings.optionNames.whatsAppChannel} 
                     onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
                     isDarkMode={isDarkMode}
                     rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
@@ -2334,7 +2663,7 @@ const isVerifiedMember = (member: Member | null) => {
                   <div className="pt-4">
                     <ProfileMenuLink 
                       icon={<LogOut className="w-5 h-5 text-red-500" />} 
-                      label="Logout" 
+                      label={advanceSettings.optionNames.logout} 
                       onClick={logout} 
                       isDarkMode={isDarkMode}
                       className="border-red-100 dark:border-red-900/30 text-red-500"
@@ -2530,11 +2859,11 @@ const isVerifiedMember = (member: Member | null) => {
         "fixed bottom-0 left-0 right-0 h-[65px] flex justify-around items-center border-t z-[1000] pb-[env(safe-area-inset-bottom,0px)]",
         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
       )}>
-        <NavItem active={activeTab === 'home'} icon={<Home />} label="হোম" onClick={() => setActiveTab('home')} />
-        <NavItem active={activeTab === 'books'} icon={<BookOpen />} label="বইপুস্তক" onClick={() => setActiveTab('books')} />
-        <NavItem active={activeTab === 'members'} icon={<Users />} label="সদস্যরা" onClick={() => setActiveTab('members')} />
-        <NavItem active={activeTab === 'blood'} icon={<Heart />} label="ব্লাড" onClick={() => setActiveTab('blood')} />
-        <NavItem active={activeTab === 'profile'} icon={<User />} label="প্রোফাইল" onClick={() => setActiveTab('profile')} />
+        <NavItem active={activeTab === 'home'} icon={<Home />} label={advanceSettings.tabNames.home} onClick={() => setActiveTab('home')} />
+        <NavItem active={activeTab === 'books'} icon={<BookOpen />} label={advanceSettings.tabNames.books} onClick={() => setActiveTab('books')} />
+        <NavItem active={activeTab === 'members'} icon={<Users />} label={advanceSettings.tabNames.members} onClick={() => setActiveTab('members')} />
+        <NavItem active={activeTab === 'blood'} icon={<Heart />} label={advanceSettings.tabNames.blood} onClick={() => setActiveTab('blood')} />
+        <NavItem active={activeTab === 'profile'} icon={<User />} label={advanceSettings.tabNames.profile} onClick={() => setActiveTab('profile')} />
       </nav>
 
       {/* Overlays */}
@@ -2566,7 +2895,7 @@ const isVerifiedMember = (member: Member | null) => {
 
         {showPaymentPage && (
           <OverlayPage key="payment-overlay" title="পেমেন্ট হিস্টোরি" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-3">
+            <div className="space-y-3 pb-24">
               {paymentData.length === 0 ? (
                 <div className="text-center p-10 opacity-50">কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
               ) : (
@@ -2593,6 +2922,23 @@ const isVerifiedMember = (member: Member | null) => {
                 ))
               )}
             </div>
+
+            {/* Floating Download Button */}
+            {paymentData.length > 0 && (
+              <div className="fixed bottom-8 right-8 z-[3000]">
+                <motion.button 
+                  initial={{ scale: 0, rotate: -45 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleDownloadFullHistory}
+                  className="w-16 h-16 bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-500/40 flex items-center justify-center transition-all hover:bg-emerald-600 group"
+                  title="Download History as PDF"
+                >
+                  <Download className="w-7 h-7 group-hover:animate-bounce" />
+                </motion.button>
+              </div>
+            )}
           </OverlayPage>
         )}
 
@@ -2660,6 +3006,233 @@ const isVerifiedMember = (member: Member | null) => {
                   );
                 })
               )}
+            </div>
+          </OverlayPage>
+        )}
+
+        {showAdvanceSettings && isDeveloper(currentUser) && (
+          <OverlayPage key="advance-settings-overlay" title="Advance Settings" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6 pb-24">
+              {/* PDF Template Settings */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> PDF Template Edit
+                </h3>
+                <div className={cn("p-4 rounded-2xl border space-y-4", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  <div>
+                    <label className="text-xs font-bold opacity-60 block mb-2 uppercase">Template Style</label>
+                    <select 
+                      value={advanceSettings.pdfTemplate}
+                      onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTemplate: e.target.value})}
+                      className={cn("w-full p-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                    >
+                      <option value="default">Default Professional</option>
+                      <option value="modern">Modern Minimal</option>
+                      <option value="compact">Compact List</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Header Text</label>
+                      <input 
+                        type="text" 
+                        value={advanceSettings.pdfHeaderText}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfHeaderText: e.target.value})}
+                        className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Footer Text</label>
+                      <textarea 
+                        value={advanceSettings.pdfFooterText}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfFooterText: e.target.value})}
+                        className={cn("w-full p-2 rounded-lg border text-sm h-20", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Header Color</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.pdfHeaderColor}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfHeaderColor: e.target.value})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Font Size (px)</label>
+                      <input 
+                        type="number" 
+                        value={advanceSettings.pdfFontSize}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfFontSize: parseInt(e.target.value)})}
+                        className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Table Head Bg</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.pdfTableHeadBg}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTableHeadBg: e.target.value})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Table Head Text</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.pdfTableHeadText}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, pdfTableHeadText: e.target.value})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Theme Settings */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                  <Palette className="w-4 h-4" /> Theme Change
+                </h3>
+                <div className={cn("p-4 rounded-2xl border space-y-4", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Background</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.theme.background}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, theme: {...advanceSettings.theme, background: e.target.value}})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Text Color</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.theme.text}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, theme: {...advanceSettings.theme, text: e.target.value}})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Button Color</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.theme.button}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, theme: {...advanceSettings.theme, button: e.target.value}})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Button Text</label>
+                      <input 
+                        type="color" 
+                        value={advanceSettings.theme.buttonText}
+                        onChange={(e) => setAdvanceSettings({...advanceSettings, theme: {...advanceSettings.theme, buttonText: e.target.value}})}
+                        className="w-full h-10 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab & Options Name Change */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                  <Layout className="w-4 h-4" /> Tab & Options Name
+                </h3>
+                <div className={cn("p-4 rounded-2xl border space-y-4", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold opacity-60 block uppercase">Tabs</label>
+                    {Object.entries(advanceSettings.tabNames).map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold opacity-40 w-16 uppercase">{key}</span>
+                        <input 
+                          type="text" 
+                          value={value}
+                          onChange={(e) => setAdvanceSettings({
+                            ...advanceSettings, 
+                            tabNames: {...advanceSettings.tabNames, [key]: e.target.value}
+                          })}
+                          className={cn("flex-1 p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                  <ToggleLeft className="w-4 h-4" /> Options Control
+                </h3>
+                <div className={cn("p-4 rounded-2xl border space-y-6", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold text-emerald-500 block uppercase">Admin Controls</label>
+                    {Object.entries(advanceSettings.controls.admin).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <span className="text-sm font-medium capitalize">{key}</span>
+                        <button 
+                          onClick={() => setAdvanceSettings({
+                            ...advanceSettings,
+                            controls: {
+                              ...advanceSettings.controls,
+                              admin: {...advanceSettings.controls.admin, [key]: !value}
+                            }
+                          })}
+                          className={cn("w-10 h-5 rounded-full relative transition-colors", value ? "bg-emerald-500" : "bg-slate-300")}
+                        >
+                          <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", value ? "right-1" : "left-1")} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold text-amber-500 block uppercase">Member Controls</label>
+                    {Object.entries(advanceSettings.controls.member).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <span className="text-sm font-medium capitalize">{key}</span>
+                        <button 
+                          onClick={() => setAdvanceSettings({
+                            ...advanceSettings,
+                            controls: {
+                              ...advanceSettings.controls,
+                              member: {...advanceSettings.controls.member, [key]: !value}
+                            }
+                          })}
+                          className={cn("w-10 h-5 rounded-full relative transition-colors", value ? "bg-emerald-500" : "bg-slate-300")}
+                        >
+                          <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", value ? "right-1" : "left-1")} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-4">
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={isSavingSettings}
+                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  {isSavingSettings ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Save className="w-5 h-5" />
+                  )}
+                  Save Global Settings
+                </button>
+                <p className="text-[10px] text-center mt-2 opacity-40">
+                  Saving will update settings for all members immediately.
+                </p>
+              </div>
             </div>
           </OverlayPage>
         )}
