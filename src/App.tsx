@@ -1729,24 +1729,54 @@ function AppContent() {
     `;
   };
 
+  const printViaIframe = (content: string) => {
+    // Remove existing iframe if any
+    const oldIframe = document.getElementById('print-iframe');
+    if (oldIframe) {
+      document.body.removeChild(oldIframe);
+    }
+
+    // Create a new hidden iframe
+    const iframe = document.createElement('iframe');
+    iframe.id = 'print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.zIndex = '-1';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(content);
+      doc.close();
+
+      // Wait for content to load then print
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          console.error('Iframe print failed, falling back to window.open', e);
+          const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+        }
+      }, 1000);
+    }
+  };
+
   const handleDownloadFullHistory = () => {
     const content = generatePDFContent(advanceSettings.pdfHeaderText || 'Full Payment History', paymentData);
-    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const printWindow = window.open(url, '_blank');
-    if (!printWindow) {
-      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
-    }
+    printViaIframe(content);
   };
 
   const handleDownloadSingleTransaction = (payment: Payment) => {
     const content = generatePDFContent(advanceSettings.pdfLabelInvoiceTitle || 'Payment Invoice', [payment]);
-    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const printWindow = window.open(url, '_blank');
-    if (!printWindow) {
-      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
-    }
+    printViaIframe(content);
   };
 
   const handleDownloadFilteredHistory = () => {
@@ -1759,12 +1789,7 @@ function AppContent() {
     }
     
     const content = generatePDFContent('Filtered Payment History', filtered);
-    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const printWindow = window.open(url, '_blank');
-    if (!printWindow) {
-      alert('পপ-আপ ব্লক করা হয়েছে। দয়া করে পপ-আপ এলাউ করুন।');
-    }
+    printViaIframe(content);
   };
 
   const toBengaliDigits = (num: number) => {
