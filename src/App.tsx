@@ -938,10 +938,24 @@ function BookshelfPage({
 
 const getGreeting = (greetingsData: any) => {
   const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return greetingsData.morning;
-  if (hour >= 12 && hour < 16) return greetingsData.afternoon;
-  if (hour >= 16 && hour < 18) return greetingsData.evening;
-  if (hour >= 18 && hour < 22) return greetingsData.night;
+  
+  const checkTime = (timeData: any) => {
+    if (!timeData) return false;
+    const start = Number(timeData.start);
+    const end = Number(timeData.end);
+    
+    if (start < end) {
+      return hour >= start && hour < end;
+    } else {
+      // Handles ranges spanning midnight (e.g., 22 to 5)
+      return hour >= start || hour < end;
+    }
+  };
+
+  if (checkTime(greetingsData.morning)) return greetingsData.morning;
+  if (checkTime(greetingsData.afternoon)) return greetingsData.afternoon;
+  if (checkTime(greetingsData.evening)) return greetingsData.evening;
+  if (checkTime(greetingsData.night)) return greetingsData.night;
   return greetingsData.lateNight;
 };
 
@@ -1033,21 +1047,31 @@ function AppContent() {
   
   const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
   const [greetingsData, setGreetingsData] = useState(() => {
+    const defaults = {
+      morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!", start: 5, end: 12 },
+      afternoon: { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!", start: 12, end: 16 },
+      evening: { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!", start: 16, end: 18 },
+      night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!", start: 18, end: 22 },
+      lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!", start: 22, end: 5 }
+    };
+
     const saved = localStorage.getItem('seba_greetings');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Merge with defaults to ensure all properties (like start/end) exist
+        return {
+          morning: { ...defaults.morning, ...parsed.morning },
+          afternoon: { ...defaults.afternoon, ...parsed.afternoon },
+          evening: { ...defaults.evening, ...parsed.evening },
+          night: { ...defaults.night, ...parsed.night },
+          lateNight: { ...defaults.lateNight, ...parsed.lateNight }
+        };
       } catch (e) {
         console.error("Error parsing saved greetings:", e);
       }
     }
-    return {
-      morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!" },
-      afternoon: { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!" },
-      evening: { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!" },
-      night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!" },
-      lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!" }
-    };
+    return defaults;
   });
   
   // Overlays
@@ -1544,6 +1568,7 @@ function AppContent() {
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser.id
       });
+      localStorage.setItem('seba_greetings', JSON.stringify(greetingsData));
       alert('Greetings সফলভাবে সংরক্ষিত হয়েছে!');
       setShowGreetingsSettings(false);
     } catch (error) {
@@ -3664,7 +3689,35 @@ function AppContent() {
                 <div className={cn("p-4 rounded-2xl border space-y-6", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                   {/* Morning */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সকাল (৫টা - ১২টা)</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সকাল</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শুরু:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.morning.start ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, morning: {...greetingsData.morning, start: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শেষ:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.morning.end ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, morning: {...greetingsData.morning, end: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3">
                       <input 
                         type="text" 
@@ -3685,7 +3738,35 @@ function AppContent() {
 
                   {/* Afternoon */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">দুপুর (১২টা - ৪টা)</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">দুপুর</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শুরু:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.afternoon.start ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, start: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শেষ:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.afternoon.end ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, end: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3">
                       <input 
                         type="text" 
@@ -3706,7 +3787,35 @@ function AppContent() {
 
                   {/* Evening */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">বিকেল (৪টা - ৬টা)</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">বিকেল</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শুরু:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.evening.start ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, evening: {...greetingsData.evening, start: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শেষ:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.evening.end ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, evening: {...greetingsData.evening, end: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3">
                       <input 
                         type="text" 
@@ -3727,7 +3836,35 @@ function AppContent() {
 
                   {/* Night */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সন্ধ্যা (৬টা - ১০টা)</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সন্ধ্যা</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শুরু:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.night.start ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, night: {...greetingsData.night, start: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শেষ:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.night.end ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, night: {...greetingsData.night, end: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3">
                       <input 
                         type="text" 
@@ -3748,7 +3885,35 @@ function AppContent() {
 
                   {/* Late Night */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">রাত (১০টা - ৫টা)</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">রাত</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শুরু:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.lateNight.start ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, start: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] opacity-50">শেষ:</span>
+                          <input 
+                            type="number" min="0" max="23"
+                            value={greetingsData.lateNight.end ?? 0}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                              setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, end: isNaN(val) ? 0 : val}});
+                            }}
+                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3">
                       <input 
                         type="text" 
