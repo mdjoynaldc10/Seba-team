@@ -912,17 +912,17 @@ function BookshelfPage({
   );
 }
 
-const getGreeting = () => {
+const getGreeting = (greetingsData: any) => {
   const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!" };
-  if (hour >= 12 && hour < 16) return { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!" };
-  if (hour >= 16 && hour < 18) return { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!" };
-  if (hour >= 18 && hour < 22) return { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!" };
-  return { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!" };
+  if (hour >= 5 && hour < 12) return greetingsData.morning;
+  if (hour >= 12 && hour < 16) return greetingsData.afternoon;
+  if (hour >= 16 && hour < 18) return greetingsData.evening;
+  if (hour >= 18 && hour < 22) return greetingsData.night;
+  return greetingsData.lateNight;
 };
 
-const SplashScreen = React.memo(() => {
-  const greeting = getGreeting();
+const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
+  const greeting = getGreeting(greetingsData);
   const [showLoadingBar, setShowLoadingBar] = useState(false);
 
   useEffect(() => {
@@ -939,18 +939,25 @@ const SplashScreen = React.memo(() => {
       transition={{ duration: 0.8, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-emerald-500 flex flex-col items-center justify-center text-white p-6"
     >
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.2, ease: "easeOut" }}
-        className="text-center space-y-4"
-      >
-        <div className="bg-white/20 p-6 rounded-full inline-block mb-4 backdrop-blur-sm">
-          <Heart className="w-12 h-12 text-white fill-white animate-pulse" />
-        </div>
-        <h1 className="text-4xl font-bold tracking-tight">{greeting.main}</h1>
-        <p className="text-lg opacity-90 font-medium">{greeting.sub}</p>
-      </motion.div>
+      <AnimatePresence mode="wait">
+        <motion.div 
+          key={greeting?.main || 'loading'}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="text-center space-y-4"
+        >
+          <div className="bg-white/20 p-6 rounded-full inline-block mb-4 backdrop-blur-sm">
+            <Heart className="w-12 h-12 text-white fill-white animate-pulse" />
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold tracking-tight">{greeting?.main}</h1>
+            <p className="text-lg opacity-90 font-medium">{greeting?.sub}</p>
+          </div>
+        </motion.div>
+      </AnimatePresence>
 
       <AnimatePresence>
         {showLoadingBar && (
@@ -999,6 +1006,25 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAppInitializing, setIsAppInitializing] = useState(true);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+  
+  const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
+  const [greetingsData, setGreetingsData] = useState(() => {
+    const saved = localStorage.getItem('seba_greetings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing saved greetings:", e);
+      }
+    }
+    return {
+      morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!" },
+      afternoon: { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!" },
+      evening: { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!" },
+      night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!" },
+      lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!" }
+    };
+  });
   
   // Overlays
   const [showInfoPage, setShowInfoPage] = useState(false);
@@ -1239,6 +1265,7 @@ function AppContent() {
         setShowBorrowForm(!!event.state.showBorrowForm);
         setShowNotice(!!event.state.showNotice);
         setShowAdvanceSettings(!!event.state.showAdvanceSettings);
+        setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
         setTimeout(() => {
           isInternalNavigation.current = false;
@@ -1299,10 +1326,11 @@ function AppContent() {
         showBorrowForm,
         showNotice,
         showAdvanceSettings,
+        showGreetingsSettings,
         showRegistration
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showRegistration]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1421,6 +1449,23 @@ function AppContent() {
     return () => unsubscribe();
   }, [isAuthReady]);
 
+  // Greetings Sync
+  useEffect(() => {
+    if (!isAuthReady) return;
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'greetings'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.greetings) {
+          setGreetingsData(data.greetings);
+          localStorage.setItem('seba_greetings', JSON.stringify(data.greetings));
+        }
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/greetings');
+    });
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
   const handleSaveSettings = async () => {
     if (!currentUser || !isDeveloper(currentUser)) return;
     setIsSavingSettings(true);
@@ -1434,6 +1479,25 @@ function AppContent() {
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'settings/global');
       alert('সেটিংস সংরক্ষণ করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleSaveGreetings = async () => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    setIsSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'settings', 'greetings'), {
+        greetings: greetingsData,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.id
+      });
+      alert('Greetings সফলভাবে সংরক্ষিত হয়েছে!');
+      setShowGreetingsSettings(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings/greetings');
+      alert('Greetings সংরক্ষণ করতে সমস্যা হয়েছে।');
     } finally {
       setIsSavingSettings(false);
     }
@@ -2122,7 +2186,7 @@ function AppContent() {
   return (
     <>
       <AnimatePresence mode="wait">
-        {isAppInitializing && <SplashScreen key="splash" />}
+        {isAppInitializing && <SplashScreen key="splash" greetingsData={greetingsData} />}
       </AnimatePresence>
 
       <div className={cn(
@@ -2940,6 +3004,14 @@ function AppContent() {
                       isDarkMode={isDarkMode}
                     />
                   )}
+                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                    <ProfileMenuLink 
+                      icon={<Bell className="w-5 h-5 text-emerald-500" />} 
+                      label="Greetings" 
+                      onClick={() => setShowGreetingsSettings(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
                   {isDeveloper(currentUser) && (
                     <ProfileMenuLink 
                       icon={<Settings className="w-5 h-5 text-slate-500" />} 
@@ -3412,6 +3484,137 @@ function AppContent() {
                   );
                 })
               )}
+            </div>
+          </OverlayPage>
+        )}
+
+        {showGreetingsSettings && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
+          <OverlayPage key="greetings-settings-overlay" title="Greetings Settings" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6 pb-24">
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                  <Bell className="w-4 h-4" /> Edit Greetings & Wishes
+                </h3>
+                
+                <div className={cn("p-4 rounded-2xl border space-y-6", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  {/* Morning */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সকাল (৫টা - ১২টা)</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={greetingsData.morning.main}
+                        onChange={(e) => setGreetingsData({...greetingsData, morning: {...greetingsData.morning, main: e.target.value}})}
+                        placeholder="Main Greeting"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                      <input 
+                        type="text" 
+                        value={greetingsData.morning.sub}
+                        onChange={(e) => setGreetingsData({...greetingsData, morning: {...greetingsData.morning, sub: e.target.value}})}
+                        placeholder="Sub Wish"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Afternoon */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">দুপুর (১২টা - ৪টা)</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={greetingsData.afternoon.main}
+                        onChange={(e) => setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, main: e.target.value}})}
+                        placeholder="Main Greeting"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                      <input 
+                        type="text" 
+                        value={greetingsData.afternoon.sub}
+                        onChange={(e) => setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, sub: e.target.value}})}
+                        placeholder="Sub Wish"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Evening */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">বিকেল (৪টা - ৬টা)</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={greetingsData.evening.main}
+                        onChange={(e) => setGreetingsData({...greetingsData, evening: {...greetingsData.evening, main: e.target.value}})}
+                        placeholder="Main Greeting"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                      <input 
+                        type="text" 
+                        value={greetingsData.evening.sub}
+                        onChange={(e) => setGreetingsData({...greetingsData, evening: {...greetingsData.evening, sub: e.target.value}})}
+                        placeholder="Sub Wish"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Night */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">সন্ধ্যা (৬টা - ১০টা)</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={greetingsData.night.main}
+                        onChange={(e) => setGreetingsData({...greetingsData, night: {...greetingsData.night, main: e.target.value}})}
+                        placeholder="Main Greeting"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                      <input 
+                        type="text" 
+                        value={greetingsData.night.sub}
+                        onChange={(e) => setGreetingsData({...greetingsData, night: {...greetingsData.night, sub: e.target.value}})}
+                        placeholder="Sub Wish"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Late Night */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">রাত (১০টা - ৫টা)</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={greetingsData.lateNight.main}
+                        onChange={(e) => setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, main: e.target.value}})}
+                        placeholder="Main Greeting"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                      <input 
+                        type="text" 
+                        value={greetingsData.lateNight.sub}
+                        onChange={(e) => setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, sub: e.target.value}})}
+                        placeholder="Sub Wish"
+                        className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating Save Button */}
+            <div className="absolute bottom-6 left-6 right-6">
+              <button 
+                onClick={handleSaveGreetings}
+                disabled={isSavingSettings}
+                className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Save Greetings
+              </button>
             </div>
           </OverlayPage>
         )}
