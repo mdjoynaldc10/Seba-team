@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Component, useCallback } from 'react';
+import React, { useState, useEffect, useRef, Component, useCallback, useMemo } from 'react';
 import { 
   Home, 
   Users, 
@@ -128,6 +128,7 @@ interface DonationTransaction {
   donorName: string;
   amount: number;
   method: string;
+  mobileNumber?: string;
 }
 
 interface Notice {
@@ -718,7 +719,8 @@ async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
               projectName: String(r[1]?.v || '').trim(),
               amount: Number(r[2]?.v || 0),
               donorName: String(r[3]?.v || '').trim(),
-              method: String(r[4]?.v || '').trim()
+              method: String(r[4]?.v || '').trim(),
+              mobileNumber: String(r[5]?.v || '').trim()
             };
           }).filter(Boolean);
         })
@@ -730,6 +732,25 @@ async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
     return [];
   }
 }
+
+// Helper to get donation payments for a user based on phone number
+const getDonationPaymentsForUser = (phone: string, transactions: DonationTransaction[]): Payment[] => {
+  if (!phone || !transactions.length) return [];
+  const normalizedPhone = phone.startsWith('0') ? phone.substring(1) : phone;
+  
+  return transactions
+    .filter(t => {
+      if (!t.mobileNumber) return false;
+      const tPhone = t.mobileNumber.trim();
+      const normalizedTPhone = tPhone.startsWith('0') ? tPhone.substring(1) : tPhone;
+      return normalizedTPhone.includes(normalizedPhone) || normalizedPhone.includes(normalizedTPhone);
+    })
+    .map(t => ({
+      amount: t.amount,
+      reason: `Donation: ${t.projectName}`,
+      date: t.date
+    }));
+};
 
 // Utility for tailwind classes
 function cn(...inputs: ClassValue[]) {
@@ -1045,6 +1066,29 @@ function AppContent() {
   const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books' | 'database'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  
+  // Combine member payment history with donation transactions based on phone number
+  const allPayments = useMemo(() => {
+    if (!currentUser) return paymentData;
+    const donationPayments = getDonationPaymentsForUser(currentUser.phone || '', donationTransactions);
+    const combined = [...paymentData, ...donationPayments];
+    return combined.sort((a, b) => {
+      const dateA = new Date(a.date).getTime() || 0;
+      const dateB = new Date(b.date).getTime() || 0;
+      return dateB - dateA;
+    });
+  }, [paymentData, donationTransactions, currentUser]);
+
+  const allMemberProfilePayments = useMemo(() => {
+    if (!selectedMemberProfile) return memberProfilePayments;
+    const donationPayments = getDonationPaymentsForUser(selectedMemberProfile.phone || '', donationTransactions);
+    const combined = [...memberProfilePayments, ...donationPayments];
+    return combined.sort((a, b) => {
+      const dateA = new Date(a.date).getTime() || 0;
+      const dateB = new Date(b.date).getTime() || 0;
+      return dateB - dateA;
+    });
+  }, [memberProfilePayments, donationTransactions, selectedMemberProfile]);
   
   // Post Reactions State
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -2134,7 +2178,7 @@ function AppContent() {
   };
 
   const handleDownloadFullHistory = () => {
-    const content = generatePDFContent(advanceSettings.pdfHeaderText || 'Full Payment History', paymentData);
+    const content = generatePDFContent(advanceSettings.pdfHeaderText || 'Full Payment History', allPayments);
     downloadAsPDF(content, `Full_History_${new Date().getTime()}`);
   };
 
@@ -2144,7 +2188,7 @@ function AppContent() {
   };
 
   const handleDownloadFilteredHistory = () => {
-    let filtered = [...paymentData];
+    let filtered = [...allPayments];
     if (filterStartDate) {
       filtered = filtered.filter(p => p.date >= filterStartDate);
     }
@@ -3398,10 +3442,10 @@ function AppContent() {
         {showPaymentPage && (
           <OverlayPage key="payment-overlay" title="পেমেন্ট হিস্টোরি" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-3 pb-24">
-              {paymentData.length === 0 ? (
+              {allPayments.length === 0 ? (
                 <div className="text-center p-10 opacity-50">কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
               ) : (
-                paymentData.map((p, idx) => (
+                allPayments.map((p, idx) => (
                   <div 
                     key={`payment-${idx}-${p.date}`} 
                     className={cn(
@@ -3433,7 +3477,7 @@ function AppContent() {
             </div>
 
             {/* Floating Buttons */}
-            {paymentData.length > 0 && (
+            {allPayments.length > 0 && (
               <div className="fixed bottom-8 right-8 z-[3000] flex flex-col gap-4">
                 <motion.button 
                   initial={{ scale: 0, rotate: -45 }}
@@ -4240,7 +4284,6 @@ function AppContent() {
                       <div>
                         <div className="flex items-center gap-1">
                           <span className="block font-bold">{t.donorName || 'Anonymous'}</span>
-                          {t.donorName && <BadgeCheck className="w-3.5 h-3.5 text-white fill-emerald-500" />}
                         </div>
                         <span className="text-[11px] opacity-60">{formatDate(t.date)}</span>
                       </div>
@@ -4495,11 +4538,11 @@ function AppContent() {
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">পেমেন্ট হিস্টোরি</h3>
                     {isProfileLoading ? (
                       <div className="text-center p-4">লোড হচ্ছে...</div>
-                    ) : memberProfilePayments.length === 0 ? (
+                    ) : allMemberProfilePayments.length === 0 ? (
                       <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
                     ) : (
                       <div className="space-y-2">
-                        {memberProfilePayments.map((p, idx) => (
+                        {allMemberProfilePayments.map((p, idx) => (
                           <div key={`prof-pay-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                             <div>
                               <span className="block font-bold text-sm">{p.reason}</span>
