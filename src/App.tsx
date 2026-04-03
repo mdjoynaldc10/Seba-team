@@ -939,15 +939,22 @@ function BookshelfPage({
 const getGreeting = (greetingsData: any) => {
   const hour = new Date().getHours();
   
+  const to24h = (h: number, period: string) => {
+    let hour24 = Number(h);
+    if (period === 'PM' && hour24 < 12) hour24 += 12;
+    if (period === 'AM' && hour24 === 12) hour24 = 0;
+    return hour24;
+  };
+
   const checkTime = (timeData: any) => {
     if (!timeData) return false;
-    const start = Number(timeData.start);
-    const end = Number(timeData.end);
+    const start = to24h(timeData.startHour, timeData.startPeriod);
+    const end = to24h(timeData.endHour, timeData.endPeriod);
     
     if (start < end) {
       return hour >= start && hour < end;
     } else {
-      // Handles ranges spanning midnight (e.g., 22 to 5)
+      // Handles ranges spanning midnight (e.g., 10 PM to 5 AM)
       return hour >= start || hour < end;
     }
   };
@@ -1048,18 +1055,18 @@ function AppContent() {
   const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
   const [greetingsData, setGreetingsData] = useState(() => {
     const defaults = {
-      morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!", start: 5, end: 12 },
-      afternoon: { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!", start: 12, end: 16 },
-      evening: { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!", start: 16, end: 18 },
-      night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!", start: 18, end: 22 },
-      lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!", start: 22, end: 5 }
+      morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!", startHour: 5, startPeriod: "AM", endHour: 12, endPeriod: "PM" },
+      afternoon: { main: "শুভ অপরাহ্ন", sub: "আপনার দুপুরটি ভালো কাটুক!", startHour: 12, startPeriod: "PM", endHour: 4, endPeriod: "PM" },
+      evening: { main: "শুভ বিকেল", sub: "আপনার বিকেলটি আনন্দময় হোক!", startHour: 4, startPeriod: "PM", endHour: 6, endPeriod: "PM" },
+      night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!", startHour: 6, startPeriod: "PM", endHour: 10, endPeriod: "PM" },
+      lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!", startHour: 10, startPeriod: "PM", endHour: 5, endPeriod: "AM" }
     };
 
     const saved = localStorage.getItem('seba_greetings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Merge with defaults to ensure all properties (like start/end) exist
+        // Merge with defaults to ensure all properties exist
         return {
           morning: { ...defaults.morning, ...parsed.morning },
           afternoon: { ...defaults.afternoon, ...parsed.afternoon },
@@ -3687,6 +3694,13 @@ function AppContent() {
                 </h3>
                 
                 <div className={cn("p-4 rounded-2xl border space-y-6", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                  <div className={cn("flex items-center justify-between p-3 rounded-xl border mb-2", isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-emerald-50 border-emerald-100")}>
+                    <span className={cn("text-xs font-bold", isDarkMode ? "text-emerald-400" : "text-emerald-700")}>সিস্টেমের বর্তমান সময়:</span>
+                    <span className={cn("text-xs font-bold", isDarkMode ? "text-emerald-400" : "text-emerald-700")}>
+                      {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                    </span>
+                  </div>
+
                   {/* Morning */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -3694,27 +3708,47 @@ function AppContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শুরু:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.morning.start ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, morning: {...greetingsData.morning, start: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.morning.startHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, morning: {...greetingsData.morning, startHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.morning.startPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, morning: {...greetingsData.morning, startPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শেষ:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.morning.end ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, morning: {...greetingsData.morning, end: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.morning.endHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, morning: {...greetingsData.morning, endHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.morning.endPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, morning: {...greetingsData.morning, endPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3743,27 +3777,47 @@ function AppContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শুরু:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.afternoon.start ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, start: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.afternoon.startHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, startHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.afternoon.startPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, startPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শেষ:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.afternoon.end ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, end: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.afternoon.endHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, endHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.afternoon.endPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, afternoon: {...greetingsData.afternoon, endPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3792,27 +3846,47 @@ function AppContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শুরু:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.evening.start ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, evening: {...greetingsData.evening, start: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.evening.startHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, evening: {...greetingsData.evening, startHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.evening.startPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, evening: {...greetingsData.evening, startPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শেষ:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.evening.end ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, evening: {...greetingsData.evening, end: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.evening.endHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, evening: {...greetingsData.evening, endHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.evening.endPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, evening: {...greetingsData.evening, endPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3841,27 +3915,47 @@ function AppContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শুরু:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.night.start ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, night: {...greetingsData.night, start: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.night.startHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, night: {...greetingsData.night, startHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.night.startPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, night: {...greetingsData.night, startPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শেষ:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.night.end ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, night: {...greetingsData.night, end: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.night.endHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, night: {...greetingsData.night, endHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.night.endPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, night: {...greetingsData.night, endPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3890,27 +3984,47 @@ function AppContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শুরু:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.lateNight.start ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, start: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.lateNight.startHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, startHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.lateNight.startPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, startPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] opacity-50">শেষ:</span>
-                          <input 
-                            type="number" min="0" max="23"
-                            value={greetingsData.lateNight.end ?? 0}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                              setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, end: isNaN(val) ? 0 : val}});
-                            }}
-                            className={cn("w-12 p-1 rounded border text-[10px] text-center", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                          />
+                          <div className={cn("flex items-center border rounded overflow-hidden", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+                            <input 
+                              type="number" min="1" max="12"
+                              value={greetingsData.lateNight.endHour ?? 1}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value);
+                                setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, endHour: isNaN(val) ? 1 : val}});
+                              }}
+                              className={cn("w-10 p-1 text-[10px] text-center bg-transparent outline-none", isDarkMode ? "text-white" : "text-slate-900")}
+                            />
+                            <select 
+                              value={greetingsData.lateNight.endPeriod}
+                              onChange={(e) => setGreetingsData({...greetingsData, lateNight: {...greetingsData.lateNight, endPeriod: e.target.value}})}
+                              className="text-[10px] bg-emerald-500 text-white p-1 outline-none cursor-pointer"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
