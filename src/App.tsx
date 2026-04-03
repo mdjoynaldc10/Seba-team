@@ -33,6 +33,7 @@ import {
   MapPin,
   CheckCircle2,
   Download,
+  Calendar,
   Settings,
   Palette,
   Layout,
@@ -152,6 +153,8 @@ interface AdvanceSettings {
   pdfLabelTotal: string;
   pdfLabelInvoiceTitle: string;
   pdfLabelSubTitle: string;
+  pdfBrandText: string;
+  pdfBrandFontSize: number;
   theme: {
     background: string;
     text: string;
@@ -1060,6 +1063,8 @@ function AppContent() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [donationFilterStartDate, setDonationFilterStartDate] = useState('');
+  const [donationFilterEndDate, setDonationFilterEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [advanceSettings, setAdvanceSettings] = useState<AdvanceSettings>({
     pdfTemplate: 'default',
@@ -1079,6 +1084,8 @@ function AppContent() {
     pdfLabelTotal: 'মোট পরিশোধিত',
     pdfLabelInvoiceTitle: 'পেমেন্ট ইনভয়েস',
     pdfLabelSubTitle: 'Seba Member Payment Record',
+    pdfBrandText: 'SEBA',
+    pdfBrandFontSize: 18,
     theme: {
       background: '#f8fafc',
       text: '#1e293b',
@@ -1731,7 +1738,9 @@ function AppContent() {
       pdfLabelReason,
       pdfLabelAmount,
       pdfLabelTotal,
-      pdfLabelSubTitle
+      pdfLabelSubTitle,
+      pdfBrandText,
+      pdfBrandFontSize
     } = advanceSettings;
 
     return `
@@ -1819,7 +1828,7 @@ function AppContent() {
                 <p style="margin-top: 3px; opacity: 0.7; font-size: 12px;">${pdfLabelSubTitle}</p>
               </div>
               <div style="text-align: right;">
-                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0;">SEBA APP</p>
+                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
                 <p style="font-size: 11px; opacity: 0.6; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
               </div>
             </div>
@@ -1862,24 +1871,136 @@ function AppContent() {
 
           <script>
             window.onload = function() {
-              // Trigger print immediately
               window.print();
-              
-              // For some mobile browsers, we might need to listen for afterprint to close
               window.onafterprint = function() {
                 if (window.opener) {
                   window.close();
                 }
               };
-              
-              // Fallback for browsers that don't support onafterprint
-              setTimeout(function() {
-                if (window.opener) {
-                  // Don't close immediately to allow print dialog to stay open
-                }
-              }, 2000);
             };
           </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const generateDonationPDFContent = (project: DonationProject, transactions: DonationTransaction[]) => {
+    const { 
+      theme, 
+      pdfHeaderColor, 
+      pdfTableHeadBg, 
+      pdfTableHeadText, 
+      pdfFontSize,
+      pdfFooterText,
+      pdfBrandText,
+      pdfBrandFontSize
+    } = advanceSettings;
+
+    return `
+      <!DOCTYPE html>
+      <html lang="bn">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>ডোনেশন রিপোর্ট - ${project.name}</title>
+          <style>
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+              padding: 20px; 
+              color: ${theme.text}; 
+              background-color: white;
+              line-height: 1.4; 
+              font-size: ${pdfFontSize}px;
+              margin: 0;
+            }
+            .container { max-width: 800px; margin: 0 auto; }
+            .header { 
+              border-bottom: 2px solid ${pdfHeaderColor}; 
+              padding-bottom: 15px; 
+              margin-bottom: 20px; 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: center; 
+            }
+            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 22px; }
+            .project-info { 
+              margin-bottom: 20px; 
+              background: #f8fafc; 
+              padding: 15px; 
+              border-radius: 10px; 
+              border: 1px solid #e2e8f0;
+            }
+            .project-info p { margin: 4px 0; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            th { 
+              background: ${pdfTableHeadBg}; 
+              color: ${pdfTableHeadText}; 
+              font-weight: bold; 
+              text-align: left; 
+              padding: 10px; 
+              font-size: 12px; 
+            }
+            td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+            .amount { font-weight: bold; color: ${theme.button}; }
+            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            
+            @media print {
+              body { padding: 0; background: white; }
+              .container { max-width: 100%; }
+              th { background: ${pdfTableHeadBg} !important; color: ${pdfTableHeadText} !important; -webkit-print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div>
+                <h1>ডোনেশন রিপোর্ট</h1>
+                <p style="margin-top: 3px; opacity: 0.7; font-size: 12px;">${project.name}</p>
+              </div>
+              <div style="text-align: right;">
+                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
+                <p style="font-size: 11px; opacity: 0.6; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
+              </div>
+            </div>
+            
+            <div class="project-info">
+              <p><strong>প্রজেক্টের নাম:</strong> ${project.name}</p>
+              <p><strong>অ্যাকাউন্ট নম্বর:</strong> ${project.accountNo || 'N/A'}</p>
+              <p><strong>টার্গেট:</strong> ৳${project.target.toLocaleString()}</p>
+              <p><strong>মোট সংগৃহীত:</strong> ৳${transactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}</p>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>তারিখ</th>
+                  <th>ডোনারের নাম</th>
+                  <th>পদ্ধতি</th>
+                  <th style="text-align: right;">পরিমাণ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${transactions.length > 0 ? transactions.map(t => `
+                  <tr>
+                    <td>${formatDate(t.date)}</td>
+                    <td>${t.donorName || 'Anonymous'}</td>
+                    <td>${t.method || 'N/A'}</td>
+                    <td style="text-align: right;" class="amount">৳${t.amount.toLocaleString()}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="4" style="text-align:center">কোনো তথ্য পাওয়া যায়নি</td></tr>'}
+              </tbody>
+            </table>
+
+            <div style="margin-top: 25px; text-align: right;">
+              <p style="font-size: 16px; font-weight: bold; margin: 0;">মোট: <span style="color: ${theme.button};">৳${transactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}</span></p>
+            </div>
+
+            <div class="footer">
+              <p style="margin: 0;">${pdfFooterText}</p>
+              <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -3654,7 +3775,7 @@ function AppContent() {
                           <p className="text-[0.7em] opacity-60">{advanceSettings.pdfLabelSubTitle}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-[0.8em]" style={{ color: advanceSettings.pdfHeaderColor }}>SEBA APP</p>
+                          <p className="font-bold" style={{ color: advanceSettings.pdfHeaderColor, fontSize: `${advanceSettings.pdfBrandFontSize * 0.05}em` }}>{advanceSettings.pdfBrandText}</p>
                           <p className="text-[0.6em] opacity-50">{new Date().toLocaleDateString('bn-BD')}</p>
                         </div>
                       </div>
@@ -3711,6 +3832,26 @@ function AppContent() {
                         onChange={(e) => setAdvanceSettings({...advanceSettings, pdfLabelSubTitle: e.target.value})}
                         className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Text</label>
+                        <input 
+                          type="text" 
+                          value={advanceSettings.pdfBrandText}
+                          onChange={(e) => setAdvanceSettings({...advanceSettings, pdfBrandText: e.target.value})}
+                          className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Font Size</label>
+                        <input 
+                          type="number" 
+                          value={advanceSettings.pdfBrandFontSize}
+                          onChange={(e) => setAdvanceSettings({...advanceSettings, pdfBrandFontSize: parseInt(e.target.value)})}
+                          className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Footer Text</label>
@@ -3989,10 +4130,98 @@ function AppContent() {
                 </div>
               </div>
 
+              {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                <div className={cn(
+                  "p-4 rounded-2xl border mb-4 space-y-4",
+                  isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-emerald-50/30 border-emerald-100"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">অ্যাডমিন টুলস</h4>
+                    <button 
+                      onClick={() => {
+                        const projectTransactions = donationTransactions.filter(t => t.projectName === selectedDonationProject.name);
+                        const filtered = projectTransactions.filter(t => {
+                          if (!donationFilterStartDate && !donationFilterEndDate) return true;
+                          const tDate = parseDate(t.date);
+                          if (!tDate) return true;
+                          const start = donationFilterStartDate ? new Date(donationFilterStartDate) : null;
+                          const end = donationFilterEndDate ? new Date(donationFilterEndDate) : null;
+                          if (start) start.setHours(0, 0, 0, 0);
+                          if (end) end.setHours(23, 59, 59, 999);
+                          return (!start || tDate >= start) && (!end || tDate <= end);
+                        });
+                        const content = generateDonationPDFContent(selectedDonationProject, filtered);
+                        downloadAsPDF(content, `Donation_${selectedDonationProject.name}`);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold active:scale-95 transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      PDF রিপোর্ট
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold opacity-50 uppercase flex items-center gap-1">
+                        <Calendar className="w-2.5 h-2.5" /> শুরুর তারিখ
+                      </label>
+                      <input 
+                        type="date" 
+                        value={donationFilterStartDate}
+                        onChange={(e) => setDonationFilterStartDate(e.target.value)}
+                        className={cn(
+                          "w-full p-2 rounded-lg border text-xs",
+                          isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold opacity-50 uppercase flex items-center gap-1">
+                        <Calendar className="w-2.5 h-2.5" /> শেষ তারিখ
+                      </label>
+                      <input 
+                        type="date" 
+                        value={donationFilterEndDate}
+                        onChange={(e) => setDonationFilterEndDate(e.target.value)}
+                        className={cn(
+                          "w-full p-2 rounded-lg border text-xs",
+                          isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {(donationFilterStartDate || donationFilterEndDate) && (
+                    <button 
+                      onClick={() => {
+                        setDonationFilterStartDate('');
+                        setDonationFilterEndDate('');
+                      }}
+                      className="w-full py-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      ফিল্টার মুছুন
+                    </button>
+                  )}
+                </div>
+              )}
+
               <h4 className="text-sm font-bold border-l-4 border-emerald-500 pl-3 py-1 mb-2">লেনদেন সমূহ</h4>
               
               {(() => {
-                const projectTransactions = donationTransactions.filter(t => t.projectName === selectedDonationProject.name);
+                let projectTransactions = donationTransactions.filter(t => t.projectName === selectedDonationProject.name);
+                
+                // Apply filters
+                if (donationFilterStartDate || donationFilterEndDate) {
+                  projectTransactions = projectTransactions.filter(t => {
+                    const tDate = parseDate(t.date);
+                    if (!tDate) return true;
+                    const start = donationFilterStartDate ? new Date(donationFilterStartDate) : null;
+                    const end = donationFilterEndDate ? new Date(donationFilterEndDate) : null;
+                    if (start) start.setHours(0, 0, 0, 0);
+                    if (end) end.setHours(23, 59, 59, 999);
+                    return (!start || tDate >= start) && (!end || tDate <= end);
+                  });
+                }
+
                 if (projectTransactions.length === 0) {
                   return <div className="text-center p-10 opacity-50">কোনো লেনদেন পাওয়া যায়নি</div>;
                 }
