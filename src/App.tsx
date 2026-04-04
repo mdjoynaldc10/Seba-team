@@ -324,15 +324,13 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const targetUrl = `https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
-    return json.table.rows.map((row: any, index: number) => {
+    return json.table.rows.map((row: any) => {
       const r = row.c;
       return {
-        id: `post-${index}`,
         title: r[0]?.v || '',
         date: r[1]?.v || '',
         content: r[2]?.v || '',
@@ -347,8 +345,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const targetUrl = `https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`;
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -366,15 +363,14 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const targetUrl = `https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`;
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
-    return json.table.rows.map((row: any, index: number) => {
+    return json.table.rows.map((row: any) => {
       const r = row.c;
       return {
-        id: `${String(r[0]?.v || '').trim()}-${index}`,
+        id: String(r[0]?.v || '').trim(),
         title: String(r[1]?.v || '').trim(),
         message: String(r[2]?.v || '').trim()
       };
@@ -387,19 +383,18 @@ async function fetchNotifications(): Promise<Notification[]> {
 
 async function fetchBooks(): Promise<Book[]> {
   try {
-    const fetchPromises = BOOKS_SHEETS.map(name => {
-      const targetUrl = `https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`;
-      return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`)
+    const fetchPromises = BOOKS_SHEETS.map(name =>
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
           const json = JSON.parse(temp);
           if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any, index: number) => {
+          return json.table.rows.map((row: any) => {
             const c = row.c;
             if (!c || !c[1]?.v) return null;
             return {
-              id: String(c[0]?.v || `book-${name}-${index}`).trim(),
+              id: String(c[0]?.v || '').trim(),
               name: String(c[1]?.v || '').trim(),
               author: String(c[2]?.v || '').trim(),
               category: String(c[3]?.v || '').trim(),
@@ -411,8 +406,8 @@ async function fetchBooks(): Promise<Book[]> {
               returnableDate: String(c[10]?.v || '').trim()
             };
           }).filter(Boolean);
-        });
-    });
+        })
+    );
     const allResults = await Promise.all(fetchPromises);
     return allResults.flat();
   } catch (err) {
@@ -478,9 +473,8 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
-    const fetchPromises = BLOOD_SHEETS.map(name => {
-      const targetUrl = `https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`;
-      return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`)
+    const fetchPromises = BLOOD_SHEETS.map(name =>
+      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -509,11 +503,10 @@ async function fetchAllDonors(): Promise<Donor[]> {
 
             return { group, name, district: cleanDistrict, thana: cleanThana, phone };
           }).filter(Boolean);
-        });
-    });
+        })
+    );
     const allResults = await Promise.all(fetchPromises);
-    const flatDonors = allResults.flat();
-    const uniqueDonors = Array.from(new Map(flatDonors.map(item => [item.phone, item])).values());
+    const uniqueDonors = Array.from(new Map(allResults.flat().map(item => [item.phone, item])).values());
     return uniqueDonors;
   } catch (err) {
     console.error("Error fetching donors:", err);
@@ -678,9 +671,8 @@ async function fetchAllMembers(): Promise<Member[]> {
 
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
-    const fetchPromises = PROJECT_SHEETS.map(sheet => {
-      const targetUrl = `https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`;
-      return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`)
+    const fetchPromises = PROJECT_SHEETS.map(sheet =>
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -699,8 +691,8 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
               description: String(r[7]?.v || '').trim()
             };
           }).filter(Boolean);
-        });
-    });
+        })
+    );
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat() as DonationProject[];
     return flatResults.sort((a, b) => {
@@ -718,18 +710,16 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
-    const fetchPromises = TRANSACTION_SHEETS.map(sheet => {
-      const targetUrl = `https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`;
-      return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`)
+    const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
           if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any, index: number) => {
+          return json.table.rows.map((row: any) => {
             const r = row.c;
             if (!r || !r[1]?.v) return null;
             return {
-              id: `trans-${sheet}-${index}`,
               date: String(r[0]?.v || '').trim(),
               projectName: String(r[1]?.v || '').trim(),
               amount: Number(r[2]?.v || 0),
@@ -738,8 +728,8 @@ async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
               mobileNumber: String(r[5]?.v || '').trim()
             };
           }).filter(Boolean);
-        });
-    });
+        })
+    );
     const allResults = await Promise.all(fetchPromises);
     return allResults.flat() as DonationTransaction[];
   } catch (e) {
@@ -1035,94 +1025,146 @@ function CloudPinPage({
                 <Key className="w-5 h-5 text-emerald-500" />
                 {savedPin ? 'পিন পরিবর্তন করুন' : 'পিন সেট করুন'}
               </button>
+              <button 
+                onClick={() => setMode('reset')}
+                className={cn(
+                  "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}
+              >
+                <RefreshCw className="w-5 h-5 text-orange-500" />
+                পিন রিসেট করুন
+              </button>
             </div>
           </div>
         )}
 
-        {(mode === 'set' || mode === 'change') && (
+        {(mode === 'set' || mode === 'change' || mode === 'reset') && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            <div className="space-y-4">
-              {mode === 'change' && !isVerified ? (
-                <div className="space-y-4">
-                  <div className="text-center space-y-2 mb-4">
-                    <h3 className="text-lg font-bold">বর্তমান পিন যাচাই করুন</h3>
-                    <p className="text-xs opacity-60">পরিবর্তন করতে আপনার বর্তমান পিন কোডটি দিন।</p>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <input 
-                        type={showCurrentPin ? "text" : "password"} 
-                        placeholder="বর্তমান পিন" 
-                        value={currentPinInput}
-                        onChange={(e) => setCurrentPinInput(e.target.value)}
-                        className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                      />
-                      <button 
-                        onClick={() => setShowCurrentPin(!showCurrentPin)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      >
-                        {showCurrentPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        if (currentPinInput === savedPin) {
-                          setIsVerified(true);
-                          setPin('');
-                          setConfirmPin('');
-                        } else {
-                          alert("ভুল পিন! আবার চেষ্টা করুন।");
-                        }
-                      }}
-                      className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
-                    >
-                      যাচাই করুন
-                    </button>
-                    <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
-                  </div>
+            {mode === 'reset' && !pin && (
+              <div className="space-y-4">
+                <div className="text-center space-y-2 mb-4">
+                  <h3 className="text-lg font-bold">পিন রিসেট করুন</h3>
+                  <p className="text-xs opacity-60">আপনার তথ্য যাচাই করে পিন রিসেট করুন।</p>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-center space-y-2 mb-4">
-                    <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : 'নতুন পিন দিন'}</h3>
-                    <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
+                <div className="space-y-3">
+                  <input 
+                    type="text" 
+                    placeholder="আইডি (SF-XXXX)" 
+                    value={resetId}
+                    onChange={(e) => setResetId(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="tel" 
+                    placeholder="ফোন নাম্বার" 
+                    value={resetPhone}
+                    onChange={(e) => setResetPhone(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="জিমেইল অথবা জন্মতারিখ (DD/MM/YYYY)" 
+                    value={resetExtra}
+                    onChange={(e) => setResetExtra(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  {resetError && <p className="text-red-500 text-xs font-bold text-center">{resetError}</p>}
+                  <button 
+                    onClick={handleReset}
+                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
+                  >
+                    যাচাই করুন
+                  </button>
+                  <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">পিছনে যান</button>
+                </div>
+              </div>
+            )}
+
+            {(mode !== 'reset' || pin) && (
+              <div className="space-y-4">
+                {mode === 'change' && !isVerified ? (
+                  <div className="space-y-4">
+                    <div className="text-center space-y-2 mb-4">
+                      <h3 className="text-lg font-bold">বর্তমান পিন যাচাই করুন</h3>
+                      <p className="text-xs opacity-60">পরিবর্তন করতে আপনার বর্তমান পিন কোডটি দিন।</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <input 
+                          type={showCurrentPin ? "text" : "password"} 
+                          placeholder="বর্তমান পিন" 
+                          value={currentPinInput}
+                          onChange={(e) => setCurrentPinInput(e.target.value)}
+                          className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                        <button 
+                          onClick={() => setShowCurrentPin(!showCurrentPin)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        >
+                          {showCurrentPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          if (currentPinInput === savedPin) {
+                            setIsVerified(true);
+                            setPin('');
+                            setConfirmPin('');
+                          } else {
+                            alert("ভুল পিন! আবার চেষ্টা করুন।");
+                          }
+                        }}
+                        className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
+                      >
+                        যাচাই করুন
+                      </button>
+                      <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="relative">
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-center space-y-2 mb-4">
+                      <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'নতুন পিন দিন' : 'নতুন পিন দিন'}</h3>
+                      <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <input 
+                          type={showPin ? "text" : "password"} 
+                          placeholder="নতুন পিন" 
+                          value={pin}
+                          onChange={(e) => setPin(e.target.value)}
+                          className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                        <button 
+                          onClick={() => setShowPin(!showPin)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        >
+                          {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                       <input 
                         type={showPin ? "text" : "password"} 
-                        placeholder="নতুন পিন" 
-                        value={pin}
-                        onChange={(e) => setPin(e.target.value)}
-                        className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        placeholder="পিন নিশ্চিত করুন" 
+                        value={confirmPin}
+                        onChange={(e) => setConfirmPin(e.target.value)}
+                        className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                       />
                       <button 
-                        onClick={() => setShowPin(!showPin)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
                       >
-                        {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
+                        সংরক্ষণ করুন
                       </button>
+                      <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
                     </div>
-                    <input 
-                      type={showPin ? "text" : "password"} 
-                      placeholder="পিন নিশ্চিত করুন" 
-                      value={confirmPin}
-                      onChange={(e) => setConfirmPin(e.target.value)}
-                      className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                    />
-                    <button 
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
-                    >
-                      {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
-                      সংরক্ষণ করুন
-                    </button>
-                    <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -3084,7 +3126,7 @@ function AppContent() {
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
               homePosts.map((post, idx) => (
-                <div key={post.id || `post-${idx}`} className={cn(
+                <div key={`post-${idx}-${post.title}`} className={cn(
                   "p-4 rounded-xl mb-5 border shadow-sm",
                   isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                 )}>
@@ -3194,7 +3236,7 @@ function AppContent() {
                       <div className="grid grid-cols-1 gap-3">
                         {(catBooks as Book[]).map((book, idx) => (
                           <button 
-                            key={book.id || `book-${idx}`}
+                            key={`book-${idx}-${book.name}`}
                             onClick={() => setSelectedBook(book)}
                             className={cn(
                               "flex items-center justify-between p-4 rounded-xl border text-left active:scale-95 transition-transform",
@@ -3391,7 +3433,7 @@ function AppContent() {
             ) : (
               <div className="space-y-4">
                 {filteredDonors.map((donor, idx) => (
-                  <div key={`${donor.phone}-${idx}`} className={cn(
+                  <div key={`donor-${idx}-${donor.phone}`} className={cn(
                     "p-4 rounded-xl border shadow-sm",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                   )}>
@@ -5757,7 +5799,7 @@ function AppContent() {
                 }
                 return myNotifications.map((n, idx) => (
                   <button 
-                    key={n.id || `notif-${idx}`}
+                    key={`notif-list-${idx}`}
                     onClick={() => setSelectedNotification(n)}
                     className={cn(
                       "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4",
