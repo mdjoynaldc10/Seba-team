@@ -29,16 +29,13 @@
 
 /* Force portrait mode fallback for mobile browsers */
 @media screen and (orientation: landscape) and (max-width: 1024px) {
-  body {
-    transform: rotate(-90deg);
-    transform-origin: left top;
-    width: 100vh;
-    height: 100vw;
-    overflow-x: hidden;
-    position: absolute;
-    top: 100%;
-    left: 0;
+  .landscape-warning {
+    display: flex !important;
   }
+}
+
+.landscape-warning {
+  display: none;
 }
 
 @keyframes shake {
