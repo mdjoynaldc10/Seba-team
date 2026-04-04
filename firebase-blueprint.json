@@ -85,12 +85,26 @@
         "updatedBy": { "type": "string" }
       },
       "required": ["advanceSettings"]
+    },
+    "cloud_pins": {
+      "title": "Cloud PIN",
+      "description": "User security PIN settings",
+      "type": "object",
+      "properties": {
+        "pin": { "type": "string", "description": "4+ digit PIN code" },
+        "isEnabled": { "type": "boolean", "description": "Whether PIN is active" }
+      },
+      "required": ["pin", "isEnabled"]
     }
   },
   "firestore": {
     "/settings/{settingId}": {
       "schema": "settings",
       "description": "Global settings document"
+    },
+    "/cloud_pins/{userId}": {
+      "schema": "cloud_pins",
+      "description": "User security PIN settings"
     },
     "/publicDonors/{donorId}": {
       "schema": "publicDonors",

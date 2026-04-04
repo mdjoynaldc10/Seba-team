@@ -46,5 +46,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAuthenticated(); // Simplified for now, can be hardened if needed
     }
+
+    // Cloud PINs Collection
+    match /cloud_pins/{userId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

@@ -26,3 +26,27 @@
 .no-capture {
   /* This is handled by logic in App.tsx usually, but we can use this class too */
 }
+
+/* Force portrait mode fallback for mobile browsers */
+@media screen and (orientation: landscape) and (max-width: 1024px) {
+  body {
+    transform: rotate(-90deg);
+    transform-origin: left top;
+    width: 100vh;
+    height: 100vw;
+    overflow-x: hidden;
+    position: absolute;
+    top: 100%;
+    left: 0;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: shake 0.2s ease-in-out 0s 2;
+}

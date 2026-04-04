@@ -40,7 +40,11 @@ import {
   ToggleLeft,
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  Lock,
+  Key,
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -50,7 +54,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth } from './firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 
 // --- Types ---
@@ -757,6 +761,11 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+interface CloudPinSettings {
+  pin: string;
+  isEnabled: boolean;
+}
+
 // --- Components ---
 const BookImage = ({ book, isDarkMode, className }: { book: Book, isDarkMode: boolean, className?: string }) => {
   const sizeClasses = className || "w-10 h-14";
@@ -818,6 +827,471 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 };
+
+function CloudPinPage({ 
+  currentUser, 
+  onClose, 
+  isDarkMode 
+}: { 
+  currentUser: Member, 
+  onClose: () => void, 
+  isDarkMode: boolean 
+}) {
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [mode, setMode] = useState<'manage' | 'set' | 'change' | 'reset'>('manage');
+  
+  // Reset fields
+  const [resetId, setResetId] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [resetExtra, setResetExtra] = useState(''); // Email or DOB
+  const [resetError, setResetError] = useState('');
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'cloud_pins', currentUser.id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data() as CloudPinSettings;
+          setPin(data.pin);
+          setIsEnabled(data.isEnabled);
+        }
+      } catch (e) {
+        console.error("Error fetching PIN settings:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, [currentUser.id]);
+
+  const handleSave = async () => {
+    if (pin.length < 4) {
+      alert("পিন কমপক্ষে ৪ সংখ্যার হতে হবে!");
+      return;
+    }
+    if (mode === 'set' || mode === 'change' || mode === 'reset') {
+      if (pin !== confirmPin) {
+        alert("পিন মেলেনি!");
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'cloud_pins', currentUser.id), {
+        pin,
+        isEnabled
+      });
+      alert("পিন সফলভাবে সংরক্ষিত হয়েছে!");
+      setMode('manage');
+      setConfirmPin('');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `cloud_pins/${currentUser.id}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggle = async (newVal: boolean) => {
+    if (!pin && newVal) {
+      setMode('set');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'cloud_pins', currentUser.id), {
+        pin,
+        isEnabled: newVal
+      }, { merge: true });
+      setIsEnabled(newVal);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `cloud_pins/${currentUser.id}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    // Verify against currentUser data (which comes from sheet)
+    const normalizedPhone = currentUser.phone.startsWith('0') ? currentUser.phone.substring(1) : currentUser.phone;
+    const inputPhone = resetPhone.startsWith('0') ? resetPhone.substring(1) : resetPhone;
+
+    const isIdMatch = resetId.trim() === currentUser.id.trim();
+    const isPhoneMatch = inputPhone.trim() === normalizedPhone.trim();
+    const isExtraMatch = resetExtra.trim() === currentUser.email.trim() || resetExtra.trim() === currentUser.dob.trim();
+
+    if (isIdMatch && isPhoneMatch && isExtraMatch) {
+      setMode('reset');
+      setPin('');
+      setConfirmPin('');
+      setResetError('');
+    } else {
+      setResetError("তথ্য মেলেনি! অনুগ্রহ করে সঠিক তথ্য দিন।");
+    }
+  };
+
+  const handleBack = () => {
+    if (mode !== 'manage') {
+      setMode('manage');
+    } else {
+      onClose();
+    }
+  };
+
+  if (isLoading) return (
+    <OverlayPage title="Cloud PIN" onClose={handleBack} isDarkMode={isDarkMode}>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    </OverlayPage>
+  );
+
+  return (
+    <OverlayPage title="Cloud PIN" onClose={handleBack} isDarkMode={isDarkMode}>
+      <div className="space-y-6">
+        {mode === 'manage' && (
+          <div className="space-y-4">
+            <div className={cn(
+              "p-6 rounded-3xl border-2 flex flex-col items-center text-center space-y-4",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+            )}>
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center",
+                isEnabled ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-400"
+              )}>
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">Cloud PIN Security</h3>
+                <p className="text-sm opacity-60">যেকোনো ডিভাইসে লগইন করার সময় পিন কোড দিয়ে সুরক্ষা নিশ্চিত করুন।</p>
+              </div>
+              
+              <div className="flex items-center justify-between w-full p-4 bg-slate-500/5 rounded-2xl border border-slate-500/10">
+                <span className="font-bold">Status: {isEnabled ? 'ON' : 'OFF'}</span>
+                <button 
+                  onClick={() => handleToggle(!isEnabled)}
+                  disabled={isSaving}
+                  className={cn(
+                    "w-12 h-6 rounded-full relative transition-all",
+                    isEnabled ? "bg-emerald-500" : "bg-slate-300"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                    isEnabled ? "right-1" : "left-1"
+                  )} />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              <button 
+                onClick={() => setMode(pin ? 'change' : 'set')}
+                className={cn(
+                  "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}
+              >
+                <Key className="w-5 h-5 text-emerald-500" />
+                {pin ? 'পিন পরিবর্তন করুন' : 'পিন সেট করুন'}
+              </button>
+              <button 
+                onClick={() => setMode('reset')}
+                className={cn(
+                  "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}
+              >
+                <RefreshCw className="w-5 h-5 text-orange-500" />
+                পিন রিসেট করুন
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(mode === 'set' || mode === 'change' || mode === 'reset') && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+            {mode === 'reset' && !pin && (
+              <div className="space-y-4">
+                <div className="text-center space-y-2 mb-4">
+                  <h3 className="text-lg font-bold">পিন রিসেট করুন</h3>
+                  <p className="text-xs opacity-60">আপনার তথ্য যাচাই করে পিন রিসেট করুন।</p>
+                </div>
+                <div className="space-y-3">
+                  <input 
+                    type="text" 
+                    placeholder="আইডি (SF-XXXX)" 
+                    value={resetId}
+                    onChange={(e) => setResetId(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="tel" 
+                    placeholder="ফোন নাম্বার" 
+                    value={resetPhone}
+                    onChange={(e) => setResetPhone(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="জিমেইল অথবা জন্মতারিখ (DD/MM/YYYY)" 
+                    value={resetExtra}
+                    onChange={(e) => setResetExtra(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  {resetError && <p className="text-red-500 text-xs font-bold text-center">{resetError}</p>}
+                  <button 
+                    onClick={handleReset}
+                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
+                  >
+                    যাচাই করুন
+                  </button>
+                  <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">পিছনে যান</button>
+                </div>
+              </div>
+            )}
+
+            {(mode !== 'reset' || pin) && (
+              <div className="space-y-4">
+                <div className="text-center space-y-2 mb-4">
+                  <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'পিন পরিবর্তন করুন' : 'নতুন পিন দিন'}</h3>
+                  <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
+                </div>
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input 
+                      type={showPin ? "text" : "password"} 
+                      placeholder="নতুন পিন" 
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value)}
+                      className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                    />
+                    <button 
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <input 
+                    type={showPin ? "text" : "password"} 
+                    placeholder="পিন নিশ্চিত করুন" 
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <button 
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
+                    সংরক্ষণ করুন
+                  </button>
+                  <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </OverlayPage>
+  );
+}
+
+function PinEntryModal({ 
+  onSuccess, 
+  onCancel, 
+  isDarkMode, 
+  targetPin,
+  pendingMember
+}: { 
+  onSuccess: () => void, 
+  onCancel: () => void, 
+  isDarkMode: boolean, 
+  targetPin: string,
+  pendingMember: Member
+}) {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  
+  // Reset fields
+  const [resetId, setResetId] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [resetExtra, setResetExtra] = useState(''); // Email or DOB
+  const [resetError, setResetError] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input === targetPin) {
+      onSuccess();
+    } else {
+      setError(true);
+      setTimeout(() => setError(false), 500);
+      setInput('');
+    }
+  };
+
+  const handleReset = async () => {
+    const normalizedPhone = pendingMember.phone.startsWith('0') ? pendingMember.phone.substring(1) : pendingMember.phone;
+    const inputPhone = resetPhone.startsWith('0') ? resetPhone.substring(1) : resetPhone;
+
+    const isIdMatch = resetId.trim() === pendingMember.id.trim();
+    const isPhoneMatch = inputPhone.trim() === normalizedPhone.trim();
+    const isExtraMatch = resetExtra.trim() === pendingMember.email.trim() || resetExtra.trim() === pendingMember.dob.trim();
+
+    if (isIdMatch && isPhoneMatch && isExtraMatch) {
+      setIsResetting(true);
+      try {
+        // Disable PIN in Firestore
+        await setDoc(doc(db, 'cloud_pins', pendingMember.id), {
+          isEnabled: false
+        }, { merge: true });
+        alert("আপনার ক্লাউড পিনটি বন্ধ করা হয়েছে। এখন আপনি লগইন করতে পারবেন।");
+        onSuccess();
+      } catch (e) {
+        console.error("Error resetting PIN:", e);
+        setResetError("পিন রিসেট করতে সমস্যা হয়েছে।");
+      } finally {
+        setIsResetting(false);
+      }
+    } else {
+      setResetError("তথ্য মেলেনি! অনুগ্রহ করে সঠিক তথ্য দিন।");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      />
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        className={cn(
+          "relative w-full max-w-sm p-8 rounded-[40px] shadow-2xl z-10",
+          isDarkMode ? "bg-slate-900 text-white" : "bg-white text-slate-900"
+        )}
+      >
+        {!showReset ? (
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center">
+              <Lock className="w-10 h-10 text-emerald-500" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold">Cloud PIN দিন</h3>
+              <p className="text-sm opacity-60">আপনার অ্যাকাউন্টের সুরক্ষা নিশ্চিত করতে পিন কোডটি দিন।</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="w-full space-y-4">
+              <input 
+                autoFocus
+                type="password" 
+                inputMode="numeric"
+                placeholder="••••"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className={cn(
+                  "w-full h-16 text-center text-3xl tracking-[1em] rounded-3xl border-2 outline-none transition-all",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-100",
+                  error ? "border-red-500 animate-shake" : "focus:border-emerald-500"
+                )}
+              />
+              {error && <p className="text-red-500 text-xs font-bold">ভুল পিন! আবার চেষ্টা করুন।</p>}
+              
+              <button 
+                type="submit"
+                className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+              >
+                প্রবেশ করুন
+              </button>
+              <div className="flex flex-col gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowReset(true)}
+                  className="text-emerald-500 font-bold text-sm"
+                >
+                  পিন ভুলে গেছেন?
+                </button>
+                <button 
+                  type="button"
+                  onClick={onCancel}
+                  className="text-slate-500 font-bold text-sm"
+                >
+                  বাতিল করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center">
+              <RefreshCw className="w-10 h-10 text-orange-500" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold">পিন রিসেট করুন</h3>
+              <p className="text-sm opacity-60">আপনার তথ্য যাচাই করে পিন রিসেট করুন।</p>
+            </div>
+
+            <div className="w-full space-y-3">
+              <input 
+                type="text" 
+                placeholder="আইডি (SF-XXXX)" 
+                value={resetId}
+                onChange={(e) => setResetId(e.target.value)}
+                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+              />
+              <input 
+                type="tel" 
+                placeholder="ফোন নাম্বার" 
+                value={resetPhone}
+                onChange={(e) => setResetPhone(e.target.value)}
+                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+              />
+              <input 
+                type="text" 
+                placeholder="জিমেইল অথবা জন্মতারিখ" 
+                value={resetExtra}
+                onChange={(e) => setResetExtra(e.target.value)}
+                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+              />
+              {resetError && <p className="text-red-500 text-xs font-bold">{resetError}</p>}
+              
+              <button 
+                onClick={handleReset}
+                disabled={isResetting}
+                className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-lg shadow-orange-500/20 active:scale-95 flex items-center justify-center gap-2"
+              >
+                {isResetting && <Loader2 className="w-5 h-5 animate-spin" />}
+                যাচাই করুন
+              </button>
+              <button 
+                onClick={() => setShowReset(false)}
+                className="text-slate-500 font-bold text-sm"
+              >
+                পিছনে যান
+              </button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
 
 class ErrorBoundary extends Component<any, any> {
   state = { hasError: false, error: null };
@@ -1052,6 +1526,30 @@ function AppContent() {
   const [isAppInitializing, setIsAppInitializing] = useState(true);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
+  useEffect(() => {
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation && (screen.orientation as any).lock) {
+          await (screen.orientation as any).lock('portrait');
+        }
+      } catch (error) {
+        // Many browsers require fullscreen for orientation lock, or don't support it.
+        // We'll just log it silently as it's a best-effort feature for web apps.
+        console.warn('Orientation lock not supported or failed:', error);
+      }
+    };
+
+    lockOrientation();
+    
+    // Fallback: listen for orientation change and try to lock again
+    const handleOrientationChange = () => {
+      lockOrientation();
+    };
+
+    window.addEventListener('orientationchange', handleOrientationChange);
+    return () => window.removeEventListener('orientationchange', handleOrientationChange);
+  }, []);
+
   const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
   const [greetingsData, setGreetingsData] = useState(() => {
     const defaults = {
@@ -1141,6 +1639,11 @@ function AppContent() {
   const [donationFilterStartDate, setDonationFilterStartDate] = useState('');
   const [donationFilterEndDate, setDonationFilterEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [showCloudPinPage, setShowCloudPinPage] = useState(false);
+  const [showPinEntry, setShowPinEntry] = useState(false);
+  const [pendingLoginMember, setPendingLoginMember] = useState<Member | null>(null);
+  const [cloudPinSettings, setCloudPinSettings] = useState<CloudPinSettings | null>(null);
+
   const [advanceSettings, setAdvanceSettings] = useState<AdvanceSettings>({
     pdfTemplate: 'default',
     pdfHeaderText: 'পেমেন্ট হিস্টোরি',
@@ -1349,6 +1852,7 @@ function AppContent() {
         setShowAdvanceSettings(!!event.state.showAdvanceSettings);
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
+        setShowCloudPinPage(!!event.state.showCloudPinPage);
         setTimeout(() => {
           isInternalNavigation.current = false;
         }, 50);
@@ -1377,7 +1881,9 @@ function AppContent() {
       showBorrowForm,
       showNotice,
       showAdvanceSettings,
-      showRegistration
+      showGreetingsSettings,
+      showRegistration,
+      showCloudPinPage
     }, '');
 
     window.addEventListener('popstate', handlePopState);
@@ -1409,10 +1915,11 @@ function AppContent() {
         showNotice,
         showAdvanceSettings,
         showGreetingsSettings,
-        showRegistration
+        showRegistration,
+        showCloudPinPage
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1748,6 +2255,17 @@ function AppContent() {
     }
   };
 
+  const completeLogin = async (member: Member) => {
+    setCurrentUser(member);
+    localStorage.setItem('seba_user', JSON.stringify(member));
+    const payments = await fetchPaymentHistory(member.id, member.phone);
+    setPaymentData(payments);
+    localStorage.setItem('seba_payments', JSON.stringify(payments));
+    setShowPinEntry(false);
+    setPendingLoginMember(null);
+    setCloudPinSettings(null);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -1759,11 +2277,24 @@ function AppContent() {
     setIsGlobalLoading(true);
     const member = await loginMember(id, phone);
     if (member) {
-      setCurrentUser(member);
-      localStorage.setItem('seba_user', JSON.stringify(member));
-      const payments = await fetchPaymentHistory(id, phone);
-      setPaymentData(payments);
-      localStorage.setItem('seba_payments', JSON.stringify(payments));
+      // Check for Cloud PIN
+      try {
+        const pinDoc = await getDoc(doc(db, 'cloud_pins', member.id));
+        if (pinDoc.exists()) {
+          const pinData = pinDoc.data() as CloudPinSettings;
+          if (pinData.isEnabled && pinData.pin) {
+            setPendingLoginMember(member);
+            setCloudPinSettings(pinData);
+            setShowPinEntry(true);
+            setIsGlobalLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Error checking Cloud PIN:", e);
+      }
+      
+      await completeLogin(member);
     } else {
       setLoginErrorMsg("সদস্য পাওয়া যায়নি! আইডি নাম্বারে SF বড় হাতের দিন এবং ফোন নাম্বার শুন্য (০) ছাড়া লিখুন।");
       setShowLoginError(true);
@@ -3108,6 +3639,12 @@ function AppContent() {
 
                 <div className="space-y-2 px-1">
                   <ProfileMenuLink 
+                    icon={<Lock className="w-5 h-5 text-emerald-500" />} 
+                    label="Cloud PIN" 
+                    onClick={() => setShowCloudPinPage(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={<Info className="w-5 h-5" />} 
                     label={advanceSettings.optionNames.information} 
                     onClick={() => setShowInfoPage(true)} 
@@ -3430,6 +3967,23 @@ function AppContent() {
         )}
       </AnimatePresence>
 
+      {/* Pin Entry Modal */}
+      <AnimatePresence>
+        {showPinEntry && cloudPinSettings && pendingLoginMember && (
+          <PinEntryModal 
+            targetPin={cloudPinSettings.pin}
+            pendingMember={pendingLoginMember}
+            isDarkMode={isDarkMode}
+            onSuccess={() => completeLogin(pendingLoginMember)}
+            onCancel={() => {
+              setShowPinEntry(false);
+              setPendingLoginMember(null);
+              setCloudPinSettings(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       </main>
 
       {/* Bottom Nav */}
@@ -3469,6 +4023,14 @@ function AppContent() {
               <InfoItem label="যোগদানের তারিখ" value={currentUser.joiningDate} isDarkMode={isDarkMode} />
             </div>
           </OverlayPage>
+        )}
+
+        {showCloudPinPage && currentUser && (
+          <CloudPinPage 
+            currentUser={currentUser} 
+            onClose={() => window.history.back()} 
+            isDarkMode={isDarkMode} 
+          />
         )}
 
         {showPaymentPage && (
