@@ -845,16 +845,10 @@ function CloudPinPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [mode, setMode] = useState<'manage' | 'set' | 'change' | 'reset'>('manage');
+  const [mode, setMode] = useState<'manage' | 'set' | 'change'>('manage');
   const [currentPinInput, setCurrentPinInput] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [showCurrentPin, setShowCurrentPin] = useState(false);
-  
-  // Reset fields
-  const [resetId, setResetId] = useState('');
-  const [resetPhone, setResetPhone] = useState('');
-  const [resetExtra, setResetExtra] = useState(''); // Email or DOB
-  const [resetError, setResetError] = useState('');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -923,25 +917,6 @@ function CloudPinPage({
       handleFirestoreError(e, OperationType.WRITE, `cloud_pins/${currentUser.id}`);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleReset = () => {
-    // Verify against currentUser data (which comes from sheet)
-    const normalizedPhone = currentUser.phone.startsWith('0') ? currentUser.phone.substring(1) : currentUser.phone;
-    const inputPhone = resetPhone.startsWith('0') ? resetPhone.substring(1) : resetPhone;
-
-    const isIdMatch = resetId.trim() === currentUser.id.trim();
-    const isPhoneMatch = inputPhone.trim() === normalizedPhone.trim();
-    const isExtraMatch = resetExtra.trim() === currentUser.email.trim() || resetExtra.trim() === currentUser.dob.trim();
-
-    if (isIdMatch && isPhoneMatch && isExtraMatch) {
-      setMode('reset');
-      setPin('');
-      setConfirmPin('');
-      setResetError('');
-    } else {
-      setResetError("তথ্য মেলেনি! অনুগ্রহ করে সঠিক তথ্য দিন।");
     }
   };
 
@@ -1025,64 +1000,13 @@ function CloudPinPage({
                 <Key className="w-5 h-5 text-emerald-500" />
                 {savedPin ? 'পিন পরিবর্তন করুন' : 'পিন সেট করুন'}
               </button>
-              <button 
-                onClick={() => setMode('reset')}
-                className={cn(
-                  "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
-                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                )}
-              >
-                <RefreshCw className="w-5 h-5 text-orange-500" />
-                পিন রিসেট করুন
-              </button>
             </div>
           </div>
         )}
 
-        {(mode === 'set' || mode === 'change' || mode === 'reset') && (
+        {(mode === 'set' || mode === 'change') && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            {mode === 'reset' && !pin && (
-              <div className="space-y-4">
-                <div className="text-center space-y-2 mb-4">
-                  <h3 className="text-lg font-bold">পিন রিসেট করুন</h3>
-                  <p className="text-xs opacity-60">আপনার তথ্য যাচাই করে পিন রিসেট করুন।</p>
-                </div>
-                <div className="space-y-3">
-                  <input 
-                    type="text" 
-                    placeholder="আইডি (SF-XXXX)" 
-                    value={resetId}
-                    onChange={(e) => setResetId(e.target.value)}
-                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="ফোন নাম্বার" 
-                    value={resetPhone}
-                    onChange={(e) => setResetPhone(e.target.value)}
-                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="জিমেইল অথবা জন্মতারিখ (DD/MM/YYYY)" 
-                    value={resetExtra}
-                    onChange={(e) => setResetExtra(e.target.value)}
-                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                  />
-                  {resetError && <p className="text-red-500 text-xs font-bold text-center">{resetError}</p>}
-                  <button 
-                    onClick={handleReset}
-                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
-                  >
-                    যাচাই করুন
-                  </button>
-                  <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">পিছনে যান</button>
-                </div>
-              </div>
-            )}
-
-            {(mode !== 'reset' || pin) && (
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {mode === 'change' && !isVerified ? (
                   <div className="space-y-4">
                     <div className="text-center space-y-2 mb-4">
@@ -1164,7 +1088,6 @@ function CloudPinPage({
                   </div>
                 )}
               </div>
-            )}
           </div>
         )}
       </div>
