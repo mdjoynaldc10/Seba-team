@@ -45,7 +45,10 @@ import {
   Key,
   RefreshCw,
   RotateCcw,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert,
+  Check,
+  Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -55,7 +58,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth } from './firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 
 // --- Types ---
@@ -849,6 +852,57 @@ function CloudPinPage({
   const [currentPinInput, setCurrentPinInput] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [showCurrentPin, setShowCurrentPin] = useState(false);
+  const [resetRequests, setResetRequests] = useState<any[]>([]);
+  const [isRequestsLoading, setIsRequestsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin(currentUser) || isDeveloper(currentUser)) {
+      setIsRequestsLoading(true);
+      const q = query(collection(db, 'pin_reset_requests'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setResetRequests(reqs);
+        setIsRequestsLoading(false);
+      }, (err) => {
+        console.error("Error fetching reset requests:", err);
+        setIsRequestsLoading(false);
+      });
+      return () => unsub();
+    }
+  }, [currentUser]);
+
+  const handleApproveRequest = async (request: any) => {
+    try {
+      // 1. Disable PIN
+      await setDoc(doc(db, 'cloud_pins', request.memberId), {
+        isEnabled: false
+      }, { merge: true });
+      
+      // 2. Update request status
+      await updateDoc(doc(db, 'pin_reset_requests', request.id), {
+        status: 'approved',
+        updatedAt: serverTimestamp()
+      });
+      
+      alert("অনুরোধটি অনুমোদিত হয়েছে।");
+    } catch (e) {
+      console.error("Error approving request:", e);
+      alert("অনুমোদন করতে সমস্যা হয়েছে।");
+    }
+  };
+
+  const handleDeclineRequest = async (requestId: string) => {
+    try {
+      await updateDoc(doc(db, 'pin_reset_requests', requestId), {
+        status: 'declined',
+        updatedAt: serverTimestamp()
+      });
+      alert("অনুরোধটি বাতিল করা হয়েছে।");
+    } catch (e) {
+      console.error("Error declining request:", e);
+      alert("বাতিল করতে সমস্যা হয়েছে।");
+    }
+  };
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1090,6 +1144,74 @@ function CloudPinPage({
               </div>
           </div>
         )}
+
+        {(isAdmin(currentUser) || isDeveloper(currentUser)) && mode === 'manage' && (
+          <div className="space-y-4 pt-4 border-t border-slate-500/10">
+            <div className="flex items-center gap-2 px-1">
+              <ShieldAlert className="w-5 h-5 text-orange-500" />
+              <h3 className="text-lg font-bold">PIN Reset Requests</h3>
+              {resetRequests.length > 0 && (
+                <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                  {resetRequests.length}
+                </span>
+              )}
+            </div>
+            
+            {isRequestsLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              </div>
+            ) : resetRequests.length === 0 ? (
+              <div className="text-center py-8 opacity-50 text-sm">
+                কোনো অনুরোধ পেন্ডিং নেই
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {resetRequests.map((req) => (
+                  <motion.div 
+                    key={req.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={cn(
+                      "p-4 rounded-2xl border-2 space-y-3",
+                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100"
+                    )}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-sm">{req.memberName}</h4>
+                        <p className="text-xs opacity-60">{req.memberId}</p>
+                        <p className="text-[10px] opacity-40 mt-1">
+                          {req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleString() : 'Just now'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleApproveRequest(req)}
+                          className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
+                          title="Approve"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeclineRequest(req.id)}
+                          className="p-2 bg-red-500 text-white rounded-xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
+                          title="Decline"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 text-[10px] opacity-60">
+                      <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {req.phone}</span>
+                      <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {req.email}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </OverlayPage>
   );
@@ -1118,6 +1240,29 @@ function PinEntryModal({
   const [resetExtra, setResetExtra] = useState(''); // Email or DOB
   const [resetError, setResetError] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [requestStatus, setRequestStatus] = useState<'idle' | 'pending' | 'approved' | 'declined'>('idle');
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (requestId) {
+      const unsub = onSnapshot(doc(db, 'pin_reset_requests', requestId), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.status === 'approved') {
+            setRequestStatus('approved');
+            setTimeout(() => {
+              onSuccess();
+            }, 2000); // Wait for animation
+          } else if (data.status === 'declined') {
+            setRequestStatus('declined');
+            setResetError("আপনার অনুরোধটি বাতিল করা হয়েছে।");
+            setIsResetting(false);
+          }
+        }
+      });
+      return () => unsub();
+    }
+  }, [requestId, onSuccess]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1141,16 +1286,21 @@ function PinEntryModal({
     if (isIdMatch && isPhoneMatch && isExtraMatch) {
       setIsResetting(true);
       try {
-        // Disable PIN in Firestore
-        await setDoc(doc(db, 'cloud_pins', pendingMember.id), {
-          isEnabled: false
-        }, { merge: true });
-        alert("আপনার ক্লাউড পিনটি বন্ধ করা হয়েছে। এখন আপনি লগইন করতে পারবেন।");
-        onSuccess();
+        const newRequestId = `${pendingMember.id}_${Date.now()}`;
+        await setDoc(doc(db, 'pin_reset_requests', newRequestId), {
+          memberId: pendingMember.id,
+          memberName: pendingMember.name,
+          phone: pendingMember.phone,
+          email: pendingMember.email,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        setRequestId(newRequestId);
+        setRequestStatus('pending');
       } catch (e) {
-        console.error("Error resetting PIN:", e);
-        setResetError("পিন রিসেট করতে সমস্যা হয়েছে।");
-      } finally {
+        console.error("Error creating reset request:", e);
+        setResetError("অনুরোধ পাঠাতে সমস্যা হয়েছে।");
         setIsResetting(false);
       }
     } else {
@@ -1238,43 +1388,80 @@ function PinEntryModal({
             </div>
 
             <div className="w-full space-y-3">
-              <input 
-                type="text" 
-                placeholder="আইডি (SF-XXXX)" 
-                value={resetId}
-                onChange={(e) => setResetId(e.target.value)}
-                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
-              />
-              <input 
-                type="tel" 
-                placeholder="ফোন নাম্বার" 
-                value={resetPhone}
-                onChange={(e) => setResetPhone(e.target.value)}
-                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
-              />
-              <input 
-                type="text" 
-                placeholder="জিমেইল অথবা জন্মতারিখ" 
-                value={resetExtra}
-                onChange={(e) => setResetExtra(e.target.value)}
-                className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
-              />
-              {resetError && <p className="text-red-500 text-xs font-bold">{resetError}</p>}
-              
-              <button 
-                onClick={handleReset}
-                disabled={isResetting}
-                className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-lg shadow-orange-500/20 active:scale-95 flex items-center justify-center gap-2"
-              >
-                {isResetting && <Loader2 className="w-5 h-5 animate-spin" />}
-                যাচাই করুন
-              </button>
-              <button 
-                onClick={() => setShowReset(false)}
-                className="text-slate-500 font-bold text-sm"
-              >
-                পিছনে যান
-              </button>
+              {requestStatus === 'pending' ? (
+                <div className="flex flex-col items-center space-y-6 py-4">
+                  <div className="relative">
+                    <div className="w-24 h-24 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <ShieldCheck className="w-10 h-10 text-emerald-500 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xl font-bold text-emerald-500">অনুরোধ পাঠানো হয়েছে</h4>
+                    <p className="text-sm opacity-60">অনুগ্রহ করে অ্যাডমিনের অনুমোদনের জন্য অপেক্ষা করুন।</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setRequestStatus('idle');
+                      setRequestId(null);
+                      setIsResetting(false);
+                    }}
+                    className="text-slate-500 font-bold text-sm"
+                  >
+                    অনুরোধ বাতিল করুন
+                  </button>
+                </div>
+              ) : requestStatus === 'approved' ? (
+                <div className="flex flex-col items-center space-y-6 py-4 animate-in zoom-in duration-500">
+                  <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/50">
+                    <Unlock className="w-12 h-12 text-white animate-bounce" />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xl font-bold text-emerald-500">অনুমোদিত হয়েছে!</h4>
+                    <p className="text-sm opacity-60">অ্যাকাউন্ট আনলক হচ্ছে...</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <input 
+                    type="text" 
+                    placeholder="আইডি (SF-XXXX)" 
+                    value={resetId}
+                    onChange={(e) => setResetId(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="tel" 
+                    placeholder="ফোন নাম্বার" 
+                    value={resetPhone}
+                    onChange={(e) => setResetPhone(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="জিমেইল অথবা জন্মতারিখ" 
+                    value={resetExtra}
+                    onChange={(e) => setResetExtra(e.target.value)}
+                    className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200")}
+                  />
+                  {resetError && <p className="text-red-500 text-xs font-bold">{resetError}</p>}
+                  
+                  <button 
+                    onClick={handleReset}
+                    disabled={isResetting}
+                    className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-lg shadow-orange-500/20 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    {isResetting && <Loader2 className="w-5 h-5 animate-spin" />}
+                    যাচাই করুন
+                  </button>
+                  <button 
+                    onClick={() => setShowReset(false)}
+                    className="text-slate-500 font-bold text-sm"
+                  >
+                    পিছনে যান
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}

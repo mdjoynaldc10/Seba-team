@@ -54,7 +54,9 @@ service cloud.firestore {
 
     // PIN Reset Requests Collection
     match /pin_reset_requests/{requestId} {
-      allow read, write: if isAuthenticated();
+      allow create: if true; // Allow anyone to request a reset
+      allow read: if true;   // Allow user to check their request status
+      allow update: if isAuthenticated(); // Only admins/authenticated users can approve/decline
     }
   }
 }
