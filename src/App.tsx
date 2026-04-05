@@ -1970,10 +1970,18 @@ function AppContent() {
     const savedPayments = localStorage.getItem('seba_payments');
     if (savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
         if (savedPayments) {
           setPaymentData(JSON.parse(savedPayments));
         }
+        // Refresh payments in background
+        fetchPaymentHistory(user.id, user.phone).then(payments => {
+          if (payments && payments.length > 0) {
+            setPaymentData(payments);
+            localStorage.setItem('seba_payments', JSON.stringify(payments));
+          }
+        });
       } catch (e) {
         console.error("Error parsing saved user data:", e);
       }
@@ -1989,6 +1997,15 @@ function AppContent() {
   }, [isAuthReady]);
 
   // Sync initialization with auth ready
+  useEffect(() => {
+    if (showPaymentPage && currentUser) {
+      fetchPaymentHistory(currentUser.id, currentUser.phone).then(payments => {
+        setPaymentData(payments);
+        localStorage.setItem('seba_payments', JSON.stringify(payments));
+      });
+    }
+  }, [showPaymentPage, currentUser]);
+
   useEffect(() => {
     if (isAuthReady) {
       const timer = setTimeout(() => {

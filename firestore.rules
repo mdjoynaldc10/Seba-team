@@ -51,5 +51,10 @@ service cloud.firestore {
     match /cloud_pins/{userId} {
       allow read, write: if isAuthenticated();
     }
+
+    // PIN Reset Requests Collection
+    match /pin_reset_requests/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }
