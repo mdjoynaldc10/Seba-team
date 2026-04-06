@@ -96,24 +96,40 @@
       },
       "required": ["pin", "isEnabled"]
     },
-    "borrow_requests": {
-      "title": "Borrow Request",
-      "description": "Requests to borrow books",
+    "bookRequests": {
+      "title": "Book Request",
+      "description": "Request to borrow a book",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "bookId": { "type": "string" },
         "bookName": { "type": "string" },
-        "userId": { "type": "string" },
-        "userName": { "type": "string" },
-        "userAddress": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "accepted", "cancelled", "returned"] },
-        "requestDate": { "type": "object" },
-        "dueDate": { "type": "string", "format": "date" },
-        "returnDate": { "type": "object" },
-        "updatedAt": { "type": "object" }
+        "bookAuthor": { "type": "string" },
+        "requesterId": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "requesterAddress": { "type": "string" },
+        "requestDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "returned"] },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "approvedBy": { "type": "string" },
+        "approvedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "bookId", "userId", "status"]
+      "required": ["id", "bookId", "bookName", "requesterId", "requesterName", "status"]
+    },
+    "bookReviews": {
+      "title": "Book Review",
+      "description": "User review for a book",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "reviewerId": { "type": "string" },
+        "reviewerName": { "type": "string" },
+        "reviewText": { "type": "string" },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookId", "reviewerId", "reviewText", "rating"]
     }
   },
   "firestore": {
@@ -145,9 +161,13 @@
       "schema": "post_reactions",
       "description": "Collection of reactions on homepage posts"
     },
-    "/borrow_requests/{requestId}": {
-      "schema": "borrow_requests",
-      "description": "Book borrowing requests"
+    "/bookRequests/{requestId}": {
+      "schema": "bookRequests",
+      "description": "Collection of book borrow requests"
+    },
+    "/bookReviews/{reviewId}": {
+      "schema": "bookReviews",
+      "description": "Collection of book reviews"
     }
   }
 }

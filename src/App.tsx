@@ -48,7 +48,9 @@ import {
   ShieldCheck,
   ShieldAlert,
   Check,
-  Unlock
+  Unlock,
+  MessageSquare,
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -117,6 +119,21 @@ interface Book {
   address: string;
   returnableDate: string;
   imageUrl?: string;
+}
+
+interface BookRequest {
+  id: string;
+  bookId: string;
+  bookName: string;
+  bookAuthor: string;
+  requesterId: string;
+  requesterName: string;
+  requesterAddress: string;
+  requestDate: string;
+  status: 'pending' | 'approved' | 'rejected' | 'returned';
+  dueDate?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 interface DonationProject {
@@ -230,20 +247,6 @@ interface Bookshelf {
   address: string;
   pinCode: string;
   mapLocation: string;
-}
-
-interface BorrowRequest {
-  id: string;
-  bookId: string;
-  bookName: string;
-  bookAuthor?: string;
-  userId: string;
-  userName: string;
-  userAddress: string;
-  status: 'pending' | 'accepted' | 'cancelled' | 'returned';
-  requestDate: any;
-  dueDate?: any;
-  returnDate?: any;
 }
 
 // --- Sheets Logic ---
@@ -496,10 +499,10 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         
         json.table.rows.forEach((r: any) => {
-          const year = r.c[1]?.v || '';
-          // Monthly payments (C to N, indices 2 to 13)
+          const year = r.c[2]?.v || '';
+          // Monthly payments (D to O, indices 3 to 14)
           for (let i = 0; i < 12; i++) {
-            const amount = r.c[i + 2]?.v;
+            const amount = r.c[i + 3]?.v;
             if (amount && amount > 0) {
               payments.push({
                 amount: Number(amount),
@@ -508,26 +511,26 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
               });
             }
           }
-          // Tshirt (O, index 14)
-          if (r.c[14]?.v && r.c[14]?.v > 0) {
+          // Tshirt (P, index 15)
+          if (r.c[15]?.v && r.c[15]?.v > 0) {
             payments.push({
-              amount: Number(r.c[14]?.v),
+              amount: Number(r.c[15]?.v),
               reason: `Tshirt`,
               date: `${year}-01-01`
             });
           }
-          // ID Card (P, index 15)
-          if (r.c[15]?.v && r.c[15]?.v > 0) {
+          // ID Card (Q, index 16)
+          if (r.c[16]?.v && r.c[16]?.v > 0) {
             payments.push({
-              amount: Number(r.c[15]?.v),
+              amount: Number(r.c[16]?.v),
               reason: `ID Card`,
               date: `${year}-01-01`
             });
           }
-          // program (Q, index 16)
-          if (r.c[16]?.v && r.c[16]?.v > 0) {
+          // program (R, index 17)
+          if (r.c[17]?.v && r.c[17]?.v > 0) {
             payments.push({
-              amount: Number(r.c[16]?.v),
+              amount: Number(r.c[17]?.v),
               reason: `Program`,
               date: `${year}-01-01`
             });
@@ -1624,153 +1627,6 @@ const LandscapeBlocker = ({ isDarkMode }: { isDarkMode: boolean }) => (
   </div>
 );
 
-function BorrowRequestsPage({ 
-  onClose, 
-  isDarkMode, 
-  requests,
-  onAccept,
-  onCancel,
-  onReturn
-}: { 
-  onClose: () => void, 
-  isDarkMode: boolean, 
-  requests: BorrowRequest[],
-  onAccept: (req: BorrowRequest, dueDate: string) => void,
-  onCancel: (id: string) => void,
-  onReturn: (req: BorrowRequest) => void
-}) {
-  const [selectedRequest, setSelectedRequest] = useState<BorrowRequest | null>(null);
-  const [dueDate, setDueDate] = useState('');
-
-  return (
-    <OverlayPage title="Borrow Requests" onClose={onClose} isDarkMode={isDarkMode}>
-      <div className="space-y-4">
-        {requests.length === 0 ? (
-          <div className="text-center py-20 opacity-50">
-            <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p>কোনো অনুরোধ নেই</p>
-          </div>
-        ) : (
-          requests
-            .sort((a, b) => (b.requestDate?.toMillis?.() || 0) - (a.requestDate?.toMillis?.() || 0))
-            .map((req) => (
-            <div key={req.id} className={cn(
-              "p-4 rounded-2xl border space-y-4",
-              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"
-            )}>
-              <div className="flex justify-between items-start">
-                <div className="flex gap-3">
-                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">{req.bookName}</h4>
-                    <p className="text-xs opacity-60">{req.userName} (ID: {req.userId})</p>
-                  </div>
-                </div>
-                <span className={cn(
-                  "text-[10px] px-2 py-1 rounded-full font-bold uppercase",
-                  req.status === 'pending' ? "bg-amber-100 text-amber-600" :
-                  req.status === 'accepted' ? "bg-emerald-100 text-emerald-600" :
-                  req.status === 'returned' ? "bg-blue-100 text-blue-600" :
-                  "bg-red-100 text-red-600"
-                )}>
-                  {req.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[10px] opacity-70">
-                <div className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {req.requestDate?.toDate ? req.requestDate.toDate().toLocaleDateString() : 'Just now'}</div>
-                <div className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {req.userAddress}</div>
-                {req.dueDate && <div className="flex items-center gap-1 text-emerald-500"><Calendar className="w-3 h-3" /> Due: {new Date(req.dueDate).toLocaleDateString()}</div>}
-              </div>
-
-              {req.status === 'pending' && (
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    onClick={() => setSelectedRequest(req)}
-                    className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-                  >
-                    Accept
-                  </button>
-                  <button 
-                    onClick={() => onCancel(req.id)}
-                    className="flex-1 py-2 bg-red-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {req.status === 'accepted' && (
-                <button 
-                  onClick={() => onReturn(req)}
-                  className="w-full py-2 bg-blue-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-                >
-                  Mark as Returned
-                </button>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <AnimatePresence>
-        {selectedRequest && (
-          <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedRequest(null)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className={cn(
-                "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10",
-                isDarkMode ? "bg-slate-900 text-white" : "bg-white text-slate-900"
-              )}
-            >
-              <h3 className="text-lg font-bold mb-4">ফেরত দেওয়ার তারিখ নির্ধারণ করুন</h3>
-              <input 
-                type="date" 
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className={cn(
-                  "w-full p-4 rounded-xl border outline-none mb-4",
-                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
-                )}
-              />
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => {
-                    if (!dueDate) return alert('তারিখ নির্বাচন করুন');
-                    onAccept(selectedRequest, dueDate);
-                    setSelectedRequest(null);
-                    setDueDate('');
-                  }}
-                  className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold active:scale-95 transition-all"
-                >
-                  নিশ্চিত করুন
-                </button>
-                <button 
-                  onClick={() => setSelectedRequest(null)}
-                  className="flex-1 py-3 bg-slate-200 dark:bg-slate-800 rounded-xl font-bold active:scale-95 transition-all"
-                >
-                  বাতিল
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </OverlayPage>
-  );
-}
-
 export default function App() {
   return (
     <ErrorBoundary>
@@ -1948,6 +1804,7 @@ function AppContent() {
   const [donorData, setDonorData] = useState<Donor[]>([]);
   const [homePosts, setHomePosts] = useState<HomePost[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  const [bookRequests, setBookRequests] = useState<BookRequest[]>([]);
   const [donationProjects, setDonationProjects] = useState<DonationProject[]>([]);
   const [donationTransactions, setDonationTransactions] = useState<DonationTransaction[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
@@ -1986,7 +1843,10 @@ function AppContent() {
     };
   }, []);
 
-  const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
+  const [showBookRequestPage, setShowBookRequestPage] = useState(false);
+  const [selectedBookRequest, setSelectedBookRequest] = useState<BookRequest | null>(null);
+  const [activeBorrowedTab, setActiveBorrowedTab] = useState<'my-books' | 'requests' | 'history'>('my-books');
+  const [dueDate, setDueDate] = useState('');
   const [greetingsData, setGreetingsData] = useState(() => {
     const defaults = {
       morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!", startHour: 5, startPeriod: "AM", endHour: 12, endPeriod: "PM" },
@@ -2027,8 +1887,6 @@ function AppContent() {
   const [showDatabasePage, setShowDatabasePage] = useState(false);
   const [showBookshelfPage, setShowBookshelfPage] = useState(false);
   const [bookshelves, setBookshelves] = useState<Bookshelf[]>([]);
-  const [borrowRequests, setBorrowRequests] = useState<BorrowRequest[]>([]);
-  const [showBorrowRequestsPage, setShowBorrowRequestsPage] = useState(false);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books' | 'database'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
@@ -2070,6 +1928,7 @@ function AppContent() {
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -2231,71 +2090,94 @@ function AppContent() {
     }
   }, [showLoginError]);
 
-  useEffect(() => {
-    if (showBorrowForm && currentUser) {
-      setBorrowFormData({
-        name: currentUser.name,
-        id: currentUser.id,
-        date: new Date().toISOString().split('T')[0],
-        address: currentUser.area || ''
-      });
-    }
-  }, [showBorrowForm, currentUser]);
-
   const handleBorrowRequest = async () => {
     if (!selectedBook || !currentUser) return;
+
+    // Check if user already has this book or a pending request
+    const existingRequest = bookRequests.find(r => 
+      r.bookId === selectedBook.id && 
+      r.requesterId === currentUser.id && 
+      (r.status === 'pending' || r.status === 'approved')
+    );
+
+    if (existingRequest) {
+      alert('আপনি ইতিমধ্যে এই বইটি সংগ্রহের জন্য অনুরোধ করেছেন বা বইটি আপনার কাছে রয়েছে।');
+      return;
+    }
     
-    const requestId = `${selectedBook.id}_${currentUser.id}_${Date.now()}`;
-    const requestData = {
+    const requestId = `${currentUser.id}_${selectedBook.id}_${Date.now()}`;
+    const requestData: BookRequest = {
       id: requestId,
       bookId: selectedBook.id,
       bookName: selectedBook.name,
       bookAuthor: selectedBook.author,
-      userId: currentUser.id,
-      userName: borrowFormData.name || currentUser.name,
-      userAddress: borrowFormData.address || currentUser.area,
-      status: 'pending',
-      requestDate: serverTimestamp(),
+      requesterId: currentUser.id,
+      requesterName: currentUser.name,
+      requesterAddress: borrowFormData.address,
+      requestDate: new Date().toISOString(),
+      status: 'pending'
     };
 
     try {
-      await setDoc(doc(db, 'borrow_requests', requestId), requestData);
+      await setDoc(doc(db, 'bookRequests', requestId), requestData);
       setIsRequestSent(true);
+      
       setTimeout(() => {
         setShowBorrowForm(false);
         setIsRequestSent(false);
-        window.history.back();
       }, 1500);
-    } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, `borrow_requests/${requestId}`);
+    } catch (error) {
+      console.error("Error sending borrow request:", error);
+      alert('অনুরোধ পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     }
   };
 
-  const handleAcceptBorrowRequest = async (req: BorrowRequest, dueDate: string) => {
+  const approveBookRequest = async (request: BookRequest, dueDate: string) => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    if (!dueDate) {
+      alert('অনুগ্রহ করে ফেরত দেওয়ার তারিখ নির্ধারণ করুন।');
+      return;
+    }
+
     try {
-      await updateDoc(doc(db, 'borrow_requests', req.id), {
-        status: 'accepted',
+      await updateDoc(doc(db, 'bookRequests', request.id), {
+        status: 'approved',
         dueDate: dueDate,
-        updatedAt: serverTimestamp()
+        approvedBy: currentUser.name,
+        approvedAt: new Date().toISOString()
       });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${req.id}`);
+      
+      alert('অনুরোধ সফলভাবে গ্রহণ করা হয়েছে।');
+      window.history.back();
+    } catch (error) {
+      console.error("Error approving request:", error);
+      alert('অনুরোধ গ্রহণ করতে সমস্যা হয়েছে।');
     }
   };
 
-  const handleCancelBorrowRequest = async (id: string) => {
+  const rejectBookRequest = async (requestId: string) => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    
     try {
-      await deleteDoc(doc(db, 'borrow_requests', id));
-    } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `borrow_requests/${id}`);
+      await deleteDoc(doc(db, 'bookRequests', requestId));
+      alert('অনুরোধ বাতিল করা হয়েছে।');
+      window.history.back();
+    } catch (error) {
+      console.error("Error rejecting request:", error);
+      alert('অনুরোধ বাতিল করতে সমস্যা হয়েছে।');
     }
   };
 
-  const handleReturnBook = async (req: BorrowRequest) => {
+  const returnBookRequest = async (requestId: string) => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    
     try {
-      await deleteDoc(doc(db, 'borrow_requests', req.id));
-    } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `borrow_requests/${req.id}`);
+      await deleteDoc(doc(db, 'bookRequests', requestId));
+      alert('বইটি ফেরত নেওয়া হয়েছে।');
+      window.history.back();
+    } catch (error) {
+      console.error("Error returning book:", error);
+      alert('বইটি ফেরত নিতে সমস্যা হয়েছে।');
     }
   };
 
@@ -2324,12 +2206,12 @@ function AppContent() {
         setShowDonatePopup(!!event.state.showDonatePopup);
         setShowLoginError(!!event.state.showLoginError);
         setShowBorrowForm(!!event.state.showBorrowForm);
-        setShowBorrowRequestsPage(!!event.state.showBorrowRequestsPage);
         setShowNotice(!!event.state.showNotice);
         setShowAdvanceSettings(!!event.state.showAdvanceSettings);
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
         setShowCloudPinPage(!!event.state.showCloudPinPage);
+        setSelectedBookRequest(event.state.selectedBookRequest || null);
         setTimeout(() => {
           isInternalNavigation.current = false;
         }, 50);
@@ -2356,12 +2238,12 @@ function AppContent() {
       showDonatePopup,
       showLoginError,
       showBorrowForm,
-      showBorrowRequestsPage,
       showNotice,
       showAdvanceSettings,
       showGreetingsSettings,
       showRegistration,
-      showCloudPinPage
+      showCloudPinPage,
+      selectedBookRequest
     }, '');
 
     window.addEventListener('popstate', handlePopState);
@@ -2390,15 +2272,15 @@ function AppContent() {
         showDonatePopup,
         showLoginError,
         showBorrowForm,
-        showBorrowRequestsPage,
         showNotice,
         showAdvanceSettings,
         showGreetingsSettings,
         showRegistration,
-        showCloudPinPage
+        showCloudPinPage,
+        selectedBookRequest
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showBorrowRequestsPage, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, selectedBookRequest]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -2537,21 +2419,6 @@ function AppContent() {
   // Greetings Sync
   useEffect(() => {
     if (!isAuthReady) return;
-    const unsubscribe = onSnapshot(collection(db, 'borrow_requests'), (snapshot) => {
-      const requests: BorrowRequest[] = [];
-      snapshot.forEach((doc) => {
-        requests.push({ id: doc.id, ...doc.data() } as BorrowRequest);
-      });
-      setBorrowRequests(requests);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'borrow_requests');
-    });
-    return () => unsubscribe();
-  }, [isAuthReady]);
-
-  // Greetings Sync
-  useEffect(() => {
-    if (!isAuthReady) return;
     const unsubscribe = onSnapshot(doc(db, 'settings', 'greetings'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -2562,6 +2429,21 @@ function AppContent() {
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'settings/greetings');
+    });
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
+  // Book Requests Sync
+  useEffect(() => {
+    if (!isAuthReady) return;
+    const unsubscribe = onSnapshot(collection(db, 'bookRequests'), (snapshot) => {
+      const requests: BookRequest[] = [];
+      snapshot.forEach((doc) => {
+        requests.push(doc.data() as BookRequest);
+      });
+      setBookRequests(requests);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'bookRequests');
     });
     return () => unsubscribe();
   }, [isAuthReady]);
@@ -4252,15 +4134,13 @@ function AppContent() {
                   )}
                   {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
                     <ProfileMenuLink 
-                      icon={<BookOpen className="w-5 h-5 text-emerald-500" />} 
-                      label="Borrow Requests" 
-                      onClick={() => setShowBorrowRequestsPage(true)} 
+                      icon={<ClipboardList className="w-5 h-5 text-emerald-500" />} 
+                      label="Requests" 
+                      onClick={() => {
+                        setActiveBorrowedTab('requests');
+                        setShowBorrowedBooksPage(true);
+                      }} 
                       isDarkMode={isDarkMode}
-                      rightElement={borrowRequests.filter(r => r.status === 'pending').length > 0 && (
-                        <span className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-                          {borrowRequests.filter(r => r.status === 'pending').length}
-                        </span>
-                      )}
                     />
                   )}
                   {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
@@ -5666,99 +5546,310 @@ function AppContent() {
         )}
 
         {showBorrowedBooksPage && currentUser && (
-          <OverlayPage key="borrowed-books-overlay" title="গৃহীত বইসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-4">
-              {(() => {
-                const userBooks = borrowRequests.filter(req => req.userId === currentUser.id && req.status === 'accepted');
-                if (userBooks.length === 0) {
-                  return <div className="text-center p-10 opacity-50">কোনো গৃহীত বই পাওয়া যায়নি</div>;
-                }
-                return userBooks.map((req, idx) => {
-                  const borrowDate = req.requestDate?.toDate ? req.requestDate.toDate() : new Date();
-                  const returnDate = req.dueDate ? new Date(req.dueDate) : null;
-                  
-                  let progress = 0;
-                  let isOverdue = false;
-                  let timeText = '';
+          <OverlayPage key="borrowed-books-overlay" title="বই সংগ্রহ ও অনুরোধ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6">
+              {/* Tabs for Admin/Dev */}
+              {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                  <button 
+                    onClick={() => setActiveBorrowedTab('my-books')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                      activeBorrowedTab === 'my-books' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:bg-emerald-500/5"
+                    )}
+                  >
+                    আমার বই
+                  </button>
+                  <button 
+                    onClick={() => setActiveBorrowedTab('requests')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative",
+                      activeBorrowedTab === 'requests' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:bg-emerald-500/5"
+                    )}
+                  >
+                    অনুরোধ
+                    {bookRequests.filter(r => r.status === 'pending').length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
+                        {bookRequests.filter(r => r.status === 'pending').length}
+                      </span>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => setActiveBorrowedTab('history')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
+                      activeBorrowedTab === 'history' 
+                        ? "bg-emerald-500 text-white shadow-md" 
+                        : "text-emerald-500/60 hover:bg-emerald-500/5"
+                    )}
+                  >
+                    ইতিহাস
+                  </button>
+                </div>
+              )}
 
-                  if (borrowDate && returnDate) {
-                    const total = returnDate.getTime() - borrowDate.getTime();
-                    const elapsed = currentTime.getTime() - borrowDate.getTime();
-                    progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
-                    isOverdue = currentTime > returnDate;
-
-                    if (isOverdue) {
-                      const diff = currentTime.getTime() - returnDate.getTime();
-                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-                      timeText = `${toBengaliDigits(days)} দিন: ${toBengaliDigits(hours)} ঘন্টা: ${toBengaliDigits(minutes)} মিনিট: ${toBengaliDigits(seconds)} সেকেন্ড`;
-                    } else {
-                      const diff = returnDate.getTime() - currentTime.getTime();
-                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-                      timeText = `${toBengaliDigits(days)} দিন: ${toBengaliDigits(hours)} ঘন্টা: ${toBengaliDigits(minutes)} মিনিট: ${toBengaliDigits(seconds)} সেকেন্ড`;
-                    }
-                  }
-
-                  return (
-                    <div 
-                      key={`user-book-${idx}-${req.bookName}`}
-                      className="bg-emerald-500 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden"
-                    >
-                      {/* Background Pattern */}
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+              {/* Tab Content */}
+              <div className="space-y-4">
+                {activeBorrowedTab === 'my-books' && (
+                  <>
+                    {(() => {
+                      // Show books from Sheets AND approved requests from Firestore
+                      const sheetBooks = books.filter(b => b.recipientId === currentUser.id);
+                      const approvedRequests = bookRequests.filter(r => r.requesterId === currentUser.id && r.status === 'approved');
                       
-                      <div className="relative z-10">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex-1">
-                            <h4 className="text-lg font-bold leading-tight mb-1">{req.bookName}</h4>
-                            <p className="text-xs text-white/70">{req.bookAuthor}</p>
-                          </div>
-                        </div>
+                      // Combine them
+                      const allUserBooks = [
+                        ...sheetBooks.map(b => ({ ...b, source: 'sheet' })),
+                        ...approvedRequests.map(r => ({
+                          id: r.bookId,
+                          name: r.bookName,
+                          author: r.bookAuthor,
+                          date: r.approvedAt || r.requestDate,
+                          returnableDate: r.dueDate || '',
+                          recipientId: r.requesterId,
+                          source: 'firestore'
+                        }))
+                      ];
 
-                        <div className="grid grid-cols-2 gap-4 mb-5">
-                          <div>
-                            <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">গ্রহণ তারিখ</span>
-                            <span className="text-sm font-bold">{borrowDate.toLocaleDateString()}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">ফেরতযোগ্য তারিখ</span>
-                            <span className="text-sm font-bold">{returnDate ? returnDate.toLocaleDateString() : 'N/A'}</span>
-                          </div>
-                        </div>
+                      if (allUserBooks.length === 0) {
+                        return <div className="text-center p-10 opacity-50">কোনো গৃহীত বই পাওয়া যায়নি</div>;
+                      }
 
-                        <div className="space-y-1 mb-2">
-                          <div className="flex flex-col gap-1">
-                            <span className={cn("text-[10px] uppercase tracking-widest font-bold", isOverdue ? "text-red-200" : "text-white/70")}>
-                              {isOverdue ? "সময় অতিবাহিত হয়েছে" : "সময় বাকি আছে"}
-                            </span>
-                            <span className={cn("text-sm font-bold", isOverdue ? "text-red-100" : "text-white")}>
-                              {timeText}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                      return allUserBooks.map((book, idx) => {
+                        const borrowDate = parseDate(book.date);
+                        const returnDate = parseDate(book.returnableDate);
+                        
+                        let progress = 0;
+                        let isOverdue = false;
+                        let timeText = '';
 
-                      {/* Progress Bar at Bottom */}
-                      <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/10 overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${progress}%` }}
+                        if (borrowDate && returnDate) {
+                          const total = returnDate.getTime() - borrowDate.getTime();
+                          const elapsed = currentTime.getTime() - borrowDate.getTime();
+                          progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+                          isOverdue = currentTime > returnDate;
+
+                          const diff = isOverdue 
+                            ? currentTime.getTime() - returnDate.getTime()
+                            : returnDate.getTime() - currentTime.getTime();
+                          
+                          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                          timeText = `${toBengaliDigits(days)} দিন: ${toBengaliDigits(hours)} ঘন্টা: ${toBengaliDigits(minutes)} মিনিট: ${toBengaliDigits(seconds)} সেকেন্ড`;
+                        }
+
+                        return (
+                          <div 
+                            key={`user-book-${idx}-${book.name}`}
+                            className="bg-emerald-500 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden"
+                          >
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                            
+                            <div className="relative z-10">
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="flex-1">
+                                  <h4 className="text-lg font-bold leading-tight mb-1">{book.name}</h4>
+                                  <p className="text-sm text-white/80 italic">{book.author}</p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4 mb-5">
+                                <div>
+                                  <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">গ্রহণ তারিখ</span>
+                                  <span className="text-sm font-bold">{formatDate(book.date)}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">ফেরতযোগ্য তারিখ</span>
+                                  <span className="text-sm font-bold">{formatDate(book.returnableDate)}</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1 mb-2">
+                                <div className="flex flex-col gap-1">
+                                  <span className={cn("text-[10px] uppercase tracking-widest font-bold", isOverdue ? "text-red-200" : "text-white/70")}>
+                                    {isOverdue ? "সময় অতিবাহিত হয়েছে" : "সময় বাকি আছে"}
+                                  </span>
+                                  <span className={cn("text-sm font-bold", isOverdue ? "text-red-100" : "text-white")}>
+                                    {timeText}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/10 overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progress}%` }}
+                                className={cn(
+                                  "h-full transition-all duration-1000",
+                                  isOverdue ? "bg-red-500" : "bg-white",
+                                  (progress >= 100 || isOverdue) ? "opacity-30" : "opacity-100"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </>
+                )}
+
+                {activeBorrowedTab === 'requests' && (
+                  <div className="space-y-3">
+                    {bookRequests.filter(r => r.status === 'pending' || r.status === 'approved').length === 0 ? (
+                      <div className="text-center p-10 opacity-50">কোনো নতুন অনুরোধ নেই</div>
+                    ) : (
+                      bookRequests.filter(r => r.status === 'pending' || r.status === 'approved').map((req) => (
+                        <div 
+                          key={req.id}
                           className={cn(
-                            "h-full transition-all duration-1000",
-                            isOverdue ? "bg-red-500" : "bg-white",
-                            (progress >= 100 || isOverdue) ? "opacity-30" : "opacity-100"
+                            "p-4 rounded-2xl border flex items-center justify-between gap-4",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                           )}
-                        />
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold truncate">{req.bookName}</h4>
+                            <p className="text-xs opacity-60 truncate">{req.requesterName} (ID: {req.requesterId})</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={cn(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                req.status === 'approved' ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+                              )}>
+                                {req.status === 'approved' ? 'গৃহীত (Borrowed)' : 'পেন্ডিং'}
+                              </span>
+                              <p className="text-[10px] opacity-40">{formatDate(req.requestDate)}</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => setSelectedBookRequest(req)}
+                            className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+                          >
+                            {req.status === 'approved' ? 'বিস্তারিত' : 'যাচাই করুন'}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {activeBorrowedTab === 'history' && (
+                  <div className="space-y-3">
+                    {bookRequests.filter(r => r.status !== 'pending' && r.status !== 'approved').length === 0 ? (
+                      <div className="text-center p-10 opacity-50">কোনো ইতিহাস পাওয়া যায়নি</div>
+                    ) : (
+                      bookRequests.filter(r => r.status !== 'pending' && r.status !== 'approved').sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()).map((req) => (
+                        <div 
+                          key={req.id}
+                          className={cn(
+                            "p-4 rounded-2xl border flex items-center justify-between gap-4",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold truncate">{req.bookName}</h4>
+                            <p className="text-xs opacity-60 truncate">{req.requesterName} (ID: {req.requesterId})</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={cn(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                req.status === 'approved' ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"
+                              )}>
+                                {req.status === 'approved' ? 'গৃহীত' : 'বাতিল'}
+                              </span>
+                              <span className="text-[10px] opacity-40">{formatDate(req.requestDate)}</span>
+                            </div>
+                          </div>
+                          {req.status === 'approved' && (
+                            <div className="text-right">
+                              <p className="text-[10px] opacity-50">ফেরত তারিখ</p>
+                              <p className="text-xs font-bold text-emerald-500">{formatDate(req.dueDate)}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </OverlayPage>
+        )}
+
+        {selectedBookRequest && (
+          <OverlayPage key="request-details-overlay" title="অনুরোধ যাচাই" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6">
+              <div className={cn(
+                "p-5 rounded-3xl border",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+              )}>
+                <h3 className="text-lg font-bold mb-4 border-b pb-2">বইয়ের তথ্য</h3>
+                <div className="space-y-2">
+                  <p className="text-sm"><span className="opacity-60">বইয়ের নাম:</span> <span className="font-bold">{selectedBookRequest.bookName}</span></p>
+                  <p className="text-sm"><span className="opacity-60">লেখক:</span> <span className="font-bold">{selectedBookRequest.bookAuthor}</span></p>
+                </div>
+                
+                <h3 className="text-lg font-bold mt-6 mb-4 border-b pb-2">সদস্যের তথ্য</h3>
+                <div className="space-y-2">
+                  <p className="text-sm"><span className="opacity-60">নাম:</span> <span className="font-bold">{selectedBookRequest.requesterName}</span></p>
+                  <p className="text-sm"><span className="opacity-60">আইডি:</span> <span className="font-bold">{selectedBookRequest.requesterId}</span></p>
+                  <p className="text-sm"><span className="opacity-60">ঠিকানা:</span> <span className="font-bold">{selectedBookRequest.requesterAddress}</span></p>
+                </div>
+              </div>
+
+              {selectedBookRequest.status === 'pending' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold opacity-60 mb-2 uppercase tracking-widest">ফেরত দেওয়ার তারিখ নির্ধারণ করুন</label>
+                    <input 
+                      type="date" 
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className={cn(
+                        "w-full p-4 rounded-2xl border font-bold",
+                        isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => rejectBookRequest(selectedBookRequest.id)}
+                      className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
+                    >
+                      বাতিল করুন
+                    </button>
+                    <button 
+                      onClick={() => approveBookRequest(selectedBookRequest, dueDate)}
+                      className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+                    >
+                      অনুমোদন দিন
+                    </button>
+                  </div>
+                </div>
+              ) : selectedBookRequest.status === 'approved' ? (
+                <div className="space-y-4">
+                  <div className={cn(
+                    "p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5",
+                    isDarkMode ? "text-emerald-400" : "text-emerald-600"
+                  )}>
+                    <p className="text-sm font-bold flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5" /> এই অনুরোধটি ইতিমধ্যে গ্রহণ করা হয়েছে।
+                    </p>
+                    <p className="text-xs opacity-80 mt-1">ফেরত দেওয়ার তারিখ: {formatDate(selectedBookRequest.dueDate)}</p>
+                  </div>
+                  <button 
+                    onClick={() => returnBookRequest(selectedBookRequest.id)}
+                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-5 h-5" /> বই ফেরত নিন (Return)
+                  </button>
+                </div>
+              ) : null}
             </div>
           </OverlayPage>
         )}
@@ -5923,22 +6014,20 @@ function AppContent() {
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
                     {(() => {
-                      const userBooks = borrowRequests.filter(req => req.userId === selectedMemberProfile.id && req.status === 'accepted');
+                      const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
                       if (userBooks.length === 0) {
                         return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
                       }
                       return (
                         <div className="space-y-2">
-                          {userBooks.map((req, idx) => (
+                          {userBooks.map((book, idx) => (
                             <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <span className="block font-bold text-sm">{req.bookName}</span>
-                                  <span className="text-[10px] opacity-60">{req.bookAuthor}</span>
+                                  <span className="block font-bold text-sm">{book.name}</span>
+                                  <span className="text-[10px] opacity-60">{book.author}</span>
                                 </div>
-                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">
-                                  {req.requestDate?.toDate ? formatDate(req.requestDate.toDate()) : 'Just now'}
-                                </span>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{formatDate(book.date)}</span>
                               </div>
                             </div>
                           ))}
@@ -6033,7 +6122,7 @@ function AppContent() {
 
 
         {selectedBook && (
-          <OverlayPage key="book-overlay" title="বই গ্রহীতার তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+          <OverlayPage key="book-overlay" title="বইয়ের বিস্তারিত তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-4 pb-24">
               <div className="flex justify-center mb-6">
                 <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-32 h-44 shadow-xl" />
@@ -6099,32 +6188,36 @@ function AppContent() {
                 </div>
               )}
 
-              {/* Borrower List */}
-              <div className="mt-8">
-                <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-3">
-                  বইটি যারা যারা নিয়েছেন ({borrowRequests.filter(req => req.bookId === selectedBook.id && req.status === 'accepted').length})
-                </h3>
+              {/* Borrower List - At the bottom */}
+              <div className={cn(
+                "p-5 rounded-3xl border mt-8",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+              )}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold">বইটি যারা যারা নিয়েছেন</h3>
+                  <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                    {bookRequests.filter(r => r.bookId === selectedBook.id && r.status === 'approved').length} জন
+                  </span>
+                </div>
+                
                 <div className="space-y-3">
-                  {borrowRequests
-                    .filter(req => req.bookId === selectedBook.id && req.status === 'accepted')
-                    .sort((a, b) => (b.requestDate?.toMillis?.() || 0) - (a.requestDate?.toMillis?.() || 0))
-                    .map((req, idx) => (
-                      <div key={idx} className={cn(
-                        "p-3 rounded-xl border flex justify-between items-center",
-                        isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white border-slate-100"
+                  {bookRequests.filter(r => r.bookId === selectedBook.id && r.status === 'approved').length === 0 ? (
+                    <p className="text-sm opacity-50 text-center py-4">বর্তমানে কেউ বইটি সংগ্রহ করেনি</p>
+                  ) : (
+                    bookRequests.filter(r => r.bookId === selectedBook.id && r.status === 'approved').map((borrower, idx) => (
+                      <div key={`borrower-${idx}`} className={cn(
+                        "p-3 rounded-xl border flex items-center gap-3",
+                        isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
                       )}>
-                        <div>
-                          <p className="font-bold text-sm">{req.userName}</p>
-                          <p className="text-[10px] opacity-60">{req.userAddress}</p>
+                        <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500">
+                          <User className="w-4 h-4" />
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] font-bold text-emerald-500">বর্তমানে আছে</p>
-                          <p className="text-[10px] opacity-40">{req.requestDate?.toDate ? formatDate(req.requestDate.toDate()) : 'Just now'}</p>
+                        <div>
+                          <p className="text-sm font-bold">{borrower.requesterName}</p>
+                          <p className="text-[10px] opacity-60">{borrower.requesterAddress}</p>
                         </div>
                       </div>
-                    ))}
-                  {borrowRequests.filter(req => req.bookId === selectedBook.id && req.status === 'accepted').length === 0 && (
-                    <p className="text-center text-xs opacity-50 py-4">এখনো কেউ সংগ্রহ করেনি</p>
+                    ))
                   )}
                 </div>
               </div>
@@ -6132,12 +6225,35 @@ function AppContent() {
 
             {/* Floating Borrow Button */}
             <div className="absolute bottom-6 left-6 right-6 flex justify-center">
-              <button 
-                onClick={() => setShowBorrowForm(true)}
-                className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
-              >
-                <BookOpen className="w-5 h-5" /> Borrow a book
-              </button>
+              {(() => {
+                const existingRequest = bookRequests.find(r => r.bookId === selectedBook.id && r.requesterId === currentUser?.id && (r.status === 'pending' || r.status === 'approved'));
+                const isAlreadyBorrowed = books.some(b => b.id === selectedBook.id && b.recipientId === currentUser?.id);
+
+                if (isAlreadyBorrowed || (existingRequest && existingRequest.status === 'approved')) {
+                  return (
+                    <div className="w-full h-14 bg-emerald-100 text-emerald-600 rounded-2xl font-bold flex items-center justify-center gap-2 border border-emerald-200">
+                      <CheckCircle2 className="w-5 h-5" /> আপনি এই বইটি নিয়েছেন
+                    </div>
+                  );
+                }
+
+                if (existingRequest && existingRequest.status === 'pending') {
+                  return (
+                    <div className="w-full h-14 bg-amber-100 text-amber-600 rounded-2xl font-bold flex items-center justify-center gap-2 border border-amber-200">
+                      <Loader2 className="w-5 h-5 animate-spin" /> অনুরোধ পেন্ডিং আছে
+                    </div>
+                  );
+                }
+
+                return (
+                  <button 
+                    onClick={() => setShowBorrowForm(true)}
+                    className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                    <BookOpen className="w-5 h-5" /> Borrow a book
+                  </button>
+                );
+              })()}
             </div>
           </OverlayPage>
         )}
@@ -6233,17 +6349,6 @@ function AppContent() {
               </button>
             </div>
           </OverlayPage>
-        )}
-
-        {showBorrowRequestsPage && (
-          <BorrowRequestsPage 
-            onClose={() => window.history.back()} 
-            isDarkMode={isDarkMode} 
-            requests={borrowRequests}
-            onAccept={handleAcceptBorrowRequest}
-            onCancel={handleCancelBorrowRequest}
-            onReturn={handleReturnBook}
-          />
         )}
 
         {showBookshelfPage && (
