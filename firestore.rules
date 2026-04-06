@@ -11,6 +11,19 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "mdjoynaldc10@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isDeveloper() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer');
+    }
+
     // Public Donors Collection
     match /publicDonors/{donorId} {
       allow read: if true;
@@ -26,7 +39,7 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      allow write: if isOwner(userId) || isAdmin();
     }
 
     // TicTacToe Games Collection
@@ -44,19 +57,25 @@ service cloud.firestore {
     // Global Settings Collection
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isAuthenticated(); // Simplified for now, can be hardened if needed
+      allow write: if isAdmin() || isDeveloper();
     }
 
     // Cloud PINs Collection
     match /cloud_pins/{userId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isOwner(userId);
     }
 
     // PIN Reset Requests Collection
     match /pin_reset_requests/{requestId} {
       allow create: if true; // Allow anyone to request a reset
       allow read: if true;   // Allow user to check their request status
-      allow update: if isAuthenticated(); // Only admins/authenticated users can approve/decline
+      allow update: if isAdmin() || isDeveloper();
+    }
+
+    // Borrow Requests Collection
+    match /borrow_requests/{requestId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
   }
 }

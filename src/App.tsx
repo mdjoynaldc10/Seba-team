@@ -232,6 +232,19 @@ interface Bookshelf {
   mapLocation: string;
 }
 
+interface BorrowRequest {
+  id: string;
+  bookId: string;
+  bookName: string;
+  userId: string;
+  userName: string;
+  userAddress: string;
+  status: 'pending' | 'accepted' | 'cancelled' | 'returned';
+  requestDate: any;
+  dueDate?: any;
+  returnDate?: any;
+}
+
 // --- Sheets Logic ---
 const HOME_SHEET_ID = '1YBSs5w0E5ujQBhCXkO4wtmVWbeEd66O7LJbaMXZAKEE';
 const MEMBER_SHEET_ID = '1pJ5Tg-ihE1TQT4VO9wus52o9Rbm7Iv5ck5XMdjvlino';
@@ -1610,6 +1623,153 @@ const LandscapeBlocker = ({ isDarkMode }: { isDarkMode: boolean }) => (
   </div>
 );
 
+function BorrowRequestsPage({ 
+  onClose, 
+  isDarkMode, 
+  requests,
+  onAccept,
+  onCancel,
+  onReturn
+}: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  requests: BorrowRequest[],
+  onAccept: (req: BorrowRequest, dueDate: string) => void,
+  onCancel: (id: string) => void,
+  onReturn: (req: BorrowRequest) => void
+}) {
+  const [selectedRequest, setSelectedRequest] = useState<BorrowRequest | null>(null);
+  const [dueDate, setDueDate] = useState('');
+
+  return (
+    <OverlayPage title="Borrow Requests" onClose={onClose} isDarkMode={isDarkMode}>
+      <div className="space-y-4">
+        {requests.length === 0 ? (
+          <div className="text-center py-20 opacity-50">
+            <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p>কোনো অনুরোধ নেই</p>
+          </div>
+        ) : (
+          requests
+            .sort((a, b) => (b.requestDate?.toMillis?.() || 0) - (a.requestDate?.toMillis?.() || 0))
+            .map((req) => (
+            <div key={req.id} className={cn(
+              "p-4 rounded-2xl border space-y-4",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"
+            )}>
+              <div className="flex justify-between items-start">
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">{req.bookName}</h4>
+                    <p className="text-xs opacity-60">{req.userName} (ID: {req.userId})</p>
+                  </div>
+                </div>
+                <span className={cn(
+                  "text-[10px] px-2 py-1 rounded-full font-bold uppercase",
+                  req.status === 'pending' ? "bg-amber-100 text-amber-600" :
+                  req.status === 'accepted' ? "bg-emerald-100 text-emerald-600" :
+                  req.status === 'returned' ? "bg-blue-100 text-blue-600" :
+                  "bg-red-100 text-red-600"
+                )}>
+                  {req.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] opacity-70">
+                <div className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {req.requestDate?.toDate ? req.requestDate.toDate().toLocaleDateString() : 'Just now'}</div>
+                <div className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {req.userAddress}</div>
+                {req.dueDate && <div className="flex items-center gap-1 text-emerald-500"><Calendar className="w-3 h-3" /> Due: {new Date(req.dueDate).toLocaleDateString()}</div>}
+              </div>
+
+              {req.status === 'pending' && (
+                <div className="flex gap-2 pt-2">
+                  <button 
+                    onClick={() => setSelectedRequest(req)}
+                    className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
+                  >
+                    Accept
+                  </button>
+                  <button 
+                    onClick={() => onCancel(req.id)}
+                    className="flex-1 py-2 bg-red-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {req.status === 'accepted' && (
+                <button 
+                  onClick={() => onReturn(req)}
+                  className="w-full py-2 bg-blue-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
+                >
+                  Mark as Returned
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <AnimatePresence>
+        {selectedRequest && (
+          <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedRequest(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className={cn(
+                "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10",
+                isDarkMode ? "bg-slate-900 text-white" : "bg-white text-slate-900"
+              )}
+            >
+              <h3 className="text-lg font-bold mb-4">ফেরত দেওয়ার তারিখ নির্ধারণ করুন</h3>
+              <input 
+                type="date" 
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={cn(
+                  "w-full p-4 rounded-xl border outline-none mb-4",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                )}
+              />
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    if (!dueDate) return alert('তারিখ নির্বাচন করুন');
+                    onAccept(selectedRequest, dueDate);
+                    setSelectedRequest(null);
+                    setDueDate('');
+                  }}
+                  className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold active:scale-95 transition-all"
+                >
+                  নিশ্চিত করুন
+                </button>
+                <button 
+                  onClick={() => setSelectedRequest(null)}
+                  className="flex-1 py-3 bg-slate-200 dark:bg-slate-800 rounded-xl font-bold active:scale-95 transition-all"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </OverlayPage>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -1866,6 +2026,8 @@ function AppContent() {
   const [showDatabasePage, setShowDatabasePage] = useState(false);
   const [showBookshelfPage, setShowBookshelfPage] = useState(false);
   const [bookshelves, setBookshelves] = useState<Bookshelf[]>([]);
+  const [borrowRequests, setBorrowRequests] = useState<BorrowRequest[]>([]);
+  const [showBorrowRequestsPage, setShowBorrowRequestsPage] = useState(false);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'info' | 'payments' | 'books' | 'database'>('info');
   const [memberProfilePayments, setMemberProfilePayments] = useState<Payment[]>([]);
@@ -2068,34 +2230,78 @@ function AppContent() {
     }
   }, [showLoginError]);
 
-  const handleBorrowRequest = () => {
-    if (!selectedBook) return;
-    
-    const message = `বই সংগ্রহের অনুরোধ:
-বইয়ের নাম: ${selectedBook.name}
-লেখক: ${selectedBook.author}
-গ্রহীতা: ${borrowFormData.name}
-আইডি নং: ${borrowFormData.id}
-তারিখ: ${borrowFormData.date}
-ঠিকানা: ${borrowFormData.address}`;
+  useEffect(() => {
+    if (showBorrowForm && currentUser) {
+      setBorrowFormData({
+        name: currentUser.name,
+        id: currentUser.id,
+        date: new Date().toISOString().split('T')[0],
+        address: currentUser.area || ''
+      });
+    }
+  }, [showBorrowForm, currentUser]);
 
-    // Copy to clipboard
-    navigator.clipboard.writeText(message).then(() => {
-      // Show tick animation
+  const handleBorrowRequest = async () => {
+    if (!selectedBook || !currentUser) return;
+    
+    const requestId = `${selectedBook.id}_${currentUser.id}_${Date.now()}`;
+    const requestData = {
+      id: requestId,
+      bookId: selectedBook.id,
+      bookName: selectedBook.name,
+      userId: currentUser.id,
+      userName: borrowFormData.name || currentUser.name,
+      userAddress: borrowFormData.address || currentUser.area,
+      status: 'pending',
+      requestDate: serverTimestamp(),
+    };
+
+    try {
+      await setDoc(doc(db, 'borrow_requests', requestId), requestData);
       setIsRequestSent(true);
-      
-      // Wait for animation then open messenger
       setTimeout(() => {
-        window.open(`https://m.me/100071182715718`, '_blank');
         setShowBorrowForm(false);
         setIsRequestSent(false);
-      }, 800);
-    }).catch(() => {
-      // Fallback if clipboard fails
-      window.open(`https://m.me/100071182715718`, '_blank');
-      setShowBorrowForm(false);
-      setIsRequestSent(false);
-    });
+        window.history.back();
+      }, 1500);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `borrow_requests/${requestId}`);
+    }
+  };
+
+  const handleAcceptBorrowRequest = async (req: BorrowRequest, dueDate: string) => {
+    try {
+      await updateDoc(doc(db, 'borrow_requests', req.id), {
+        status: 'accepted',
+        dueDate: dueDate,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${req.id}`);
+    }
+  };
+
+  const handleCancelBorrowRequest = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'borrow_requests', id), {
+        status: 'cancelled',
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${id}`);
+    }
+  };
+
+  const handleReturnBook = async (req: BorrowRequest) => {
+    try {
+      await updateDoc(doc(db, 'borrow_requests', req.id), {
+        status: 'returned',
+        returnDate: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${req.id}`);
+    }
   };
 
   const isInternalNavigation = useRef(false);
@@ -2326,6 +2532,21 @@ function AppContent() {
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'settings/global');
+    });
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
+  // Greetings Sync
+  useEffect(() => {
+    if (!isAuthReady) return;
+    const unsubscribe = onSnapshot(collection(db, 'borrow_requests'), (snapshot) => {
+      const requests: BorrowRequest[] = [];
+      snapshot.forEach((doc) => {
+        requests.push({ id: doc.id, ...doc.data() } as BorrowRequest);
+      });
+      setBorrowRequests(requests);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'borrow_requests');
     });
     return () => unsubscribe();
   }, [isAuthReady]);
@@ -4033,6 +4254,19 @@ function AppContent() {
                   )}
                   {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
                     <ProfileMenuLink 
+                      icon={<BookOpen className="w-5 h-5 text-emerald-500" />} 
+                      label="Borrow Requests" 
+                      onClick={() => setShowBorrowRequestsPage(true)} 
+                      isDarkMode={isDarkMode}
+                      rightElement={borrowRequests.filter(r => r.status === 'pending').length > 0 && (
+                        <span className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                          {borrowRequests.filter(r => r.status === 'pending').length}
+                        </span>
+                      )}
+                    />
+                  )}
+                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                    <ProfileMenuLink 
                       icon={<Bell className="w-5 h-5 text-emerald-500" />} 
                       label="Greetings" 
                       onClick={() => setShowGreetingsSettings(true)} 
@@ -5437,13 +5671,13 @@ function AppContent() {
           <OverlayPage key="borrowed-books-overlay" title="গৃহীত বইসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-4">
               {(() => {
-                const userBooks = books.filter(b => b.recipientId === currentUser.id);
+                const userBooks = borrowRequests.filter(req => req.userId === currentUser.id && req.status === 'accepted');
                 if (userBooks.length === 0) {
                   return <div className="text-center p-10 opacity-50">কোনো গৃহীত বই পাওয়া যায়নি</div>;
                 }
-                return userBooks.map((book, idx) => {
-                  const borrowDate = parseDate(book.date);
-                  const returnDate = parseDate(book.returnableDate);
+                return userBooks.map((req, idx) => {
+                  const borrowDate = req.requestDate?.toDate ? req.requestDate.toDate() : new Date();
+                  const returnDate = req.dueDate ? new Date(req.dueDate) : null;
                   
                   let progress = 0;
                   let isOverdue = false;
@@ -5474,7 +5708,7 @@ function AppContent() {
 
                   return (
                     <div 
-                      key={`user-book-${idx}-${book.name}`}
+                      key={`user-book-${idx}-${req.bookName}`}
                       className="bg-emerald-500 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden"
                     >
                       {/* Background Pattern */}
@@ -5483,22 +5717,18 @@ function AppContent() {
                       <div className="relative z-10">
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex-1">
-                            <h4 className="text-lg font-bold leading-tight mb-1">{book.name}</h4>
-                            <p className="text-sm text-white/80 italic">{book.author}</p>
-                          </div>
-                          <div className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                            {book.category || 'অন্যান্য'}
+                            <h4 className="text-lg font-bold leading-tight mb-1">{req.bookName}</h4>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 mb-5">
                           <div>
                             <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">গ্রহণ তারিখ</span>
-                            <span className="text-sm font-bold">{formatDate(book.date)}</span>
+                            <span className="text-sm font-bold">{borrowDate.toLocaleDateString()}</span>
                           </div>
                           <div className="text-right">
                             <span className="block text-[10px] uppercase tracking-widest opacity-70 mb-1">ফেরতযোগ্য তারিখ</span>
-                            <span className="text-sm font-bold">{formatDate(book.returnableDate)}</span>
+                            <span className="text-sm font-bold">{returnDate ? returnDate.toLocaleDateString() : 'N/A'}</span>
                           </div>
                         </div>
 
@@ -5867,6 +6097,34 @@ function AppContent() {
                   </div>
                 </div>
               )}
+
+              {/* Borrower List */}
+              <div className="mt-8">
+                <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-3">বইটি যারা যারা নিয়েছেন</h3>
+                <div className="space-y-3">
+                  {borrowRequests
+                    .filter(req => req.bookId === selectedBook.id && (req.status === 'accepted' || req.status === 'returned'))
+                    .sort((a, b) => (b.requestDate?.toMillis?.() || 0) - (a.requestDate?.toMillis?.() || 0))
+                    .map((req, idx) => (
+                      <div key={idx} className={cn(
+                        "p-3 rounded-xl border flex justify-between items-center",
+                        isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        <div>
+                          <p className="font-bold text-sm">{req.userName}</p>
+                          <p className="text-[10px] opacity-60">{req.userAddress}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-emerald-500">{req.status === 'accepted' ? 'বর্তমানে আছে' : 'ফেরত দিয়েছেন'}</p>
+                          <p className="text-[10px] opacity-40">{req.requestDate?.toDate ? formatDate(req.requestDate.toDate()) : 'Just now'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  {borrowRequests.filter(req => req.bookId === selectedBook.id && (req.status === 'accepted' || req.status === 'returned')).length === 0 && (
+                    <p className="text-center text-xs opacity-50 py-4">এখনো কেউ সংগ্রহ করেনি</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Floating Borrow Button */}
@@ -5972,6 +6230,17 @@ function AppContent() {
               </button>
             </div>
           </OverlayPage>
+        )}
+
+        {showBorrowRequestsPage && (
+          <BorrowRequestsPage 
+            onClose={() => window.history.back()} 
+            isDarkMode={isDarkMode} 
+            requests={borrowRequests}
+            onAccept={handleAcceptBorrowRequest}
+            onCancel={handleCancelBorrowRequest}
+            onReturn={handleReturnBook}
+          />
         )}
 
         {showBookshelfPage && (

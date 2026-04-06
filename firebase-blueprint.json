@@ -95,6 +95,25 @@
         "isEnabled": { "type": "boolean", "description": "Whether PIN is active" }
       },
       "required": ["pin", "isEnabled"]
+    },
+    "borrow_requests": {
+      "title": "Borrow Request",
+      "description": "Requests to borrow books",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "bookName": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAddress": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "cancelled", "returned"] },
+        "requestDate": { "type": "object" },
+        "dueDate": { "type": "string", "format": "date" },
+        "returnDate": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["id", "bookId", "userId", "status"]
     }
   },
   "firestore": {
@@ -125,6 +144,10 @@
     "/post_reactions/{reactionId}": {
       "schema": "post_reactions",
       "description": "Collection of reactions on homepage posts"
+    },
+    "/borrow_requests/{requestId}": {
+      "schema": "borrow_requests",
+      "description": "Book borrowing requests"
     }
   }
 }
