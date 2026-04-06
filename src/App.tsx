@@ -236,6 +236,7 @@ interface BorrowRequest {
   id: string;
   bookId: string;
   bookName: string;
+  bookAuthor?: string;
   userId: string;
   userName: string;
   userAddress: string;
@@ -2249,6 +2250,7 @@ function AppContent() {
       id: requestId,
       bookId: selectedBook.id,
       bookName: selectedBook.name,
+      bookAuthor: selectedBook.author,
       userId: currentUser.id,
       userName: borrowFormData.name || currentUser.name,
       userAddress: borrowFormData.address || currentUser.area,
@@ -2283,24 +2285,17 @@ function AppContent() {
 
   const handleCancelBorrowRequest = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'borrow_requests', id), {
-        status: 'cancelled',
-        updatedAt: serverTimestamp()
-      });
+      await deleteDoc(doc(db, 'borrow_requests', id));
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${id}`);
+      handleFirestoreError(e, OperationType.DELETE, `borrow_requests/${id}`);
     }
   };
 
   const handleReturnBook = async (req: BorrowRequest) => {
     try {
-      await updateDoc(doc(db, 'borrow_requests', req.id), {
-        status: 'returned',
-        returnDate: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      await deleteDoc(doc(db, 'borrow_requests', req.id));
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `borrow_requests/${req.id}`);
+      handleFirestoreError(e, OperationType.DELETE, `borrow_requests/${req.id}`);
     }
   };
 
@@ -2329,6 +2324,7 @@ function AppContent() {
         setShowDonatePopup(!!event.state.showDonatePopup);
         setShowLoginError(!!event.state.showLoginError);
         setShowBorrowForm(!!event.state.showBorrowForm);
+        setShowBorrowRequestsPage(!!event.state.showBorrowRequestsPage);
         setShowNotice(!!event.state.showNotice);
         setShowAdvanceSettings(!!event.state.showAdvanceSettings);
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
@@ -2360,6 +2356,7 @@ function AppContent() {
       showDonatePopup,
       showLoginError,
       showBorrowForm,
+      showBorrowRequestsPage,
       showNotice,
       showAdvanceSettings,
       showGreetingsSettings,
@@ -2393,6 +2390,7 @@ function AppContent() {
         showDonatePopup,
         showLoginError,
         showBorrowForm,
+        showBorrowRequestsPage,
         showNotice,
         showAdvanceSettings,
         showGreetingsSettings,
@@ -2400,7 +2398,7 @@ function AppContent() {
         showCloudPinPage
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showBorrowRequestsPage, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -5718,6 +5716,7 @@ function AppContent() {
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex-1">
                             <h4 className="text-lg font-bold leading-tight mb-1">{req.bookName}</h4>
+                            <p className="text-xs text-white/70">{req.bookAuthor}</p>
                           </div>
                         </div>
 
@@ -5924,20 +5923,22 @@ function AppContent() {
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
                     {(() => {
-                      const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
+                      const userBooks = borrowRequests.filter(req => req.userId === selectedMemberProfile.id && req.status === 'accepted');
                       if (userBooks.length === 0) {
                         return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
                       }
                       return (
                         <div className="space-y-2">
-                          {userBooks.map((book, idx) => (
+                          {userBooks.map((req, idx) => (
                             <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <span className="block font-bold text-sm">{book.name}</span>
-                                  <span className="text-[10px] opacity-60">{book.author}</span>
+                                  <span className="block font-bold text-sm">{req.bookName}</span>
+                                  <span className="text-[10px] opacity-60">{req.bookAuthor}</span>
                                 </div>
-                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{formatDate(book.date)}</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">
+                                  {req.requestDate?.toDate ? formatDate(req.requestDate.toDate()) : 'Just now'}
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -6100,10 +6101,12 @@ function AppContent() {
 
               {/* Borrower List */}
               <div className="mt-8">
-                <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-3">বইটি যারা যারা নিয়েছেন</h3>
+                <h3 className="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-3">
+                  বইটি যারা যারা নিয়েছেন ({borrowRequests.filter(req => req.bookId === selectedBook.id && req.status === 'accepted').length})
+                </h3>
                 <div className="space-y-3">
                   {borrowRequests
-                    .filter(req => req.bookId === selectedBook.id && (req.status === 'accepted' || req.status === 'returned'))
+                    .filter(req => req.bookId === selectedBook.id && req.status === 'accepted')
                     .sort((a, b) => (b.requestDate?.toMillis?.() || 0) - (a.requestDate?.toMillis?.() || 0))
                     .map((req, idx) => (
                       <div key={idx} className={cn(
@@ -6115,12 +6118,12 @@ function AppContent() {
                           <p className="text-[10px] opacity-60">{req.userAddress}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] font-bold text-emerald-500">{req.status === 'accepted' ? 'বর্তমানে আছে' : 'ফেরত দিয়েছেন'}</p>
+                          <p className="text-[10px] font-bold text-emerald-500">বর্তমানে আছে</p>
                           <p className="text-[10px] opacity-40">{req.requestDate?.toDate ? formatDate(req.requestDate.toDate()) : 'Just now'}</p>
                         </div>
                       </div>
                     ))}
-                  {borrowRequests.filter(req => req.bookId === selectedBook.id && (req.status === 'accepted' || req.status === 'returned')).length === 0 && (
+                  {borrowRequests.filter(req => req.bookId === selectedBook.id && req.status === 'accepted').length === 0 && (
                     <p className="text-center text-xs opacity-50 py-4">এখনো কেউ সংগ্রহ করেনি</p>
                   )}
                 </div>
