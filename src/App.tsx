@@ -239,6 +239,7 @@ const BLOOD_SHEET_ID = '1dFO9EhpwS8yV_O98cFDCQje6jXEjnnT2aJ1zhH6slxs';
 const BOOKS_SHEET_ID = '1qevkZUndwH7v6QAwjDj56VDNR9dm1sRHYQU2X51MLig';
 const DONATION_SHEET_ID = '1NnAsCeuP7Z1D4HKVqV4HjRPys0TJ2NXrpmmryzCEfvg';
 const NEW_MEMBER_SHEET_ID = '1Rk4crZ8HN2DFqWeualTwxjJmtFTs8G_jonYa5lsHodI';
+const NEW_PAYMENT_DATA_SHEET_ID = '1TetkWolWcXvl0URf-CeNJdXd9GIAuPNRscTZEYkI834';
 
 const DATABASE_LINKS = [
   { name: 'Home Sheet', id: HOME_SHEET_ID, description: 'নোটিশ, নোটিফিকেশন এবং হোম পেজ ডাটা' },
@@ -247,11 +248,13 @@ const DATABASE_LINKS = [
   { name: 'Books Sheet', id: BOOKS_SHEET_ID, description: 'বইয়ের তালিকা এবং গ্রহীতাদের তথ্য' },
   { name: 'Donation Sheet', id: DONATION_SHEET_ID, description: 'ডোনেশন প্রজেক্ট এবং ডোনারদের তথ্য' },
   { name: 'New Member Sheet', id: NEW_MEMBER_SHEET_ID, description: 'নতুন সদস্যদের রেজিস্ট্রেশন ডাটা' },
+  { name: 'New Payment Sheet', id: NEW_PAYMENT_DATA_SHEET_ID, description: 'নতুন পেমেন্ট ডাটা এবং ইয়ারলি রিপোর্ট' },
 ];
 
 const MEMBER_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 const REGISTRATION_SHEETS = ['Sheet1', 'Registration', 'Form Responses 1'];
 const PAYMENT_SHEETS = ['Sheet11', 'Sheet12', 'Sheet13', 'Sheet14', 'Sheet15', 'Sheet16', 'Sheet17', 'Sheet18', 'Sheet19', 'Sheet20'];
+const NEW_PAYMENT_DATA_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3'];
 const BLOOD_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"];
 const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6", "Sheet7", "Sheet8"];
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
@@ -466,8 +469,77 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
         return [];
       }
     });
-    const results = await Promise.all(promises);
-    return results.flat();
+
+    const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
+      const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
+      try {
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
+        const text = await res.text();
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        if (!json.table || !json.table.rows) return [];
+        
+        const payments: Payment[] = [];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        json.table.rows.forEach((r: any) => {
+          const year = r.c[1]?.v || '';
+          // Monthly payments (C to N, indices 2 to 13)
+          for (let i = 0; i < 12; i++) {
+            const amount = r.c[i + 2]?.v;
+            if (amount && amount > 0) {
+              payments.push({
+                amount: Number(amount),
+                reason: months[i],
+                date: `${year}-${String(i + 1).padStart(2, '0')}-01`
+              });
+            }
+          }
+          // Tshirt (O, index 14)
+          if (r.c[14]?.v && r.c[14]?.v > 0) {
+            payments.push({
+              amount: Number(r.c[14]?.v),
+              reason: `Tshirt`,
+              date: `${year}-01-01`
+            });
+          }
+          // ID Card (P, index 15)
+          if (r.c[15]?.v && r.c[15]?.v > 0) {
+            payments.push({
+              amount: Number(r.c[15]?.v),
+              reason: `ID Card`,
+              date: `${year}-01-01`
+            });
+          }
+          // program (Q, index 16)
+          if (r.c[16]?.v && r.c[16]?.v > 0) {
+            payments.push({
+              amount: Number(r.c[16]?.v),
+              reason: `Program`,
+              date: `${year}-01-01`
+            });
+          }
+        });
+        return payments;
+      } catch (e) {
+        return [];
+      }
+    });
+
+    const results = await Promise.all([...promises, ...newPromises]);
+    const allPayments = results.flat();
+
+    // Filter duplicates based on date, reason, and amount to ensure clean history
+    const uniquePayments = Array.from(
+      new Map(
+        allPayments.map((p) => {
+          const key = `${p.date}-${p.reason}-${p.amount}`.toLowerCase().trim();
+          return [key, p];
+        })
+      ).values()
+    );
+
+    // Sort by date descending
+    return uniquePayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   } catch (e) {
     console.error("Error fetching payment history:", e);
     return [];
