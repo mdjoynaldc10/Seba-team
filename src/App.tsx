@@ -242,6 +242,16 @@ interface Notification {
   message: string;
 }
 
+interface RealTimeNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'book_request' | 'request_approved' | 'request_rejected' | 'general';
+  isRead: boolean;
+  createdAt: string;
+}
+
 interface Bookshelf {
   district: string;
   address: string;
@@ -1726,6 +1736,36 @@ const getGreeting = (greetingsData: any) => {
   return greetingsData.lateNight;
 };
 
+const PushNotificationToast = ({ notification, onClose, isDarkMode }: { notification: RealTimeNotification, onClose: () => void, isDarkMode: boolean }) => {
+  return (
+    <motion.div
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -100, opacity: 0 }}
+      className="fixed top-4 left-4 right-4 z-[9999] flex justify-center pointer-events-none"
+    >
+      <div 
+        onClick={onClose}
+        className={cn(
+          "max-w-md w-full p-4 rounded-2xl shadow-2xl border flex items-start gap-4 pointer-events-auto cursor-pointer active:scale-95 transition-transform",
+          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+        )}
+      >
+        <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white shrink-0">
+          <Bell className="w-6 h-6" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-sm truncate">{notification.title}</h4>
+          <p className="text-xs opacity-70 line-clamp-2">{notification.message}</p>
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="p-1 opacity-50 hover:opacity-100">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
 const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
   const greeting = getGreeting(greetingsData);
   const [showLoadingBar, setShowLoadingBar] = useState(false);
@@ -1926,6 +1966,8 @@ function AppContent() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [showNotice, setShowNotice] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [realTimeNotifications, setRealTimeNotifications] = useState<RealTimeNotification[]>([]);
+  const [activePushNotification, setActivePushNotification] = useState<RealTimeNotification | null>(null);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
@@ -2092,6 +2134,33 @@ function AppContent() {
     }
   }, [showLoginError]);
 
+  const sendRealTimeNotification = async (userId: string, title: string, message: string, type: RealTimeNotification['type']) => {
+    const id = `${userId}_${Date.now()}`;
+    const notification: RealTimeNotification = {
+      id,
+      userId,
+      title,
+      message,
+      type,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'notifications', id), notification);
+    } catch (error) {
+      console.error("Error sending real-time notification:", error);
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), { isRead: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
   const handleBorrowRequest = async () => {
     if (!selectedBook || !currentUser) return;
 
@@ -2122,6 +2191,18 @@ function AppContent() {
 
     try {
       await setDoc(doc(db, 'bookRequests', requestId), requestData);
+      
+      // Notify Admins
+      const admins = allMembers.filter(m => m.access === 'Admin' || m.designation === 'Developer');
+      for (const admin of admins) {
+        await sendRealTimeNotification(
+          admin.id,
+          'নতুন বইয়ের অনুরোধ',
+          `${currentUser.name} '${selectedBook.name}' বইটি সংগ্রহের জন্য অনুরোধ করেছেন।`,
+          'book_request'
+        );
+      }
+
       setIsRequestSent(true);
       
       setTimeout(() => {
@@ -2149,6 +2230,14 @@ function AppContent() {
         approvedAt: new Date().toISOString()
       });
       
+      // Notify Member
+      await sendRealTimeNotification(
+        request.requesterId,
+        'অনুরোধ গ্রহণ করা হয়েছে',
+        `আপনার '${request.bookName}' বইটি সংগ্রহের অনুরোধ গ্রহণ করা হয়েছে। ফেরত দেওয়ার তারিখ: ${formatDate(dueDate)}`,
+        'request_approved'
+      );
+      
       alert('অনুরোধ সফলভাবে গ্রহণ করা হয়েছে।');
       window.history.back();
     } catch (error) {
@@ -2160,8 +2249,20 @@ function AppContent() {
   const rejectBookRequest = async (requestId: string) => {
     if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
     
+    const request = bookRequests.find(r => r.id === requestId);
+    if (!request) return;
+
     try {
       await deleteDoc(doc(db, 'bookRequests', requestId));
+      
+      // Notify Member
+      await sendRealTimeNotification(
+        request.requesterId,
+        'অনুরোধ বাতিল করা হয়েছে',
+        `দুঃখিত, আপনার '${request.bookName}' বইটি সংগ্রহের অনুরোধ বাতিল করা হয়েছে।`,
+        'request_rejected'
+      );
+
       alert('অনুরোধ বাতিল করা হয়েছে।');
       window.history.back();
     } catch (error) {
@@ -2450,6 +2551,42 @@ function AppContent() {
     return () => unsubscribe();
   }, [isAuthReady]);
 
+  // Real-time Notifications Listener
+  useEffect(() => {
+    if (!currentUser || !isAuthReady) return;
+
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', currentUser.id),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newNotifications = snapshot.docs.map(doc => doc.data() as RealTimeNotification);
+      
+      // Check for new unread notifications to show push toast
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const notification = change.doc.data() as RealTimeNotification;
+          // Only show toast for notifications created in the last 10 seconds to avoid showing old ones on load
+          const createdTime = new Date(notification.createdAt).getTime();
+          const now = Date.now();
+          if (!notification.isRead && (now - createdTime < 10000)) {
+            setActivePushNotification(notification);
+            // Auto hide after 5 seconds
+            setTimeout(() => setActivePushNotification(null), 5000);
+          }
+        }
+      });
+
+      setRealTimeNotifications(newNotifications);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'notifications');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, isAuthReady]);
+
   const handleSaveSettings = async () => {
     if (!currentUser || !isDeveloper(currentUser)) return;
     setIsSavingSettings(true);
@@ -2560,14 +2697,15 @@ function AppContent() {
 
   const loadInitialData = async () => {
     setIsLoading(true);
-    const [posts, donors, allBooks, projects, transactions, noticeData, notificationData] = await Promise.all([
+    const [posts, donors, allBooks, projects, transactions, noticeData, notificationData, members] = await Promise.all([
       fetchHomePosts(),
       fetchAllDonors(),
       fetchBooks(),
       fetchDonationProjects(),
       fetchDonationTransactions(),
       fetchNotice(),
-      fetchNotifications()
+      fetchNotifications(),
+      fetchAllMembers()
     ]);
     setHomePosts(posts);
     setDonorData(donors);
@@ -2575,6 +2713,7 @@ function AppContent() {
     setDonationProjects(projects);
     setDonationTransactions(transactions);
     setNotifications(notificationData);
+    setAllMembers(members);
     
     if (noticeData && noticeData.title && noticeData.message) {
       setNotice(noticeData);
@@ -3313,6 +3452,16 @@ function AppContent() {
         {isAppInitializing && <SplashScreen key="splash" greetingsData={greetingsData} />}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {activePushNotification && (
+          <PushNotificationToast 
+            notification={activePushNotification} 
+            onClose={() => setActivePushNotification(null)} 
+            isDarkMode={isDarkMode} 
+          />
+        )}
+      </AnimatePresence>
+
       <div className={cn(
         "flex flex-col h-screen overflow-hidden font-['Hind_Siliguri']",
         isDarkMode ? "bg-slate-900 text-slate-50" : "bg-slate-50 text-slate-900"
@@ -4026,7 +4175,7 @@ function AppContent() {
                         style={{ backgroundColor: '#FFFFFF00' }}
                       >
                         <Bell className={cn("w-6 h-6", isDarkMode ? "text-white" : "text-slate-400")} />
-                        {notifications.some(n => n.id === currentUser.id && n.message) && (
+                        {(notifications.some(n => n.id === currentUser.id && n.message) || realTimeNotifications.some(n => !n.isRead)) && (
                           <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
                         )}
                       </button>
@@ -6456,24 +6605,55 @@ function AppContent() {
           >
             <div className="space-y-3">
               {(() => {
-                const myNotifications = notifications.filter(n => n.id === currentUser.id && n.message);
-                if (myNotifications.length === 0) {
+                const mySheetNotifications = notifications.filter(n => n.id === currentUser.id && n.message);
+                const allNotifs = [
+                  ...realTimeNotifications.map(n => ({ ...n, isRealTime: true })),
+                  ...mySheetNotifications.map(n => ({ ...n, isRealTime: false }))
+                ].sort((a, b) => {
+                  const dateA = a.isRealTime ? new Date(a.createdAt).getTime() : 0;
+                  const dateB = b.isRealTime ? new Date(b.createdAt).getTime() : 0;
+                  return dateB - dateA;
+                });
+
+                if (allNotifs.length === 0) {
                   return <div className="text-center p-10 opacity-50">কোনো নোটিফিকেশন পাওয়া যায়নি</div>;
                 }
-                return myNotifications.map((n, idx) => (
+
+                return allNotifs.map((n: any, idx) => (
                   <button 
                     key={`notif-list-${idx}`}
-                    onClick={() => setSelectedNotification(n)}
+                    onClick={() => {
+                      if (n.isRealTime) {
+                        markNotificationAsRead(n.id);
+                        setSelectedNotification({ id: n.id, title: n.title, message: n.message });
+                      } else {
+                        setSelectedNotification(n);
+                      }
+                    }}
                     className={cn(
-                      "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4 relative overflow-hidden",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100",
+                      n.isRealTime && !n.isRead && "border-emerald-500/50 bg-emerald-500/5"
                     )}
                   >
-                    <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
+                    {n.isRealTime && !n.isRead && (
+                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+                    )}
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+                      n.isRealTime && !n.isRead ? "bg-emerald-500 text-white" : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500"
+                    )}>
                       <Bell className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-bold truncate">{n.title}</h4>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className={cn("font-bold truncate", n.isRealTime && !n.isRead ? "text-emerald-500" : "")}>{n.title}</h4>
+                        {n.isRealTime && (
+                          <span className="text-[10px] opacity-40 shrink-0">
+                            {new Date(n.createdAt).toLocaleDateString('bn-BD')}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs opacity-60 truncate">{n.message}</p>
                     </div>
                     <ChevronRight className="w-4 h-4 opacity-30" />

@@ -130,6 +130,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "bookId", "reviewerId", "reviewText", "rating"]
+    },
+    "notifications": {
+      "title": "Notification",
+      "description": "Real-time notification for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Target user ID" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["book_request", "request_approved", "request_rejected"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "isRead", "createdAt"]
     }
   },
   "firestore": {
@@ -168,6 +183,10 @@
     "/bookReviews/{reviewId}": {
       "schema": "bookReviews",
       "description": "Collection of book reviews"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "notifications",
+      "description": "Collection of real-time notifications for users"
     }
   }
 }
