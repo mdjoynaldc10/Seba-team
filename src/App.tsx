@@ -50,7 +50,9 @@ import {
   Check,
   Unlock,
   MessageSquare,
-  ClipboardList
+  ClipboardList,
+  UserRoundPen,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -929,6 +931,171 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+};
+
+// --- Custom Notification Page ---
+const CustomNotificationPage = ({ onClose, isDarkMode, allMembers, onSend }: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  allMembers: Member[],
+  onSend: (userId: string, title: string, message: string, type: RealTimeNotification['type']) => Promise<void>
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [status, setStatus] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const filteredMembers = allMembers.filter(m => 
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.phone.includes(searchQuery)
+  ).slice(0, 5);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember || !title || !message) return;
+
+    setIsSending(true);
+    setStatus(null);
+    try {
+      await onSend(selectedMember.id, title, message, 'general');
+      setStatus({ type: 'success', text: 'নোটিফিকেশন সফলভাবে পাঠানো হয়েছে!' });
+      setTitle('');
+      setMessage('');
+      setSelectedMember(null);
+      setSearchQuery('');
+    } catch (error) {
+      setStatus({ type: 'error', text: 'পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <OverlayPage title="কাস্টম নোটিফিকেশন" onClose={onClose} isDarkMode={isDarkMode}>
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">সদস্য খুঁজুন</label>
+            <div className={cn(
+              "flex items-center gap-3 px-4 py-1 rounded-xl border",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+            )}>
+              <Search className="w-5 h-5 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="নাম, আইডি বা ফোন নম্বর..." 
+                className="flex-1 py-3 bg-transparent outline-none text-sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            {searchQuery && !selectedMember && (
+              <div className="mt-2 space-y-2">
+                {filteredMembers.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setSelectedMember(m);
+                      setSearchQuery(m.name);
+                    }}
+                    className={cn(
+                      "w-full p-3 rounded-xl border text-left flex items-center gap-3 active:scale-95 transition-all",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-100"
+                    )}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">{m.name}</p>
+                      <p className="text-[10px] opacity-50">{m.id} • {m.phone}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedMember && (
+            <div className={cn(
+              "p-4 rounded-2xl border flex items-center justify-between",
+              isDarkMode ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-50"
+            )}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                  <User className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-emerald-600">{selectedMember.name}</p>
+                  <p className="text-[10px] opacity-60">নির্বাচিত সদস্য</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedMember(null)} className="text-red-500 p-2">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSend} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold opacity-60 ml-1">শিরোনাম</label>
+              <input 
+                required
+                type="text" 
+                placeholder="নোটিফিকেশন শিরোনাম"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className={cn(
+                  "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                )}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold opacity-60 ml-1">বার্তা</label>
+              <textarea 
+                required
+                placeholder="আপনার বার্তা এখানে লিখুন..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                className={cn(
+                  "w-full p-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors resize-none",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                )}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={isSending || !selectedMember}
+              className={cn(
+                "w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2",
+                (isSending || !selectedMember) && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isSending ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-5 h-5" />}
+              পাঠিয়ে দিন
+            </button>
+
+            {status && (
+              <p className={cn(
+                "text-center text-sm font-bold",
+                status.type === 'success' ? "text-emerald-500" : "text-red-500"
+              )}>
+                {status.text}
+              </p>
+            )}
+          </form>
+        </div>
+      </div>
+    </OverlayPage>
+  );
 };
 
 function CloudPinPage({ 
@@ -1969,6 +2136,7 @@ function AppContent() {
   const [realTimeNotifications, setRealTimeNotifications] = useState<RealTimeNotification[]>([]);
   const [activePushNotification, setActivePushNotification] = useState<RealTimeNotification | null>(null);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
+  const [showCustomNotificationPage, setShowCustomNotificationPage] = useState(false);
   const [longPressedItem, setLongPressedItem] = useState<{ type: 'notification' | 'member' | 'request', data: any } | null>(null);
   const longPressTimer = useRef<any>(null);
 
@@ -2178,6 +2346,35 @@ function AppContent() {
     }
   }, [showLoginError]);
 
+  const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
+
+    if (!appId || !apiKey) {
+      console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
+      return;
+    }
+
+    try {
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": `Basic ${apiKey}`
+        },
+        body: JSON.stringify({
+          app_id: appId,
+          include_external_user_ids: [userId],
+          headings: { en: title },
+          contents: { en: message },
+          android_channel_id: "push-notification-channel-id" // Optional: customize channel
+        })
+      });
+    } catch (error) {
+      console.error("Error sending OneSignal notification:", error);
+    }
+  };
+
   const sendRealTimeNotification = async (userId: string, title: string, message: string, type: RealTimeNotification['type']) => {
     const id = `${userId}_${Date.now()}`;
     const notification: RealTimeNotification = {
@@ -2192,6 +2389,8 @@ function AppContent() {
 
     try {
       await setDoc(doc(db, 'notifications', id), notification);
+      // Also send via OneSignal
+      await sendOneSignalNotification(userId, title, message);
     } catch (error) {
       console.error("Error sending real-time notification:", error);
     }
@@ -4231,7 +4430,7 @@ function AppContent() {
                     "text-center p-6 rounded-2xl border shadow-sm relative",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                   )}>
-                    <div className="absolute top-4 right-4">
+                    <div className="absolute top-4 right-4 flex flex-col gap-2">
                       <button 
                         onClick={() => setShowNotificationsPage(true)}
                         className="relative p-2 bg-transparent rounded-full text-white active:scale-95 transition-all"
@@ -4242,6 +4441,14 @@ function AppContent() {
                           <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
                         )}
                       </button>
+                      {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                        <button 
+                          onClick={() => setShowCustomNotificationPage(true)}
+                          className="p-2 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-full text-emerald-500 active:scale-95 transition-all"
+                        >
+                          <UserRoundPen className="w-6 h-6" />
+                        </button>
+                      )}
                     </div>
                     <div className="relative inline-block">
                       <img 
@@ -6857,6 +7064,15 @@ function AppContent() {
               )}
             </AnimatePresence>
           </OverlayPage>
+        )}
+
+        {showCustomNotificationPage && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
+          <CustomNotificationPage 
+            onClose={() => window.history.back()} 
+            isDarkMode={isDarkMode} 
+            allMembers={allMembers}
+            onSend={sendRealTimeNotification}
+          />
         )}
 
       {/* Invoice Modal - Outside main AnimatePresence to stay on top of background pages */}
