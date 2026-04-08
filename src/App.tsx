@@ -2557,6 +2557,7 @@ function AppContent() {
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
         setShowCloudPinPage(!!event.state.showCloudPinPage);
+        setShowCustomNotificationPage(!!event.state.showCustomNotificationPage);
         setSelectedBookRequest(event.state.selectedBookRequest || null);
         setTimeout(() => {
           isInternalNavigation.current = false;
@@ -2589,6 +2590,7 @@ function AppContent() {
       showGreetingsSettings,
       showRegistration,
       showCloudPinPage,
+      showCustomNotificationPage,
       selectedBookRequest
     }, '');
 
@@ -2623,10 +2625,11 @@ function AppContent() {
         showGreetingsSettings,
         showRegistration,
         showCloudPinPage,
+        showCustomNotificationPage,
         selectedBookRequest
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, selectedBookRequest]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showCustomNotificationPage, selectedBookRequest]);
 
   // Refs for swipe
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -7113,14 +7116,16 @@ function AppContent() {
           </OverlayPage>
         )}
 
-        {showCustomNotificationPage && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
-          <CustomNotificationPage 
-            onClose={() => window.history.back()} 
-            isDarkMode={isDarkMode} 
-            allMembers={allMembers}
-            onSend={sendRealTimeNotification}
-          />
-        )}
+        <AnimatePresence>
+          {showCustomNotificationPage && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
+            <CustomNotificationPage 
+              onClose={() => window.history.back()} 
+              isDarkMode={isDarkMode} 
+              allMembers={allMembers}
+              onSend={sendRealTimeNotification}
+            />
+          )}
+        </AnimatePresence>
 
       {/* Invoice Modal - Outside main AnimatePresence to stay on top of background pages */}
       <AnimatePresence>
