@@ -3877,19 +3877,26 @@ function AppContent() {
                 )}
               </div>
               
-              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar relative">
                 {['সব', ...Array.from(new Set(books.map(b => b.category || 'অন্যান্য')))].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedBookCategory(cat)}
                     className={cn(
-                      "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all",
+                      "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all relative z-10",
                       selectedBookCategory === cat 
-                        ? "bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20" 
+                        ? "text-white border-emerald-500" 
                         : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300" : "bg-white border-slate-200 text-slate-600"
                     )}
                   >
-                    {cat}
+                    {selectedBookCategory === cat && (
+                      <motion.div 
+                        layoutId="selectedBookCategoryTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-full shadow-md shadow-emerald-500/20"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">{cat}</span>
                   </button>
                 ))}
               </div>
@@ -6008,19 +6015,24 @@ function AppContent() {
             <div className="space-y-6">
               {/* Tabs for Admin/Dev */}
               {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
-                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
                   <button 
                     onClick={() => setActiveBorrowedTab('requests')} 
                     className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative",
-                      activeBorrowedTab === 'requests' 
-                        ? "bg-emerald-500 text-white shadow-md" 
-                        : "text-emerald-500/60 hover:bg-emerald-500/5"
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeBorrowedTab === 'requests' ? "text-white" : "text-emerald-500/60 hover:bg-emerald-500/5"
                     )}
                   >
-                    অনুরোধ
+                    {activeBorrowedTab === 'requests' && (
+                      <motion.div 
+                        layoutId="activeBorrowedTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">অনুরোধ</span>
                     {bookRequests.filter(r => r.status === 'pending').length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 z-30">
                         {bookRequests.filter(r => r.status === 'pending').length}
                       </span>
                     )}
@@ -6028,13 +6040,18 @@ function AppContent() {
                   <button 
                     onClick={() => setActiveBorrowedTab('history')} 
                     className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
-                      activeBorrowedTab === 'history' 
-                        ? "bg-emerald-500 text-white shadow-md" 
-                        : "text-emerald-500/60 hover:bg-emerald-500/5"
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeBorrowedTab === 'history' ? "text-white" : "text-emerald-500/60 hover:bg-emerald-500/5"
                     )}
                   >
-                    ইতিহাস
+                    {activeBorrowedTab === 'history' && (
+                      <motion.div 
+                        layoutId="activeBorrowedTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">ইতিহাস</span>
                   </button>
                 </div>
               )}
@@ -6427,51 +6444,71 @@ function AppContent() {
                 </div>
 
                 {/* Tab Navigation Buttons - Sticky with Active/Inactive Effect */}
-                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
                   <button 
                     onClick={() => setActiveProfileTab('info')} 
                     className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
-                      activeProfileTab === 'info' 
-                        ? "bg-emerald-500 text-white shadow-md" 
-                        : "text-emerald-500/60 hover:text-emerald-500"
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeProfileTab === 'info' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
                     )}
                   >
-                    Information
+                    {activeProfileTab === 'info' && (
+                      <motion.div 
+                        layoutId="activeProfileTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">Information</span>
                   </button>
                   <button 
                     onClick={() => setActiveProfileTab('payments')} 
                     className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
-                      activeProfileTab === 'payments' 
-                        ? "bg-emerald-500 text-white shadow-md" 
-                        : "text-emerald-500/60 hover:text-emerald-500"
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeProfileTab === 'payments' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
                     )}
                   >
-                    Payments
+                    {activeProfileTab === 'payments' && (
+                      <motion.div 
+                        layoutId="activeProfileTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">Payments</span>
                   </button>
                   <button 
                     onClick={() => setActiveProfileTab('books')} 
                     className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
-                      activeProfileTab === 'books' 
-                        ? "bg-emerald-500 text-white shadow-md" 
-                        : "text-emerald-500/60 hover:text-emerald-500"
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeProfileTab === 'books' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
                     )}
                   >
-                    Books
+                    {activeProfileTab === 'books' && (
+                      <motion.div 
+                        layoutId="activeProfileTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">Books</span>
                   </button>
                   {isSpecialMember(currentUser) && isSpecialMember(selectedMemberProfile) && (
                     <button 
                       onClick={() => setActiveProfileTab('database')} 
                       className={cn(
-                        "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider",
-                        activeProfileTab === 'database' 
-                          ? "bg-emerald-500 text-white shadow-md" 
-                          : "text-emerald-500/60 hover:text-emerald-500"
+                        "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                        activeProfileTab === 'database' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
                       )}
                     >
-                      Database
+                      {activeProfileTab === 'database' && (
+                        <motion.div 
+                          layoutId="activeProfileTab"
+                          className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                        />
+                      )}
+                      <span className="relative z-20">Database</span>
                     </button>
                   )}
                 </div>
@@ -6642,30 +6679,40 @@ function AppContent() {
             <div className="space-y-4 pb-24">
               {/* Tab Navigation */}
               <div className={cn(
-                "flex p-1 rounded-2xl mb-6",
+                "flex p-1 rounded-2xl mb-6 relative",
                 isDarkMode ? "bg-slate-800" : "bg-slate-100"
               )}>
                 <button 
                   onClick={() => setActiveBookDetailTab('details')}
                   className={cn(
-                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                    activeBookDetailTab === 'details' 
-                      ? "bg-emerald-500 text-white shadow-lg" 
-                      : "text-slate-500"
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeBookDetailTab === 'details' ? "text-white" : "text-slate-500"
                   )}
                 >
-                  বিস্তারিত
+                  {activeBookDetailTab === 'details' && (
+                    <motion.div 
+                      layoutId="activeBookDetailTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20">বিস্তারিত</span>
                 </button>
                 <button 
                   onClick={() => setActiveBookDetailTab('borrowers')}
                   className={cn(
-                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                    activeBookDetailTab === 'borrowers' 
-                      ? "bg-emerald-500 text-white shadow-lg" 
-                      : "text-slate-500"
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeBookDetailTab === 'borrowers' ? "text-white" : "text-slate-500"
                   )}
                 >
-                  গ্রহণকারীগণ
+                  {activeBookDetailTab === 'borrowers' && (
+                    <motion.div 
+                      layoutId="activeBookDetailTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20">গ্রহণকারীগণ</span>
                 </button>
               </div>
 
@@ -7606,24 +7653,54 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-4 w-full mt-20">
+      <div className="flex flex-wrap gap-2 mb-4 w-full mt-20 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl relative">
         <button 
           onClick={() => { setGameMode('PvE'); resetGame(); setError(null); }}
-          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'PvE' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          className={cn(
+            "flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all relative z-10",
+            gameMode === 'PvE' ? "text-white" : (isDarkMode ? "text-slate-400" : "text-slate-600")
+          )}
         >
-          Vs Computer
+          {gameMode === 'PvE' && (
+            <motion.div 
+              layoutId="gameModeTab"
+              className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+            />
+          )}
+          <span className="relative z-20">Vs Computer</span>
         </button>
         <button 
           onClick={() => { setGameMode('PvP'); resetGame(); setError(null); }}
-          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'PvP' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          className={cn(
+            "flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all relative z-10",
+            gameMode === 'PvP' ? "text-white" : (isDarkMode ? "text-slate-400" : "text-slate-600")
+          )}
         >
-          Vs Friend
+          {gameMode === 'PvP' && (
+            <motion.div 
+              layoutId="gameModeTab"
+              className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+            />
+          )}
+          <span className="relative z-20">Vs Friend</span>
         </button>
         <button 
           onClick={() => { setGameMode('vs-member'); resetGame(); setError(null); }}
-          className={cn("flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all", gameMode === 'vs-member' ? "bg-emerald-500 text-white" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+          className={cn(
+            "flex-1 py-2 px-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all relative z-10",
+            gameMode === 'vs-member' ? "text-white" : (isDarkMode ? "text-slate-400" : "text-slate-600")
+          )}
         >
-          Vs Seba member
+          {gameMode === 'vs-member' && (
+            <motion.div 
+              layoutId="gameModeTab"
+              className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+            />
+          )}
+          <span className="relative z-20">Vs Seba member</span>
         </button>
       </div>
 
@@ -7672,18 +7749,38 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
       )}
 
       {gameMode === 'PvE' && (
-        <div className="flex gap-2 mb-6 w-full">
+        <div className="flex gap-2 mb-6 w-full p-1 bg-slate-100 dark:bg-slate-800 rounded-xl relative">
           <button 
             onClick={() => setDifficulty('Medium')}
-            className={cn("flex-1 py-1 rounded-lg text-xs font-bold transition-all", difficulty === 'Medium' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+            className={cn(
+              "flex-1 py-1 rounded-lg text-xs font-bold transition-all relative z-10",
+              difficulty === 'Medium' ? "text-emerald-600" : (isDarkMode ? "text-slate-400" : "text-slate-600")
+            )}
           >
-            Medium
+            {difficulty === 'Medium' && (
+              <motion.div 
+                layoutId="difficultyTab"
+                className="absolute inset-0 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg"
+                transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-20">Medium</span>
           </button>
           <button 
             onClick={() => setDifficulty('Hard')}
-            className={cn("flex-1 py-1 rounded-lg text-xs font-bold transition-all", difficulty === 'Hard' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : (isDarkMode ? "bg-slate-800" : "bg-slate-100"))}
+            className={cn(
+              "flex-1 py-1 rounded-lg text-xs font-bold transition-all relative z-10",
+              difficulty === 'Hard' ? "text-emerald-600" : (isDarkMode ? "text-slate-400" : "text-slate-600")
+            )}
           >
-            Hard
+            {difficulty === 'Hard' && (
+              <motion.div 
+                layoutId="difficultyTab"
+                className="absolute inset-0 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg"
+                transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-20">Hard</span>
           </button>
         </div>
       )}
