@@ -52,7 +52,9 @@ import {
   MessageSquare,
   ClipboardList,
   UserRoundPen,
-  Send
+  Send,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -254,6 +256,15 @@ interface RealTimeNotification {
   createdAt: string;
 }
 
+interface AdminDatabaseLink {
+  id: string;
+  userId: string;
+  name: string;
+  sheetId: string;
+  description: string;
+  createdAt: any;
+}
+
 interface Bookshelf {
   district: string;
   address: string;
@@ -269,16 +280,6 @@ const BOOKS_SHEET_ID = '1qevkZUndwH7v6QAwjDj56VDNR9dm1sRHYQU2X51MLig';
 const DONATION_SHEET_ID = '1NnAsCeuP7Z1D4HKVqV4HjRPys0TJ2NXrpmmryzCEfvg';
 const NEW_MEMBER_SHEET_ID = '1Rk4crZ8HN2DFqWeualTwxjJmtFTs8G_jonYa5lsHodI';
 const NEW_PAYMENT_DATA_SHEET_ID = '1TetkWolWcXvl0URf-CeNJdXd9GIAuPNRscTZEYkI834';
-
-const DATABASE_LINKS = [
-  { name: 'Home Sheet', id: HOME_SHEET_ID, description: 'নোটিশ, নোটিফিকেশন এবং হোম পেজ ডাটা' },
-  { name: 'Member Sheet', id: MEMBER_SHEET_ID, description: 'সকল সদস্যদের তথ্য এবং পেমেন্ট ডাটা' },
-  { name: 'Blood Donor Sheet', id: BLOOD_SHEET_ID, description: 'রক্তদাতাদের তালিকা এবং তথ্য' },
-  { name: 'Books Sheet', id: BOOKS_SHEET_ID, description: 'বইয়ের তালিকা এবং গ্রহীতাদের তথ্য' },
-  { name: 'Donation Sheet', id: DONATION_SHEET_ID, description: 'ডোনেশন প্রজেক্ট এবং ডোনারদের তথ্য' },
-  { name: 'New Member Sheet', id: NEW_MEMBER_SHEET_ID, description: 'নতুন সদস্যদের রেজিস্ট্রেশন ডাটা' },
-  { name: 'New Payment Sheet', id: NEW_PAYMENT_DATA_SHEET_ID, description: 'নতুন পেমেন্ট ডাটা এবং ইয়ারলি রিপোর্ট' },
-];
 
 const MEMBER_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 const REGISTRATION_SHEETS = ['Sheet1', 'Registration', 'Form Responses 1'];
@@ -2092,6 +2093,12 @@ function AppContent() {
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showDatabasePage, setShowDatabasePage] = useState(false);
+  const [adminDatabaseLinks, setAdminDatabaseLinks] = useState<AdminDatabaseLink[]>([]);
+  const [isAddingLink, setIsAddingLink] = useState(false);
+  const [editingLink, setEditingLink] = useState<AdminDatabaseLink | null>(null);
+  const [newLinkName, setNewLinkName] = useState('');
+  const [newLinkSheetId, setNewLinkSheetId] = useState('');
+  const [newLinkDesc, setNewLinkDesc] = useState('');
   const [showBookshelfPage, setShowBookshelfPage] = useState(false);
   const [bookshelves, setBookshelves] = useState<Bookshelf[]>([]);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
@@ -2168,8 +2175,12 @@ function AppContent() {
           setNotifications(prev => prev.filter(n => n.id !== data.id || n.message !== data.message));
         }
       } else if (type === 'request') {
-        await deleteDoc(doc(db, 'bookRequests', data.id));
-        setBookRequests(prev => prev.filter(r => r.id !== data.id));
+        if (data.isLink) {
+          await deleteDoc(doc(db, 'admin_database_links', data.id));
+        } else {
+          await deleteDoc(doc(db, 'bookRequests', data.id));
+          setBookRequests(prev => prev.filter(r => r.id !== data.id));
+        }
       } else if (type === 'member') {
         // Deleting from sheet is not supported, so we just hide it locally
         setAllMembers(prev => prev.filter(m => m.id !== data.id));
@@ -2195,6 +2206,30 @@ function AppContent() {
   const [showPinEntry, setShowPinEntry] = useState(false);
   const [pendingLoginMember, setPendingLoginMember] = useState<Member | null>(null);
   const [cloudPinSettings, setCloudPinSettings] = useState<CloudPinSettings | null>(null);
+
+  useEffect(() => {
+    if (currentUser && isAdmin(currentUser) && isAuthReady) {
+      const q = query(
+        collection(db, 'admin_database_links'),
+        where('userId', '==', currentUser.id)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdminDatabaseLink));
+        // Sort manually since we removed orderBy to avoid index requirement for now
+        links.sort((a, b) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateB - dateA;
+        });
+        setAdminDatabaseLinks(links);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'admin_database_links');
+      });
+      return () => unsubscribe();
+    } else {
+      setAdminDatabaseLinks([]);
+    }
+  }, [currentUser, isAuthReady]);
 
   const [advanceSettings, setAdvanceSettings] = useState<AdvanceSettings>({
     pdfTemplate: 'default',
@@ -2632,6 +2667,72 @@ function AppContent() {
   }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showCustomNotificationPage, selectedBookRequest]);
 
   // Refs for swipe
+  const extractSheetId = (input: string) => {
+    if (!input) return '';
+    // Match pattern like /d/ID/ or just the ID
+    const match = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) return match[1];
+    // If it's a full URL but doesn't match the above, try to clean it
+    try {
+      if (input.includes('http')) {
+        const url = new URL(input);
+        const pathParts = url.pathname.split('/');
+        const dIndex = pathParts.indexOf('d');
+        if (dIndex !== -1 && pathParts[dIndex + 1]) {
+          return pathParts[dIndex + 1];
+        }
+      }
+    } catch (e) {
+      // Not a valid URL, just trim
+    }
+    return input.trim();
+  };
+
+  const getSheetUrl = (sheetId: string) => {
+    if (!sheetId) return '#';
+    if (sheetId.startsWith('http')) return sheetId;
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+  };
+
+  const handleAddAdminLink = async (name: string, sheetId: string, description: string) => {
+    if (!currentUser) return;
+    const sanitizedId = extractSheetId(sheetId);
+    try {
+      const newLinkRef = doc(collection(db, 'admin_database_links'));
+      await setDoc(newLinkRef, {
+        id: newLinkRef.id,
+        userId: currentUser.id,
+        name,
+        sheetId: sanitizedId,
+        description,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'admin_database_links');
+    }
+  };
+
+  const handleUpdateAdminLink = async (id: string, name: string, sheetId: string, description: string) => {
+    const sanitizedId = extractSheetId(sheetId);
+    try {
+      await updateDoc(doc(db, 'admin_database_links', id), {
+        name,
+        sheetId: sanitizedId,
+        description
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `admin_database_links/${id}`);
+    }
+  };
+
+  const handleDeleteAdminLink = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'admin_database_links', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `admin_database_links/${id}`);
+    }
+  };
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const touchStartX = useRef(0);
@@ -6595,36 +6696,51 @@ function AppContent() {
 
                 {activeProfileTab === 'database' && isSpecialMember(currentUser) && isSpecialMember(selectedMemberProfile) && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ডাটাবেস শীটসমূহ</h3>
-                    <div className="grid grid-cols-1 gap-3">
-                      {DATABASE_LINKS.map((link, idx) => (
-                        <div 
-                          key={`db-link-${idx}`} 
-                          className={cn(
-                            "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
-                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                          )}
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ডাটাবেস শীটসমূহ</h3>
+                      {currentUser.id === selectedMemberProfile.id && (
+                        <button 
+                          onClick={() => setShowDatabasePage(true)}
+                          className="text-[10px] font-bold text-emerald-500 flex items-center gap-1"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                              <Database className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-sm truncate">{link.name}</h4>
-                              <p className="text-[10px] opacity-60 line-clamp-1">{link.description}</p>
-                            </div>
-                          </div>
-                          <a 
-                            href={`https://docs.google.com/spreadsheets/d/${link.id}/edit`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                          <Settings className="w-3 h-3" />
+                          ম্যানেজ করুন
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {adminDatabaseLinks.length === 0 ? (
+                        <div className="text-center py-6 opacity-50 text-xs">কোনো সংরক্ষিত লিংক নেই</div>
+                      ) : (
+                        adminDatabaseLinks.map((link) => (
+                          <div 
+                            key={`prof-db-link-${link.id}`} 
+                            className={cn(
+                              "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
+                              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                            )}
                           >
-                            <ExternalLink className="w-4 h-4" />
-                            শীট ওপেন করুন
-                          </a>
-                        </div>
-                      ))}
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                                <Database className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-sm truncate">{link.name}</h4>
+                                <p className="text-[10px] opacity-60 line-clamp-1">{link.description || 'কোনো বর্ণনা নেই'}</p>
+                              </div>
+                            </div>
+                            <a 
+                              href={getSheetUrl(link.sheetId)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                              শীট ওপেন করুন
+                            </a>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -6641,36 +6757,149 @@ function AppContent() {
 
         {showDatabasePage && isSpecialMember(currentUser) && (
           <OverlayPage key="database-overlay" title="ডাটাবেস শীটসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-4 pb-10">
-              <div className="grid grid-cols-1 gap-3">
-                {DATABASE_LINKS.map((link, idx) => (
-                  <div 
-                    key={`db-link-main-${idx}`} 
-                    className={cn(
-                      "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                        <Database className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm truncate">{link.name}</h4>
-                        <p className="text-[10px] opacity-60 line-clamp-1">{link.description}</p>
-                      </div>
-                    </div>
-                    <a 
-                      href={`https://docs.google.com/spreadsheets/d/${link.id}/edit`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      শীট ওপেন করুন
-                    </a>
+            <div className="space-y-6 pb-10">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider">আপনার সংরক্ষিত লিংকসমূহ</h3>
+                <button 
+                  onClick={() => {
+                    setIsAddingLink(true);
+                    setEditingLink(null);
+                    setNewLinkName('');
+                    setNewLinkSheetId('');
+                    setNewLinkDesc('');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  নতুন লিংক
+                </button>
+              </div>
+
+              {(isAddingLink || editingLink) && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "p-4 rounded-2xl border space-y-4",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-xl"
+                  )}
+                >
+                  <h4 className="font-bold text-sm">{editingLink ? 'লিংক ইডিট করুন' : 'নতুন লিংক যুক্ত করুন'}</h4>
+                  <div className="space-y-3">
+                    <input 
+                      type="text" 
+                      placeholder="লিংকের নাম (যেমন: মেম্বার শীট)" 
+                      className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      value={newLinkName}
+                      onChange={(e) => setNewLinkName(e.target.value)}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="গুগল শীট আইডি বা ফুল লিংক" 
+                      className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      value={newLinkSheetId}
+                      onChange={(e) => setNewLinkSheetId(e.target.value)}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="সংক্ষিপ্ত বর্ণনা (ঐচ্ছিক)" 
+                      className={cn("w-full p-3 rounded-xl border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                      value={newLinkDesc}
+                      onChange={(e) => setNewLinkDesc(e.target.value)}
+                    />
                   </div>
-                ))}
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={async () => {
+                        if (!newLinkName || !newLinkSheetId || !currentUser?.id) return;
+                        if (editingLink) {
+                          await handleUpdateAdminLink(editingLink.id, newLinkName, newLinkSheetId, newLinkDesc);
+                        } else {
+                          await handleAddAdminLink(newLinkName, newLinkSheetId, newLinkDesc);
+                        }
+                        setIsAddingLink(false);
+                        setEditingLink(null);
+                        setNewLinkName('');
+                        setNewLinkSheetId('');
+                        setNewLinkDesc('');
+                      }}
+                      className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-sm font-bold active:scale-95 transition-all"
+                    >
+                      সংরক্ষণ করুন
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setIsAddingLink(false);
+                        setEditingLink(null);
+                      }}
+                      className="flex-1 py-3 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold"
+                    >
+                      বাতিল
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3">
+                {adminDatabaseLinks.length === 0 ? (
+                  <div className="text-center py-10 opacity-50 flex flex-col items-center gap-3">
+                    <Database className="w-12 h-12 opacity-20" />
+                    <p className="text-sm">আপনার কোনো সংরক্ষিত লিংক নেই।</p>
+                  </div>
+                ) : (
+                  adminDatabaseLinks.map((link) => (
+                    <div 
+                      key={link.id} 
+                      className={cn(
+                        "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                            <Database className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-sm truncate">{link.name}</h4>
+                            <p className="text-[10px] opacity-60 line-clamp-1">{link.description || 'কোনো বর্ণনা নেই'}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => {
+                              setEditingLink(link);
+                              setNewLinkName(link.name);
+                              setNewLinkSheetId(link.sheetId);
+                              setNewLinkDesc(link.description);
+                              setIsAddingLink(false);
+                            }}
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setLongPressedItem({ type: 'request', data: { id: link.id, name: link.name, isLink: true } });
+                            }}
+                            className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <a 
+                        href={getSheetUrl(link.sheetId)} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        শীট ওপেন করুন
+                      </a>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </OverlayPage>
@@ -7038,7 +7267,8 @@ function AppContent() {
                       </div>
                       <div>
                         <h3 className="text-xl font-bold text-white">
-                          {longPressedItem.type === 'notification' ? 'নোটিফিকেশন মুছুন?' : 
+                          {longPressedItem.data.isLink ? 'লিংক মুছুন?' : 
+                           longPressedItem.type === 'notification' ? 'নোটিফিকেশন মুছুন?' : 
                            longPressedItem.type === 'member' ? 'সদস্য লুকান?' : 'অনুরোধ মুছুন?'}
                         </h3>
                         <p className="text-sm text-white/60 mt-1">

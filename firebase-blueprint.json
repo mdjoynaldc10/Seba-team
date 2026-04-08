@@ -145,6 +145,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "admin_database_links": {
+      "title": "Admin Database Link",
+      "description": "Custom database link for an admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the link" },
+        "userId": { "type": "string", "description": "Owner of the link" },
+        "name": { "type": "string", "description": "Display name of the link" },
+        "sheetId": { "type": "string", "description": "Google Sheet ID" },
+        "description": { "type": "string", "description": "Brief description" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "sheetId"]
     }
   },
   "firestore": {
@@ -187,6 +201,10 @@
     "/notifications/{notificationId}": {
       "schema": "notifications",
       "description": "Collection of real-time notifications for users"
+    },
+    "/admin_database_links/{linkId}": {
+      "schema": "admin_database_links",
+      "description": "Custom database links managed by admins"
     }
   }
 }

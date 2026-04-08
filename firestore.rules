@@ -79,5 +79,10 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update, delete: if isAuthenticated();
     }
+
+    // Admin Database Links Collection
+    match /admin_database_links/{linkId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }
