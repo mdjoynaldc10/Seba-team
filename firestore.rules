@@ -75,9 +75,9 @@ service cloud.firestore {
 
     // Notifications Collection
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid);
+      allow update, delete: if isAuthenticated();
     }
   }
 }

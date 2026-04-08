@@ -1748,17 +1748,17 @@ const PushNotificationToast = ({ notification, onClose, isDarkMode }: { notifica
         onClick={onClose}
         className={cn(
           "max-w-md w-full p-4 rounded-2xl shadow-2xl border flex items-start gap-4 pointer-events-auto cursor-pointer active:scale-95 transition-transform",
-          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+          "bg-slate-900 border-slate-800 text-white"
         )}
       >
         <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white shrink-0">
           <Bell className="w-6 h-6" />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-bold text-sm truncate">{notification.title}</h4>
-          <p className="text-xs opacity-70 line-clamp-2">{notification.message}</p>
+          <h4 className="font-bold text-sm truncate text-white">{notification.title}</h4>
+          <p className="text-xs text-white/70 line-clamp-2">{notification.message}</p>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="p-1 opacity-50 hover:opacity-100">
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="p-1 text-white/50 hover:text-white">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -1969,6 +1969,50 @@ function AppContent() {
   const [realTimeNotifications, setRealTimeNotifications] = useState<RealTimeNotification[]>([]);
   const [activePushNotification, setActivePushNotification] = useState<RealTimeNotification | null>(null);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
+  const [longPressedItem, setLongPressedItem] = useState<{ type: 'notification' | 'member' | 'request', data: any } | null>(null);
+  const longPressTimer = useRef<any>(null);
+
+  const handleLongPressStart = (type: 'notification' | 'member' | 'request', data: any) => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      setLongPressedItem({ type, data });
+    }, 600);
+  };
+
+  const handleLongPressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!longPressedItem) return;
+
+    const { type, data } = longPressedItem;
+
+    try {
+      if (type === 'notification') {
+        if (data.isRealTime) {
+          await deleteDoc(doc(db, 'notifications', data.id));
+          setRealTimeNotifications(prev => prev.filter(n => n.id !== data.id));
+        } else {
+          setNotifications(prev => prev.filter(n => n.id !== data.id || n.message !== data.message));
+        }
+      } else if (type === 'request') {
+        await deleteDoc(doc(db, 'bookRequests', data.id));
+        setBookRequests(prev => prev.filter(r => r.id !== data.id));
+      } else if (type === 'member') {
+        // Deleting from sheet is not supported, so we just hide it locally
+        setAllMembers(prev => prev.filter(m => m.id !== data.id));
+        setFoundMembers(prev => prev.filter(m => m.id !== data.id));
+      }
+    } catch (error) {
+      console.error(`Error deleting ${type}:`, error);
+    }
+    setLongPressedItem(null);
+  };
+
   const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
@@ -2411,7 +2455,12 @@ function AppContent() {
     // Silent anonymous login to Firebase for Firestore access
     signInAnonymously(auth)
       .then(() => setIsAuthReady(true))
-      .catch(err => console.error("Firebase Auth Error:", err));
+      .catch(err => {
+        console.error("Firebase Auth Error:", err);
+        // Fallback: set isAuthReady to true anyway so at least some parts of the app work
+        // though Firestore operations will likely fail if rules require auth.
+        setIsAuthReady(true);
+      });
 
     // Load saved user from localStorage
     const savedUser = localStorage.getItem('seba_user');
@@ -2557,21 +2606,22 @@ function AppContent() {
 
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', currentUser.id),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', currentUser.id)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newNotifications = snapshot.docs.map(doc => doc.data() as RealTimeNotification);
+      const newNotifications = snapshot.docs
+        .map(doc => doc.data() as RealTimeNotification)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       
       // Check for new unread notifications to show push toast
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const notification = change.doc.data() as RealTimeNotification;
-          // Only show toast for notifications created in the last 10 seconds to avoid showing old ones on load
+          // Only show toast for notifications created in the last 60 seconds to avoid showing old ones on load
           const createdTime = new Date(notification.createdAt).getTime();
           const now = Date.now();
-          if (!notification.isRead && (now - createdTime < 10000)) {
+          if (!notification.isRead && (now - createdTime < 60000)) {
             setActivePushNotification(notification);
             // Auto hide after 5 seconds
             setTimeout(() => setActivePushNotification(null), 5000);
@@ -2581,7 +2631,7 @@ function AppContent() {
 
       setRealTimeNotifications(newNotifications);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'notifications');
+      console.error("Notifications Listener Error:", error);
     });
 
     return () => unsubscribe();
@@ -3771,6 +3821,11 @@ function AppContent() {
                   return filtered.map((m, idx) => (
                     <button 
                       key={`member-${idx}-${m.id}`} 
+                      onMouseDown={() => handleLongPressStart('member', m)}
+                      onMouseUp={handleLongPressEnd}
+                      onMouseLeave={handleLongPressEnd}
+                      onTouchStart={() => handleLongPressStart('member', m)}
+                      onTouchEnd={handleLongPressEnd}
                       onClick={() => handleMemberClick(m)}
                       className={cn(
                         "w-full flex items-center gap-4 p-3 rounded-xl border text-left active:scale-95 transition-transform",
@@ -3808,10 +3863,18 @@ function AppContent() {
                 
                 if (foundMembers.length > 0) {
                   return foundMembers.map((m, idx) => (
-                    <div key={`member-${idx}-${m.id}`} className={cn(
-                      "flex items-center gap-4 p-3 rounded-xl border",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                    )}>
+                    <div 
+                      key={`member-${idx}-${m.id}`}
+                      onMouseDown={() => handleLongPressStart('member', m)}
+                      onMouseUp={handleLongPressEnd}
+                      onMouseLeave={handleLongPressEnd}
+                      onTouchStart={() => handleLongPressStart('member', m)}
+                      onTouchEnd={handleLongPressEnd}
+                      className={cn(
+                        "flex items-center gap-4 p-3 rounded-xl border",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}
+                    >
                       {m.photoId && !m.isNewSheet ? (
                         <img 
                           src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
@@ -4328,6 +4391,14 @@ function AppContent() {
                       icon={<Bell className="w-5 h-5 text-emerald-500" />} 
                       label="Greetings" 
                       onClick={() => setShowGreetingsSettings(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {isDeveloper(currentUser) && (
+                    <ProfileMenuLink 
+                      icon={<Bell className="w-5 h-5 text-emerald-500" />} 
+                      label="Test Notification" 
+                      onClick={() => sendRealTimeNotification(currentUser.id, 'টেস্ট নোটিফিকেশন', 'এটি একটি টেস্ট পুশ নোটিফিকেশন।', 'general')} 
                       isDarkMode={isDarkMode}
                     />
                   )}
@@ -5886,7 +5957,12 @@ function AppContent() {
 
                         return pendingRequests.map((req) => (
                           <div 
-                            key={req.id}
+                            key={req.id} 
+                            onMouseDown={() => handleLongPressStart('request', req)}
+                            onMouseUp={handleLongPressEnd}
+                            onMouseLeave={handleLongPressEnd}
+                            onTouchStart={() => handleLongPressStart('request', req)}
+                            onTouchEnd={handleLongPressEnd}
                             className={cn(
                               "p-4 rounded-2xl border flex items-center justify-between gap-4",
                               isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -5922,6 +5998,11 @@ function AppContent() {
                       bookRequests.filter(r => r.status === 'pending').map((req) => (
                         <div 
                           key={req.id}
+                          onMouseDown={() => handleLongPressStart('request', req)}
+                          onMouseUp={handleLongPressEnd}
+                          onMouseLeave={handleLongPressEnd}
+                          onTouchStart={() => handleLongPressStart('request', req)}
+                          onTouchEnd={handleLongPressEnd}
                           className={cn(
                             "p-4 rounded-2xl border flex items-center justify-between gap-4",
                             isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -5961,6 +6042,11 @@ function AppContent() {
                       return filteredRequests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()).map((req) => (
                         <div 
                           key={req.id}
+                          onMouseDown={() => handleLongPressStart('request', req)}
+                          onMouseUp={handleLongPressEnd}
+                          onMouseLeave={handleLongPressEnd}
+                          onTouchStart={() => handleLongPressStart('request', req)}
+                          onTouchEnd={handleLongPressEnd}
                           className={cn(
                             "p-4 rounded-2xl border flex items-center justify-between gap-4",
                             isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -6622,6 +6708,11 @@ function AppContent() {
                 return allNotifs.map((n: any, idx) => (
                   <button 
                     key={`notif-list-${idx}`}
+                    onMouseDown={() => handleLongPressStart('notification', n)}
+                    onMouseUp={handleLongPressEnd}
+                    onMouseLeave={handleLongPressEnd}
+                    onTouchStart={() => handleLongPressStart('notification', n)}
+                    onTouchEnd={handleLongPressEnd}
                     onClick={() => {
                       if (n.isRealTime) {
                         markNotificationAsRead(n.id);
@@ -6632,8 +6723,8 @@ function AppContent() {
                     }}
                     className={cn(
                       "w-full p-4 rounded-xl border text-left active:scale-95 transition-all flex items-center gap-4 relative overflow-hidden",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100",
-                      n.isRealTime && !n.isRead && "border-emerald-500/50 bg-emerald-500/5"
+                      "bg-slate-900 border-slate-800 text-white",
+                      n.isRealTime && !n.isRead && "border-emerald-500/50 bg-emerald-500/10"
                     )}
                   >
                     {n.isRealTime && !n.isRead && (
@@ -6641,26 +6732,81 @@ function AppContent() {
                     )}
                     <div className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                      n.isRealTime && !n.isRead ? "bg-emerald-500 text-white" : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500"
+                      n.isRealTime && !n.isRead ? "bg-emerald-500 text-white" : "bg-emerald-900/30 text-emerald-400"
                     )}>
                       <Bell className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <h4 className={cn("font-bold truncate", n.isRealTime && !n.isRead ? "text-emerald-500" : "")}>{n.title}</h4>
+                        <h4 className="font-bold truncate text-white">{n.title}</h4>
                         {n.isRealTime && (
-                          <span className="text-[10px] opacity-40 shrink-0">
+                          <span className="text-[10px] text-white/40 shrink-0">
                             {new Date(n.createdAt).toLocaleDateString('bn-BD')}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs opacity-60 truncate">{n.message}</p>
+                      <p className="text-xs text-white/60 truncate">{n.message}</p>
                     </div>
-                    <ChevronRight className="w-4 h-4 opacity-30" />
+                    <ChevronRight className="w-4 h-4 text-white/30" />
                   </button>
                 ));
               })()}
             </div>
+
+            {/* Delete Confirmation Slide-up */}
+            <AnimatePresence>
+              {longPressedItem && (
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setLongPressedItem(null)}
+                    className="fixed inset-0 bg-black/60 z-[6000] backdrop-blur-[2px]"
+                  />
+                  <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                    className={cn(
+                      "fixed bottom-0 left-0 right-0 z-[6001] p-6 rounded-t-[32px] shadow-2xl border-t",
+                      "bg-slate-900 border-slate-800 text-white"
+                    )}
+                  >
+                    <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-6 opacity-50" />
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 bg-red-900/30 text-red-500 rounded-full flex items-center justify-center mx-auto">
+                        <AlertCircle className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-white">
+                          {longPressedItem.type === 'notification' ? 'নোটিফিকেশন মুছুন?' : 
+                           longPressedItem.type === 'member' ? 'সদস্য লুকান?' : 'অনুরোধ মুছুন?'}
+                        </h3>
+                        <p className="text-sm text-white/60 mt-1">
+                          আপনি কি নিশ্চিত যে আপনি এটি {longPressedItem.type === 'member' ? 'লুকাতে' : 'মুছে ফেলতে'} চান?
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 pt-4">
+                        <button 
+                          onClick={() => setLongPressedItem(null)}
+                          className="py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-all active:scale-95"
+                        >
+                          বাতিল
+                        </button>
+                        <button 
+                          onClick={handleDeleteItem}
+                          className="py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95"
+                        >
+                          {longPressedItem.type === 'member' ? 'লুকান' : 'মুছে ফেলুন'}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
 
             {/* Full Screen Notification Detail */}
             <AnimatePresence>
@@ -6672,36 +6818,36 @@ function AppContent() {
                   transition={{ duration: 0.3, ease: "easeOut" }}
                   className={cn(
                     "fixed inset-0 z-[5000] flex flex-col",
-                    isDarkMode ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-900"
+                    "bg-slate-900 text-white"
                   )}
                 >
                   <div className={cn(
                     "flex items-center gap-4 p-4 border-b",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                    "bg-slate-800 border-slate-700"
                   )}>
                     <button 
-                      onClick={() => window.history.back()}
-                      className="p-2 rounded-xl active:scale-90 transition-transform"
+                      onClick={() => setSelectedNotification(null)}
+                      className="p-2 rounded-xl active:scale-90 transition-transform text-white"
                     >
                       <ArrowLeft className="w-6 h-6" />
                     </button>
-                    <h2 className="text-lg font-bold">বিস্তারিত</h2>
+                    <h2 className="text-lg font-bold text-white">বিস্তারিত</h2>
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-6">
                     <div className="flex flex-col items-center text-center space-y-6 max-w-lg mx-auto">
-                      <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+                      <div className="w-20 h-20 bg-emerald-900/30 rounded-full flex items-center justify-center">
                         <Bell className="w-10 h-10 text-emerald-500" />
                       </div>
                       
                       <div className="space-y-2">
-                        <h3 className="text-2xl font-bold text-emerald-500">{selectedNotification.title}</h3>
+                        <h3 className="text-2xl font-bold text-emerald-400">{selectedNotification.title}</h3>
                         <div className="h-1 w-20 bg-emerald-500/20 mx-auto rounded-full" />
                       </div>
                       
                       <div className={cn(
                         "w-full p-6 rounded-3xl text-lg leading-relaxed shadow-sm border",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                        "bg-slate-800 border-slate-700 text-white"
                       )}>
                         {selectedNotification.message}
                       </div>
