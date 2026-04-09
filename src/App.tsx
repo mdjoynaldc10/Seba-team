@@ -185,6 +185,7 @@ interface AdvanceSettings {
   pdfLabelSubTitle: string;
   pdfBrandText: string;
   pdfBrandFontSize: number;
+  pdfBrandColor: string;
   theme: {
     background: string;
     text: string;
@@ -2251,6 +2252,7 @@ function AppContent() {
     pdfLabelSubTitle: 'Seba Member Payment Record',
     pdfBrandText: 'SEBA',
     pdfBrandFontSize: 18,
+    pdfBrandColor: '#10b981',
     theme: {
       background: '#f8fafc',
       text: '#1e293b',
@@ -3234,7 +3236,8 @@ function AppContent() {
       pdfLabelTotal,
       pdfLabelSubTitle,
       pdfBrandText,
-      pdfBrandFontSize
+      pdfBrandFontSize,
+      pdfBrandColor
     } = advanceSettings;
 
     const getTemplateStyles = (template: string) => {
@@ -3362,7 +3365,7 @@ function AppContent() {
                 <p style="margin-top: 4px; opacity: 0.8; font-size: 13px;">${pdfLabelSubTitle}</p>
               </div>
               <div style="text-align: right;">
-                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
+                <p style="font-weight: bold; color: ${pdfBrandColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
                 <p style="font-size: 12px; opacity: 0.7; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
               </div>
             </div>
@@ -3431,6 +3434,7 @@ function AppContent() {
       pdfFooterText,
       pdfBrandText,
       pdfBrandFontSize,
+      pdfBrandColor,
       pdfLabelSubTitle
     } = advanceSettings;
 
@@ -3559,7 +3563,7 @@ function AppContent() {
                 <p style="margin-top: 4px; opacity: 0.8; font-size: 13px;">${project.name}</p>
               </div>
               <div style="text-align: right;">
-                <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
+                <p style="font-weight: bold; color: ${pdfBrandColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
                 <p style="font-size: 12px; opacity: 0.7; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
               </div>
             </div>
@@ -5776,7 +5780,7 @@ function AppContent() {
                           <p className="text-[0.7em] opacity-60">{advanceSettings.pdfLabelSubTitle}</p>
                         </div>
                         <div className={cn("text-right", advanceSettings.pdfTemplate === 'modern' && "text-center")}>
-                          <p className="font-bold" style={{ color: advanceSettings.pdfTemplate === 'professional' ? 'white' : advanceSettings.pdfHeaderColor, fontSize: `${advanceSettings.pdfBrandFontSize * 0.05}em` }}>{advanceSettings.pdfBrandText}</p>
+                          <p className="font-bold" style={{ color: advanceSettings.pdfTemplate === 'professional' ? 'white' : advanceSettings.pdfBrandColor, fontSize: `${advanceSettings.pdfBrandFontSize * 0.05}em` }}>{advanceSettings.pdfBrandText}</p>
                           <p className="text-[0.6em] opacity-50">{new Date().toLocaleDateString('bn-BD')}</p>
                         </div>
                       </div>
@@ -5846,7 +5850,7 @@ function AppContent() {
                         className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Text</label>
                         <input 
@@ -5857,13 +5861,30 @@ function AppContent() {
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Font Size</label>
+                        <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Size</label>
                         <input 
                           type="number" 
                           value={advanceSettings.pdfBrandFontSize}
                           onChange={(e) => setAdvanceSettings({...advanceSettings, pdfBrandFontSize: parseInt(e.target.value)})}
                           className={cn("w-full p-2 rounded-lg border text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                         />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold opacity-60 block mb-1 uppercase">Brand Color</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="color" 
+                            value={advanceSettings.pdfBrandColor}
+                            onChange={(e) => setAdvanceSettings({...advanceSettings, pdfBrandColor: e.target.value})}
+                            className="w-10 h-9 p-0 border-0 bg-transparent cursor-pointer"
+                          />
+                          <input 
+                            type="text" 
+                            value={advanceSettings.pdfBrandColor}
+                            onChange={(e) => setAdvanceSettings({...advanceSettings, pdfBrandColor: e.target.value})}
+                            className={cn("flex-1 p-2 rounded-lg border text-[10px] font-mono uppercase", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                        </div>
                       </div>
                     </div>
                     <div>
