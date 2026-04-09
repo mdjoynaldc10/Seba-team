@@ -3237,6 +3237,60 @@ function AppContent() {
       pdfBrandFontSize
     } = advanceSettings;
 
+    const getTemplateStyles = (template: string) => {
+      switch (template) {
+        case 'modern':
+          return `
+            .header { text-align: center; flex-direction: column; border-bottom: none; gap: 10px; }
+            .header h1 { font-size: 28px; margin-bottom: 5px; }
+            .user-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f0fdf4; border-color: #bcf0da; }
+            th { border-radius: 5px 5px 0 0; }
+            table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+          `;
+        case 'compact':
+          return `
+            body { padding: 10px; }
+            .header { margin-bottom: 10px; padding-bottom: 5px; }
+            .user-info { padding: 8px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; }
+            .user-info p { margin: 0; font-size: 11px; }
+            td, th { padding: 6px 8px; font-size: 11px; }
+            .footer { margin-top: 20px; }
+          `;
+        case 'elegant':
+          return `
+            body { font-family: "Times New Roman", Times, serif; }
+            .header { border-bottom: 1px solid #ccc; padding-bottom: 20px; text-align: center; display: block; }
+            .header h1 { font-style: italic; font-weight: normal; letter-spacing: 2px; font-size: 32px; }
+            .user-info { background: none; border: none; border-bottom: 1px double #ccc; border-radius: 0; padding: 15px 0; display: block; }
+            .user-info p { display: inline-block; margin-right: 20px; }
+            th { background: none !important; color: ${pdfHeaderColor} !important; border-bottom: 2px solid ${pdfHeaderColor}; text-transform: uppercase; }
+            td { border-bottom: 1px solid #eee; }
+            .amount { color: #333; }
+          `;
+        case 'professional':
+          return `
+            .header { background: ${pdfHeaderColor}; color: white; padding: 25px; border-radius: 8px; border-bottom: none; margin-bottom: 30px; }
+            .header h1 { color: white; font-size: 26px; }
+            .header p { color: white; opacity: 0.9; }
+            .user-info { border-left: 5px solid ${pdfHeaderColor}; border-radius: 0 8px 8px 0; background: #f8fafc; }
+            th { text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; }
+            table { margin-top: 25px; }
+          `;
+        case 'minimal':
+          return `
+            .header { border-bottom: none; padding-bottom: 0; margin-bottom: 40px; }
+            .user-info { background: none; border: none; padding: 0; margin-bottom: 40px; }
+            .user-info p { border-bottom: 1px solid #f1f5f9; padding: 8px 0; margin: 0; }
+            table { margin-top: 0; }
+            th { background: none !important; color: #64748b !important; border-bottom: 2px solid #1e293b; padding-left: 0; }
+            td { border-bottom: 1px solid #f1f5f9; padding-left: 0; }
+            .footer { border-top: none; opacity: 0.5; }
+          `;
+        default:
+          return '';
+      }
+    };
+
     return `
       <!DOCTYPE html>
       <html lang="bn">
@@ -3245,72 +3299,58 @@ function AppContent() {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${title} - ${currentUser.name}</title>
           <style>
+            @page {
+              margin: 15mm;
+            }
             body { 
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
-              padding: 20px; 
+              padding: 0; 
               color: ${theme.text}; 
               background-color: white;
-              line-height: 1.4; 
+              line-height: 1.5; 
               font-size: ${pdfFontSize}px;
               margin: 0;
             }
-            .container { max-width: 800px; margin: 0 auto; }
+            .container { width: 100%; max-width: 800px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
             .header { 
               border-bottom: 2px solid ${pdfHeaderColor}; 
               padding-bottom: 15px; 
-              margin-bottom: 20px; 
+              margin-bottom: 25px; 
               display: flex; 
               justify-content: space-between; 
               align-items: center; 
             }
-            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 22px; }
+            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 24px; }
             .user-info { 
-              margin-bottom: 20px; 
+              margin-bottom: 25px; 
               background: #f8fafc; 
-              padding: 15px; 
-              border-radius: 10px; 
+              padding: 20px; 
+              border-radius: 12px; 
               border: 1px solid #e2e8f0;
             }
-            .user-info p { margin: 4px 0; font-size: 13px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            .user-info p { margin: 6px 0; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
             th { 
               background: ${pdfTableHeadBg}; 
               color: ${pdfTableHeadText}; 
               font-weight: bold; 
               text-align: left; 
-              padding: 10px; 
-              font-size: 12px; 
+              padding: 12px; 
+              font-size: 13px; 
             }
-            td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; word-wrap: break-word; }
             .amount { font-weight: bold; color: ${theme.button}; }
-            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 20px; page-break-inside: avoid; }
             
-            .print-controls {
-              position: fixed;
-              top: 10px;
-              right: 10px;
-              display: flex;
-              gap: 10px;
-              z-index: 9999;
-            }
-            .btn {
-              padding: 8px 16px;
-              border-radius: 6px;
-              border: none;
-              cursor: pointer;
-              font-weight: bold;
-              font-size: 12px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .btn-print { background: #10b981; color: white; }
-            .btn-close { background: #ef4444; color: white; }
+            ${getTemplateStyles(pdfTemplate)}
 
             @media print {
-              .print-controls { display: none !important; }
               body { padding: 0; background: white; }
-              .container { max-width: 100%; }
+              .container { max-width: 100%; padding: 0; }
               .user-info { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
               th { background: ${pdfTableHeadBg} !important; color: ${pdfTableHeadText} !important; -webkit-print-color-adjust: exact; }
+              .amount { color: ${theme.button} !important; -webkit-print-color-adjust: exact; }
+              tr { page-break-inside: avoid; }
             }
           </style>
         </head>
@@ -3319,11 +3359,11 @@ function AppContent() {
             <div class="header">
               <div>
                 <h1>${pdfHeaderText}</h1>
-                <p style="margin-top: 3px; opacity: 0.7; font-size: 12px;">${pdfLabelSubTitle}</p>
+                <p style="margin-top: 4px; opacity: 0.8; font-size: 13px;">${pdfLabelSubTitle}</p>
               </div>
               <div style="text-align: right;">
                 <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
-                <p style="font-size: 11px; opacity: 0.6; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
+                <p style="font-size: 12px; opacity: 0.7; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
               </div>
             </div>
             
@@ -3337,9 +3377,9 @@ function AppContent() {
             <table>
               <thead>
                 <tr>
-                  <th>${pdfLabelDate}</th>
-                  <th>${pdfLabelReason}</th>
-                  <th style="text-align: right;">${pdfLabelAmount}</th>
+                  <th style="width: 25%;">${pdfLabelDate}</th>
+                  <th style="width: 50%;">${pdfLabelReason}</th>
+                  <th style="width: 25%; text-align: right;">${pdfLabelAmount}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3353,24 +3393,26 @@ function AppContent() {
               </tbody>
             </table>
 
-            <div style="margin-top: 25px; text-align: right;">
-              <p style="font-size: 16px; font-weight: bold; margin: 0;">${pdfLabelTotal}: <span style="color: ${theme.button};">৳${data.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</span></p>
+            <div style="margin-top: 30px; text-align: right; page-break-inside: avoid;">
+              <p style="font-size: 18px; font-weight: bold; margin: 0;">${pdfLabelTotal}: <span style="color: ${theme.button};">৳${data.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</span></p>
             </div>
 
             <div class="footer">
               <p style="margin: 0;">${pdfFooterText}</p>
-              <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
             </div>
           </div>
 
           <script>
             window.onload = function() {
-              window.print();
-              window.onafterprint = function() {
-                if (window.opener) {
-                  window.close();
-                }
-              };
+              setTimeout(() => {
+                window.print();
+                window.onafterprint = function() {
+                  if (window.opener) {
+                    window.close();
+                  }
+                };
+              }, 500);
             };
           </script>
         </body>
@@ -3381,14 +3423,70 @@ function AppContent() {
   const generateDonationPDFContent = (project: DonationProject, transactions: DonationTransaction[]) => {
     const { 
       theme, 
+      pdfTemplate,
       pdfHeaderColor, 
       pdfTableHeadBg, 
       pdfTableHeadText, 
       pdfFontSize,
       pdfFooterText,
       pdfBrandText,
-      pdfBrandFontSize
+      pdfBrandFontSize,
+      pdfLabelSubTitle
     } = advanceSettings;
+
+    const getTemplateStyles = (template: string) => {
+      switch (template) {
+        case 'modern':
+          return `
+            .header { text-align: center; flex-direction: column; border-bottom: none; gap: 10px; }
+            .header h1 { font-size: 28px; margin-bottom: 5px; }
+            .project-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f0fdf4; border-color: #bcf0da; }
+            th { border-radius: 5px 5px 0 0; }
+            table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+          `;
+        case 'compact':
+          return `
+            body { padding: 10px; }
+            .header { margin-bottom: 10px; padding-bottom: 5px; }
+            .project-info { padding: 8px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; }
+            .project-info p { margin: 0; font-size: 11px; }
+            td, th { padding: 6px 8px; font-size: 11px; }
+            .footer { margin-top: 20px; }
+          `;
+        case 'elegant':
+          return `
+            body { font-family: "Times New Roman", Times, serif; }
+            .header { border-bottom: 1px solid #ccc; padding-bottom: 20px; text-align: center; display: block; }
+            .header h1 { font-style: italic; font-weight: normal; letter-spacing: 2px; font-size: 32px; }
+            .project-info { background: none; border: none; border-bottom: 1px double #ccc; border-radius: 0; padding: 15px 0; display: block; }
+            .project-info p { display: inline-block; margin-right: 20px; }
+            th { background: none !important; color: ${pdfHeaderColor} !important; border-bottom: 2px solid ${pdfHeaderColor}; text-transform: uppercase; }
+            td { border-bottom: 1px solid #eee; }
+            .amount { color: #333; }
+          `;
+        case 'professional':
+          return `
+            .header { background: ${pdfHeaderColor}; color: white; padding: 25px; border-radius: 8px; border-bottom: none; margin-bottom: 30px; }
+            .header h1 { color: white; font-size: 26px; }
+            .header p { color: white; opacity: 0.9; }
+            .project-info { border-left: 5px solid ${pdfHeaderColor}; border-radius: 0 8px 8px 0; background: #f8fafc; }
+            th { text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; }
+            table { margin-top: 25px; }
+          `;
+        case 'minimal':
+          return `
+            .header { border-bottom: none; padding-bottom: 0; margin-bottom: 40px; }
+            .project-info { background: none; border: none; padding: 0; margin-bottom: 40px; }
+            .project-info p { border-bottom: 1px solid #f1f5f9; padding: 8px 0; margin: 0; }
+            table { margin-top: 0; }
+            th { background: none !important; color: #64748b !important; border-bottom: 2px solid #1e293b; padding-left: 0; }
+            td { border-bottom: 1px solid #f1f5f9; padding-left: 0; }
+            .footer { border-top: none; opacity: 0.5; }
+          `;
+        default:
+          return '';
+      }
+    };
 
     return `
       <!DOCTYPE html>
@@ -3398,50 +3496,58 @@ function AppContent() {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>ডোনেশন রিপোর্ট - ${project.name}</title>
           <style>
+            @page {
+              margin: 15mm;
+            }
             body { 
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
-              padding: 20px; 
+              padding: 0; 
               color: ${theme.text}; 
               background-color: white;
-              line-height: 1.4; 
+              line-height: 1.5; 
               font-size: ${pdfFontSize}px;
               margin: 0;
             }
-            .container { max-width: 800px; margin: 0 auto; }
+            .container { width: 100%; max-width: 800px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
             .header { 
               border-bottom: 2px solid ${pdfHeaderColor}; 
               padding-bottom: 15px; 
-              margin-bottom: 20px; 
+              margin-bottom: 25px; 
               display: flex; 
               justify-content: space-between; 
               align-items: center; 
             }
-            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 22px; }
+            .header h1 { color: ${pdfHeaderColor}; margin: 0; font-size: 24px; }
             .project-info { 
-              margin-bottom: 20px; 
+              margin-bottom: 25px; 
               background: #f8fafc; 
-              padding: 15px; 
-              border-radius: 10px; 
+              padding: 20px; 
+              border-radius: 12px; 
               border: 1px solid #e2e8f0;
             }
-            .project-info p { margin: 4px 0; font-size: 13px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            .project-info p { margin: 6px 0; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
             th { 
               background: ${pdfTableHeadBg}; 
               color: ${pdfTableHeadText}; 
               font-weight: bold; 
               text-align: left; 
-              padding: 10px; 
-              font-size: 12px; 
+              padding: 12px; 
+              font-size: 13px; 
             }
-            td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; word-wrap: break-word; }
             .amount { font-weight: bold; color: ${theme.button}; }
-            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 20px; page-break-inside: avoid; }
             
+            ${getTemplateStyles(pdfTemplate)}
+
             @media print {
               body { padding: 0; background: white; }
-              .container { max-width: 100%; }
+              .container { max-width: 100%; padding: 0; }
+              .project-info { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
               th { background: ${pdfTableHeadBg} !important; color: ${pdfTableHeadText} !important; -webkit-print-color-adjust: exact; }
+              .amount { color: ${theme.button} !important; -webkit-print-color-adjust: exact; }
+              tr { page-break-inside: avoid; }
             }
           </style>
         </head>
@@ -3450,11 +3556,11 @@ function AppContent() {
             <div class="header">
               <div>
                 <h1>ডোনেশন রিপোর্ট</h1>
-                <p style="margin-top: 3px; opacity: 0.7; font-size: 12px;">${project.name}</p>
+                <p style="margin-top: 4px; opacity: 0.8; font-size: 13px;">${project.name}</p>
               </div>
               <div style="text-align: right;">
                 <p style="font-weight: bold; color: ${pdfHeaderColor}; margin: 0; font-size: ${pdfBrandFontSize}px;">${pdfBrandText}</p>
-                <p style="font-size: 11px; opacity: 0.6; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
+                <p style="font-size: 12px; opacity: 0.7; margin: 0;">${new Date().toLocaleDateString('bn-BD')}</p>
               </div>
             </div>
             
@@ -3468,10 +3574,10 @@ function AppContent() {
             <table>
               <thead>
                 <tr>
-                  <th>তারিখ</th>
-                  <th>ডোনারের নাম</th>
-                  <th>পদ্ধতি</th>
-                  <th style="text-align: right;">পরিমাণ</th>
+                  <th style="width: 20%;">তারিখ</th>
+                  <th style="width: 40%;">ডোনারের নাম</th>
+                  <th style="width: 20%;">পদ্ধতি</th>
+                  <th style="width: 20%; text-align: right;">পরিমাণ</th>
                 </tr>
               </thead>
               <tbody>
@@ -3486,39 +3592,54 @@ function AppContent() {
               </tbody>
             </table>
 
-            <div style="margin-top: 25px; text-align: right;">
-              <p style="font-size: 16px; font-weight: bold; margin: 0;">মোট: <span style="color: ${theme.button};">৳${transactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}</span></p>
+            <div style="margin-top: 30px; text-align: right; page-break-inside: avoid;">
+              <p style="font-size: 18px; font-weight: bold; margin: 0;">মোট: <span style="color: ${theme.button};">৳${transactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}</span></p>
             </div>
 
             <div class="footer">
               <p style="margin: 0;">${pdfFooterText}</p>
-              <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
             </div>
           </div>
+          <script>
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+                window.onafterprint = function() {
+                  if (window.opener) {
+                    window.close();
+                  }
+                };
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
   };
 
   const downloadAsPDF = async (content: string, filename: string) => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
     // Create a temporary container to render the HTML
     const container = document.createElement('div');
     container.style.position = 'fixed';
     container.style.left = '-9999px';
     container.style.top = '0';
-    container.style.width = '750px'; // Slightly narrower to ensure it fits well
+    container.style.width = '190mm'; // A4 width minus some margin for safety
     container.innerHTML = content;
     document.body.appendChild(container);
 
-    // Add some padding to the container itself for safety
+    // Ensure the container has a white background
     const innerContainer = container.querySelector('.container') as HTMLElement;
     if (innerContainer) {
-      innerContainer.style.padding = '20px';
+      innerContainer.style.width = '100%';
+      innerContainer.style.maxWidth = 'none';
+      innerContainer.style.margin = '0';
+      innerContainer.style.padding = '0'; // We'll handle margins in jsPDF
+      innerContainer.style.backgroundColor = '#ffffff';
     }
 
-    // Remove print controls if they exist in the content
+    // Remove scripts and print controls
+    container.querySelectorAll('script').forEach(s => s.remove());
     const controls = container.querySelector('.print-controls');
     if (controls) controls.remove();
 
@@ -3528,7 +3649,8 @@ function AppContent() {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 800
+        width: 190 * 3.78,
+        windowWidth: 190 * 3.78
       });
       
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -3537,18 +3659,27 @@ function AppContent() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      // Standard margin (10mm on each side)
-      const margin = 10;
+      const margin = 15; // 15mm standard margin
       const contentWidth = pdfWidth - (2 * margin);
+      const contentHeight = pdfHeight - (2 * margin);
       
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = contentWidth / imgWidth;
-      const finalImgWidth = imgWidth * ratio;
-      const finalImgHeight = imgHeight * ratio;
+      const imgWidth = contentWidth;
+      const imgHeight = (canvas.height * contentWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = margin;
 
-      // Position with margin
-      pdf.addImage(imgData, 'JPEG', margin, margin, finalImgWidth, finalImgHeight);
+      // Add the first page
+      pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+      heightLeft -= contentHeight;
+
+      // Add subsequent pages if content is longer than one page
+      while (heightLeft > 0) {
+        pdf.addPage();
+        position = (heightLeft - imgHeight) + margin;
+        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+        heightLeft -= contentHeight;
+      }
       
       pdf.save(`${filename}.pdf`);
     } catch (error) {
@@ -5627,29 +5758,49 @@ function AppContent() {
                     )}
                     style={{ fontSize: `${advanceSettings.pdfFontSize * 0.6}px` }}
                   >
-                    <div className="bg-white text-slate-900 p-4 rounded shadow-sm min-h-[300px] flex flex-col">
-                      <div className="flex justify-between items-center border-b pb-2 mb-4" style={{ borderColor: advanceSettings.pdfHeaderColor }}>
-                        <div>
-                          <h4 className="font-bold m-0" style={{ color: advanceSettings.pdfHeaderColor, fontSize: '1.2em' }}>{advanceSettings.pdfHeaderText}</h4>
+                    <div className={cn(
+                      "bg-white text-slate-900 p-4 rounded shadow-sm min-h-[300px] flex flex-col transition-all duration-300",
+                      advanceSettings.pdfTemplate === 'elegant' && "font-serif",
+                      advanceSettings.pdfTemplate === 'modern' && "items-center text-center",
+                      advanceSettings.pdfTemplate === 'compact' && "p-2"
+                    )}>
+                      <div className={cn(
+                        "flex justify-between items-center border-b pb-2 mb-4 w-full",
+                        advanceSettings.pdfTemplate === 'modern' && "flex-col border-none gap-2",
+                        advanceSettings.pdfTemplate === 'elegant' && "flex-col border-b-2",
+                        advanceSettings.pdfTemplate === 'professional' && "bg-slate-900 text-white p-4 rounded-lg border-none mb-6",
+                        advanceSettings.pdfTemplate === 'minimal' && "border-none mb-8"
+                      )} style={{ borderColor: advanceSettings.pdfHeaderColor, backgroundColor: advanceSettings.pdfTemplate === 'professional' ? advanceSettings.pdfHeaderColor : undefined }}>
+                        <div className={cn(advanceSettings.pdfTemplate === 'modern' && "text-center")}>
+                          <h4 className="font-bold m-0" style={{ color: advanceSettings.pdfTemplate === 'professional' ? 'white' : advanceSettings.pdfHeaderColor, fontSize: '1.2em' }}>{advanceSettings.pdfHeaderText}</h4>
                           <p className="text-[0.7em] opacity-60">{advanceSettings.pdfLabelSubTitle}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold" style={{ color: advanceSettings.pdfHeaderColor, fontSize: `${advanceSettings.pdfBrandFontSize * 0.05}em` }}>{advanceSettings.pdfBrandText}</p>
+                        <div className={cn("text-right", advanceSettings.pdfTemplate === 'modern' && "text-center")}>
+                          <p className="font-bold" style={{ color: advanceSettings.pdfTemplate === 'professional' ? 'white' : advanceSettings.pdfHeaderColor, fontSize: `${advanceSettings.pdfBrandFontSize * 0.05}em` }}>{advanceSettings.pdfBrandText}</p>
                           <p className="text-[0.6em] opacity-50">{new Date().toLocaleDateString('bn-BD')}</p>
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 p-2 rounded mb-4 space-y-1">
+                      <div className={cn(
+                        "bg-slate-50 p-2 rounded mb-4 space-y-1 w-full",
+                        advanceSettings.pdfTemplate === 'modern' && "grid grid-cols-2 gap-2 bg-emerald-50 border border-emerald-100",
+                        advanceSettings.pdfTemplate === 'professional' && "border-l-4 rounded-l-none",
+                        advanceSettings.pdfTemplate === 'minimal' && "bg-transparent p-0 border-none",
+                        advanceSettings.pdfTemplate === 'elegant' && "bg-transparent border-b-2 border-double rounded-none px-0"
+                      )} style={{ borderLeftColor: advanceSettings.pdfTemplate === 'professional' ? advanceSettings.pdfHeaderColor : undefined }}>
                         <p className="text-[0.7em]"><strong>{advanceSettings.pdfLabelMemberName}:</strong> John Doe</p>
                         <p className="text-[0.7em]"><strong>{advanceSettings.pdfLabelMemberId}:</strong> SF-001</p>
                       </div>
 
-                      <table className="w-full text-[0.7em] border-collapse">
+                      <table className={cn(
+                        "w-full text-[0.7em] border-collapse",
+                        advanceSettings.pdfTemplate === 'modern' && "border rounded-lg overflow-hidden"
+                      )}>
                         <thead>
-                          <tr style={{ background: advanceSettings.pdfTableHeadBg, color: advanceSettings.pdfTableHeadText }}>
-                            <th className="p-1 text-left">{advanceSettings.pdfLabelDate}</th>
-                            <th className="p-1 text-left">{advanceSettings.pdfLabelReason}</th>
-                            <th className="p-1 text-right">{advanceSettings.pdfLabelAmount}</th>
+                          <tr style={{ background: advanceSettings.pdfTemplate === 'minimal' || advanceSettings.pdfTemplate === 'elegant' ? 'transparent' : advanceSettings.pdfTableHeadBg, color: advanceSettings.pdfTemplate === 'minimal' || advanceSettings.pdfTemplate === 'elegant' ? '#1e293b' : advanceSettings.pdfTableHeadText }}>
+                            <th className={cn("p-1 text-left", (advanceSettings.pdfTemplate === 'minimal' || advanceSettings.pdfTemplate === 'elegant') && "border-b-2 border-slate-900")}>{advanceSettings.pdfLabelDate}</th>
+                            <th className={cn("p-1 text-left", (advanceSettings.pdfTemplate === 'minimal' || advanceSettings.pdfTemplate === 'elegant') && "border-b-2 border-slate-900")}>{advanceSettings.pdfLabelReason}</th>
+                            <th className={cn("p-1 text-right", (advanceSettings.pdfTemplate === 'minimal' || advanceSettings.pdfTemplate === 'elegant') && "border-b-2 border-slate-900")}>{advanceSettings.pdfLabelAmount}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -5665,7 +5816,10 @@ function AppContent() {
                         <p className="font-bold">{advanceSettings.pdfLabelTotal}: <span style={{ color: advanceSettings.theme.button }}>৳500</span></p>
                       </div>
 
-                      <div className="mt-4 pt-2 border-t text-center text-[0.6em] opacity-40">
+                      <div className={cn(
+                        "mt-4 pt-2 border-t text-center text-[0.6em] opacity-40",
+                        advanceSettings.pdfTemplate === 'minimal' && "border-none"
+                      )}>
                         <p>{advanceSettings.pdfFooterText}</p>
                       </div>
                     </div>
@@ -5733,6 +5887,9 @@ function AppContent() {
                         <option value="default">Default</option>
                         <option value="modern">Modern</option>
                         <option value="compact">Compact</option>
+                        <option value="elegant">Elegant</option>
+                        <option value="professional">Professional</option>
+                        <option value="minimal">Minimal</option>
                       </select>
                     </div>
                     <div>
