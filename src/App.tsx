@@ -6875,7 +6875,7 @@ function AppContent() {
                 {activeProfileTab === 'database' && isSpecialMember(currentUser) && isSpecialMember(selectedMemberProfile) && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ডাটাবেস শীটসমূহ</h3>
+                      <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">Database Management</h3>
                       {currentUser.id === selectedMemberProfile.id && (
                         <button 
                           onClick={() => setShowDatabasePage(true)}
@@ -6934,29 +6934,18 @@ function AppContent() {
         )}
 
         {showDatabasePage && isSpecialMember(currentUser) && (
-          <OverlayPage key="database-overlay" title="ডাটাবেস শীটসমূহ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+          <OverlayPage key="database-overlay" title="Database Management" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-6 pb-10">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider">আপনার সংরক্ষিত লিংকসমূহ</h3>
-                <button 
-                  onClick={() => {
-                    setIsAddingLink(true);
-                    setEditingLink(null);
-                    setNewLinkName('');
-                    setNewLinkSheetId('');
-                    setNewLinkDesc('');
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
-                >
-                  <Plus className="w-4 h-4" />
-                  নতুন লিংক
-                </button>
               </div>
 
+              <AnimatePresence mode="wait">
               {(isAddingLink || editingLink) && (
                 <motion.div 
-                  initial={{ opacity: 0, y: -20 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
                   className={cn(
                     "p-4 rounded-2xl border space-y-4",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-xl"
@@ -7017,6 +7006,7 @@ function AppContent() {
                   </div>
                 </motion.div>
               )}
+              </AnimatePresence>
 
               <div className="grid grid-cols-1 gap-3">
                 {adminDatabaseLinks.length === 0 ? (
@@ -7080,6 +7070,20 @@ function AppContent() {
                 )}
               </div>
             </div>
+
+            {/* Floating Action Button */}
+            <button 
+              onClick={() => {
+                setIsAddingLink(true);
+                setEditingLink(null);
+                setNewLinkName('');
+                setNewLinkSheetId('');
+                setNewLinkDesc('');
+              }}
+              className="fixed bottom-8 right-6 w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all z-[2600] hover:bg-emerald-600"
+            >
+              <Plus className="w-8 h-8" />
+            </button>
           </OverlayPage>
         )}
 
