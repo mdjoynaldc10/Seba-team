@@ -3997,6 +3997,11 @@ function AppContent() {
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (isAnyOverlayOpen) return;
+
+    // Prevent tab switching if the touch started inside the global notice slider
+    const target = e.target as HTMLElement;
+    if (target.closest('.global-notice-slider')) return;
+
     const diffX = touchStartX.current - e.changedTouches[0].clientX;
     const tabs: ('home' | 'books' | 'members' | 'blood' | 'profile')[] = ['home', 'books', 'members', 'blood', 'profile'];
     const currentIndex = tabs.indexOf(activeTab);
@@ -4151,14 +4156,14 @@ function AppContent() {
           style={{ transform: `translateX(-${['home', 'books', 'members', 'blood', 'profile'].indexOf(activeTab) * 20}%)`, width: '500%' }}
         >
           {/* Home Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto scroll-smooth no-scrollbar">
+          <div className="w-1/5 h-full overflow-y-auto px-4 pb-4 max-w-2xl mx-auto scroll-smooth no-scrollbar">
             {/* Global Notice Section (Sticky) */}
             {currentUser && globalNotices.length > 0 && (
               <div className={cn(
-                "sticky -mt-4 -mx-4 top-0 z-[100] p-4 mb-2",
-                isDarkMode ? "bg-slate-900" : "bg-slate-50"
+                "sticky top-0 -mx-4 z-[100] px-4 pt-2 pb-4 mb-6 shadow-lg border-b",
+                isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
               )}>
-                <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2">
+                <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 global-notice-slider pt-2">
                   {globalNotices.map((notice) => (
                     <motion.div 
                       key={notice.id}
@@ -4169,7 +4174,7 @@ function AppContent() {
                         setShowFullNotice(true);
                       }}
                       className={cn(
-                        "flex-shrink-0 w-[85%] snap-center p-5 rounded-[2rem] border-2 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all",
+                        "flex-shrink-0 w-[82%] snap-center p-4 rounded-[1.8rem] border-2 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all",
                         isDarkMode ? "bg-slate-800 border-emerald-500/30 text-white" : "bg-white border-emerald-100 text-slate-900 shadow-sm"
                       )}
                     >
@@ -4181,15 +4186,15 @@ function AppContent() {
                         className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none"
                       />
                       
-                      <div className="flex items-start gap-4 relative z-10">
-                        <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                          <Megaphone className="w-5 h-5 text-white" />
+                      <div className="flex items-start gap-3 relative z-10">
+                        <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                          <Megaphone className="w-4 h-4 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-base font-black text-emerald-500 mb-1 truncate">{notice.title}</h3>
-                          <p className="text-xs opacity-80 leading-relaxed line-clamp-2">{notice.message}</p>
-                          <div className="mt-2 flex items-center gap-2 opacity-40">
-                            <span className="text-[9px] font-bold uppercase tracking-wider">
+                          <h3 className="text-sm font-black text-emerald-500 mb-0.5 truncate">{notice.title}</h3>
+                          <p className="text-[11px] opacity-80 leading-tight line-clamp-2">{notice.message}</p>
+                          <div className="mt-1.5 flex items-center gap-2 opacity-40">
+                            <span className="text-[8px] font-bold uppercase tracking-wider">
                               {formatDate(notice.createdAt)}
                             </span>
                           </div>
