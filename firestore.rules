@@ -84,5 +84,11 @@ service cloud.firestore {
     match /admin_database_links/{linkId} {
       allow read, write: if isAuthenticated();
     }
+
+    // Global Notices Collection
+    match /global_notices/{noticeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Admins can manage notices
+    }
   }
 }

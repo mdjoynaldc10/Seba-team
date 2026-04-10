@@ -159,6 +159,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "name", "sheetId"]
+    },
+    "global_notices": {
+      "title": "Global Notice",
+      "description": "Notice displayed to all logged-in users on app startup",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "authorId", "authorName", "createdAt"]
     }
   },
   "firestore": {
@@ -205,6 +219,10 @@
     "/admin_database_links/{linkId}": {
       "schema": "admin_database_links",
       "description": "Custom database links managed by admins"
+    },
+    "/global_notices/{noticeId}": {
+      "schema": "global_notices",
+      "description": "Collection of global notices displayed to all users"
     }
   }
 }

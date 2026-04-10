@@ -54,7 +54,10 @@ import {
   UserRoundPen,
   Send,
   Trash2,
-  Edit2
+  Edit2,
+  Megaphone,
+  Volume2,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -138,6 +141,15 @@ interface BookRequest {
   dueDate?: string;
   approvedBy?: string;
   approvedAt?: string;
+}
+
+interface GlobalNotice {
+  id: string;
+  title: string;
+  message: string;
+  authorId: string;
+  authorName: string;
+  createdAt: any;
 }
 
 interface DonationProject {
@@ -2196,6 +2208,13 @@ function AppContent() {
   const [showAdvanceSettings, setShowAdvanceSettings] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [showGreetingsSettings, setShowGreetingsSettings] = useState(false);
+  const [globalNotices, setGlobalNotices] = useState<GlobalNotice[]>([]);
+  const [showGlobalNoticeManager, setShowGlobalNoticeManager] = useState(false);
+  const [activeGlobalNotice, setActiveGlobalNotice] = useState<GlobalNotice | null>(null);
+  const [activeGlobalNoticeTab, setActiveGlobalNoticeTab] = useState<'write' | 'history'>('write');
+  const [newNoticeTitle, setNewNoticeTitle] = useState('');
+  const [newNoticeMessage, setNewNoticeMessage] = useState('');
+  const [isSavingNotice, setIsSavingNotice] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -2335,6 +2354,7 @@ function AppContent() {
     setShowLoginError(false);
     setShowBorrowForm(false);
     setShowNotice(false);
+    setShowGlobalNoticeManager(false);
     setActiveBookDetailTab('details');
   }, []);
 
@@ -2346,7 +2366,7 @@ function AppContent() {
     showDonationProjectsPage || showTicTacToe || showDatabasePage || showBookshelfPage || 
     selectedMemberProfile !== null || selectedBook !== null || selectedPayment !== null || 
     showNotificationsPage || selectedNotification !== null || showDonatePopup || 
-    showBorrowForm || showNotice;
+    showBorrowForm || showNotice || showGlobalNoticeManager;
 
   useEffect(() => {
     if (isAnyOverlayOpen) {
@@ -2942,6 +2962,31 @@ function AppContent() {
     return () => unsubscribe();
   }, [currentUser, isAuthReady]);
 
+  // Global Notices Listener
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    const q = query(
+      collection(db, 'global_notices'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GlobalNotice));
+      setGlobalNotices(notices);
+      
+      // Show latest notice on startup if user is logged in
+      if (notices.length > 0 && currentUser && isAppInitializing) {
+        // We only show it once per app load when initialization finishes
+        // The actual display logic will be triggered when isAppInitializing becomes false
+      }
+    }, (error) => {
+      console.error("Global Notices Listener Error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady, currentUser]);
+
   const handleSaveSettings = async () => {
     if (!currentUser || !isDeveloper(currentUser)) return;
     setIsSavingSettings(true);
@@ -2977,6 +3022,51 @@ function AppContent() {
       alert('Greetings সংরক্ষণ করতে সমস্যা হয়েছে।');
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleSaveGlobalNotice = async () => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    if (!newNoticeTitle.trim() || !newNoticeMessage.trim()) {
+      alert('শিরোনাম এবং বার্তা উভয়ই প্রয়োজন।');
+      return;
+    }
+
+    setIsSavingNotice(true);
+    const id = `notice_${Date.now()}`;
+    const noticeData: GlobalNotice = {
+      id,
+      title: newNoticeTitle,
+      message: newNoticeMessage,
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'global_notices', id), noticeData);
+      setNewNoticeTitle('');
+      setNewNoticeMessage('');
+      setActiveGlobalNoticeTab('history');
+      alert('নোটিশ সফলভাবে পাবলিশ করা হয়েছে!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'global_notices');
+      alert('নোটিশ পাবলিশ করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSavingNotice(false);
+    }
+  };
+
+  const handleDeleteGlobalNotice = async (id: string) => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    if (!window.confirm('আপনি কি নিশ্চিত যে এই নোটিশটি ডিলেট করতে চান?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'global_notices', id));
+      alert('নোটিশ ডিলেট করা হয়েছে।');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `global_notices/${id}`);
+      alert('নোটিশ ডিলেট করতে সমস্যা হয়েছে।');
     }
   };
 
@@ -3048,7 +3138,6 @@ function AppContent() {
     }, 400); // Simulate system search delay for better UX
     return () => clearTimeout(timer);
   }, [bloodSearchQuery, selectedBloodGroup, donorData, publicDonors]);
-
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -4061,6 +4150,42 @@ function AppContent() {
         >
           {/* Home Tab */}
           <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto scroll-smooth">
+            {/* Global Notice Card */}
+            {currentUser && globalNotices.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  "p-5 rounded-[2rem] mb-6 border-2 relative overflow-hidden",
+                  isDarkMode ? "bg-slate-900 border-emerald-500/30 text-white" : "bg-white border-emerald-100 text-slate-900"
+                )}
+              >
+                {/* Green Reflection Effect */}
+                <motion.div 
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '200%' }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 4, ease: "linear" }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none"
+                />
+                
+                <div className="flex items-start gap-4 relative z-10">
+                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                    <Megaphone className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-black text-emerald-500 mb-1 truncate">{globalNotices[0].title}</h3>
+                    <p className="text-sm opacity-80 leading-relaxed">{globalNotices[0].message}</p>
+                    <div className="mt-3 flex items-center gap-2 opacity-40">
+                      <div className="w-1 h-1 rounded-full bg-current" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                        {formatDate(globalNotices[0].createdAt)} • {globalNotices[0].authorName}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {isLoading && homePosts.length === 0 ? (
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
@@ -4844,6 +4969,14 @@ function AppContent() {
                       icon={<Bell className="w-5 h-5 text-emerald-500" />} 
                       label="Greetings" 
                       onClick={() => setShowGreetingsSettings(true)} 
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                    <ProfileMenuLink 
+                      icon={<Megaphone className="w-5 h-5 text-emerald-500" />} 
+                      label="Global Notice" 
+                      onClick={() => setShowGlobalNoticeManager(true)} 
                       isDarkMode={isDarkMode}
                     />
                   )}
@@ -7084,6 +7217,137 @@ function AppContent() {
             >
               <Plus className="w-8 h-8" />
             </button>
+          </OverlayPage>
+        )}
+
+        {showGlobalNoticeManager && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
+          <OverlayPage key="global-notice-overlay" title="Global Notice" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6 pb-10">
+              {/* Tab Navigation */}
+              <div className={cn(
+                "flex p-1 rounded-2xl mb-6 relative",
+                isDarkMode ? "bg-slate-800" : "bg-slate-100"
+              )}>
+                <button 
+                  onClick={() => setActiveGlobalNoticeTab('write')}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeGlobalNoticeTab === 'write' ? "text-white" : "text-slate-500"
+                  )}
+                >
+                  {activeGlobalNoticeTab === 'write' && (
+                    <motion.div 
+                      layoutId="activeGlobalNoticeTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20 flex items-center justify-center gap-2">
+                    <Edit2 className="w-4 h-4" />
+                    নোটিশ লিখুন
+                  </span>
+                </button>
+                <button 
+                  onClick={() => setActiveGlobalNoticeTab('history')}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeGlobalNoticeTab === 'history' ? "text-white" : "text-slate-500"
+                  )}
+                >
+                  {activeGlobalNoticeTab === 'history' && (
+                    <motion.div 
+                      layoutId="activeGlobalNoticeTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20 flex items-center justify-center gap-2">
+                    <History className="w-4 h-4" />
+                    ইতিহাস
+                  </span>
+                </button>
+              </div>
+
+              <AnimatePresence mode="wait">
+                {activeGlobalNoticeTab === 'write' ? (
+                  <motion.div 
+                    key="write-tab"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold opacity-50 ml-1">নোটিশের শিরোনাম</label>
+                      <input 
+                        type="text" 
+                        placeholder="শিরোনাম লিখুন..." 
+                        className={cn("w-full p-4 rounded-2xl border text-sm font-bold", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
+                        value={newNoticeTitle}
+                        onChange={(e) => setNewNoticeTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold opacity-50 ml-1">নোটিশের বার্তা</label>
+                      <textarea 
+                        placeholder="বার্তা লিখুন..." 
+                        rows={6}
+                        className={cn("w-full p-4 rounded-2xl border text-sm resize-none", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
+                        value={newNoticeMessage}
+                        onChange={(e) => setNewNoticeMessage(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSaveGlobalNotice}
+                      disabled={isSavingNotice}
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                    >
+                      {isSavingNotice ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                      পাবলিশ করুন
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="history-tab"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-3"
+                  >
+                    {globalNotices.length === 0 ? (
+                      <div className="text-center py-20 opacity-50 flex flex-col items-center gap-3">
+                        <History className="w-12 h-12 opacity-20" />
+                        <p className="text-sm">কোনো নোটিশের ইতিহাস পাওয়া যায়নি।</p>
+                      </div>
+                    ) : (
+                      globalNotices.map((notice) => (
+                        <div 
+                          key={notice.id} 
+                          className={cn(
+                            "p-4 rounded-2xl border space-y-3 transition-all",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                          )}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm text-emerald-500">{notice.title}</h4>
+                              <p className="text-[10px] opacity-50">{formatDate(notice.createdAt)} • {notice.authorName}</p>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteGlobalNotice(notice.id)}
+                              className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-xs opacity-80 leading-relaxed line-clamp-3">{notice.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </OverlayPage>
         )}
 
