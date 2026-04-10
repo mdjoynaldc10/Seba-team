@@ -2211,6 +2211,7 @@ function AppContent() {
   const [globalNotices, setGlobalNotices] = useState<GlobalNotice[]>([]);
   const [showGlobalNoticeManager, setShowGlobalNoticeManager] = useState(false);
   const [activeGlobalNotice, setActiveGlobalNotice] = useState<GlobalNotice | null>(null);
+  const [showFullNotice, setShowFullNotice] = useState(false);
   const [activeGlobalNoticeTab, setActiveGlobalNoticeTab] = useState<'write' | 'history'>('write');
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
   const [newNoticeMessage, setNewNoticeMessage] = useState('');
@@ -2355,6 +2356,7 @@ function AppContent() {
     setShowBorrowForm(false);
     setShowNotice(false);
     setShowGlobalNoticeManager(false);
+    setShowFullNotice(false);
     setActiveBookDetailTab('details');
   }, []);
 
@@ -2366,7 +2368,7 @@ function AppContent() {
     showDonationProjectsPage || showTicTacToe || showDatabasePage || showBookshelfPage || 
     selectedMemberProfile !== null || selectedBook !== null || selectedPayment !== null || 
     showNotificationsPage || selectedNotification !== null || showDonatePopup || 
-    showBorrowForm || showNotice || showGlobalNoticeManager;
+    showBorrowForm || showNotice || showGlobalNoticeManager || showFullNotice;
 
   useEffect(() => {
     if (isAnyOverlayOpen) {
@@ -4149,41 +4151,54 @@ function AppContent() {
           style={{ transform: `translateX(-${['home', 'books', 'members', 'blood', 'profile'].indexOf(activeTab) * 20}%)`, width: '500%' }}
         >
           {/* Home Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto scroll-smooth">
-            {/* Global Notice Card */}
+          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto scroll-smooth no-scrollbar">
+            {/* Global Notice Section (Sticky) */}
             {currentUser && globalNotices.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                  "p-5 rounded-[2rem] mb-6 border-2 relative overflow-hidden",
-                  isDarkMode ? "bg-slate-900 border-emerald-500/30 text-white" : "bg-white border-emerald-100 text-slate-900"
-                )}
-              >
-                {/* Green Reflection Effect */}
-                <motion.div 
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '200%' }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 4, ease: "linear" }}
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none"
-                />
-                
-                <div className="flex items-start gap-4 relative z-10">
-                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                    <Megaphone className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-black text-emerald-500 mb-1 truncate">{globalNotices[0].title}</h3>
-                    <p className="text-sm opacity-80 leading-relaxed">{globalNotices[0].message}</p>
-                    <div className="mt-3 flex items-center gap-2 opacity-40">
-                      <div className="w-1 h-1 rounded-full bg-current" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider">
-                        {formatDate(globalNotices[0].createdAt)} • {globalNotices[0].authorName}
-                      </span>
-                    </div>
-                  </div>
+              <div className={cn(
+                "sticky -mt-4 -mx-4 top-0 z-[100] p-4 mb-2",
+                isDarkMode ? "bg-slate-900" : "bg-slate-50"
+              )}>
+                <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2">
+                  {globalNotices.map((notice) => (
+                    <motion.div 
+                      key={notice.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      onClick={() => {
+                        setActiveGlobalNotice(notice);
+                        setShowFullNotice(true);
+                      }}
+                      className={cn(
+                        "flex-shrink-0 w-[85%] snap-center p-5 rounded-[2rem] border-2 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all",
+                        isDarkMode ? "bg-slate-800 border-emerald-500/30 text-white" : "bg-white border-emerald-100 text-slate-900 shadow-sm"
+                      )}
+                    >
+                      {/* Green Reflection Effect */}
+                      <motion.div 
+                        initial={{ x: '-100%' }}
+                        animate={{ x: '200%' }}
+                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 4, ease: "linear" }}
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none"
+                      />
+                      
+                      <div className="flex items-start gap-4 relative z-10">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                          <Megaphone className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-black text-emerald-500 mb-1 truncate">{notice.title}</h3>
+                          <p className="text-xs opacity-80 leading-relaxed line-clamp-2">{notice.message}</p>
+                          <div className="mt-2 flex items-center gap-2 opacity-40">
+                            <span className="text-[9px] font-bold uppercase tracking-wider">
+                              {formatDate(notice.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {isLoading && homePosts.length === 0 ? (
@@ -5076,6 +5091,90 @@ function AppContent() {
                     <X className="w-5 h-5" />
                     বন্ধ করুন
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Full Screen Global Notice */}
+        <AnimatePresence>
+          {showFullNotice && activeGlobalNotice && (
+            <div className="fixed inset-0 z-[6000] flex flex-col">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowFullNotice(false)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+              />
+              <motion.div 
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className={cn(
+                  "relative flex-1 flex flex-col p-8 pt-16 overflow-y-auto",
+                  isDarkMode ? "text-white" : "text-slate-900"
+                )}
+              >
+                {/* Decorative background */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-full pointer-events-none overflow-hidden">
+                  <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" />
+                  <div className="absolute bottom-40 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl animate-pulse delay-1000" />
+                </div>
+
+                <div className="max-w-xl mx-auto w-full flex-1 flex flex-col items-center text-center relative z-10">
+                  <motion.div 
+                    initial={{ scale: 0, rotate: -20 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ delay: 0.2, type: 'spring' }}
+                    className="w-24 h-24 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-emerald-500/40 mb-8"
+                  >
+                    <Megaphone className="w-12 h-12 text-white" />
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="space-y-4 w-full"
+                  >
+                    <h2 className="text-4xl font-black tracking-tight text-emerald-500 leading-tight">
+                      {activeGlobalNotice.title}
+                    </h2>
+                    <div className="flex items-center justify-center gap-2 opacity-50 text-sm font-bold uppercase tracking-widest">
+                      <span>{formatDate(activeGlobalNotice.createdAt)}</span>
+                      <span className="w-1 h-1 rounded-full bg-current" />
+                      <span>{activeGlobalNotice.authorName}</span>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className={cn(
+                      "mt-10 p-8 rounded-[3rem] text-lg leading-relaxed font-medium w-full border shadow-inner",
+                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white/50 border-emerald-100"
+                    )}
+                  >
+                    {activeGlobalNotice.message}
+                  </motion.div>
+                </div>
+
+                {/* Close Button at Bottom Center */}
+                <div className="sticky bottom-8 left-0 right-0 flex justify-center mt-10 z-20">
+                  <motion.button 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.5, type: 'spring' }}
+                    onClick={() => setShowFullNotice(false)}
+                    className="px-10 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-black shadow-2xl shadow-emerald-500/40 active:scale-95 transition-all flex items-center gap-3 group"
+                  >
+                    <X className="w-6 h-6 group-hover:rotate-90 transition-transform" />
+                    CLOSE
+                  </motion.button>
                 </div>
               </motion.div>
             </div>
