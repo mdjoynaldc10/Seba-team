@@ -90,5 +90,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated(); // Admins can manage notices
     }
+
+    // Sessions Collection
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
+    }
   }
 }

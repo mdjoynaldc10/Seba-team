@@ -20,6 +20,7 @@ import {
   Filter,
   X,
   Smartphone,
+  Monitor,
   Facebook,
   ExternalLink,
   MessageCircle,
@@ -947,6 +948,49 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 };
 
+const getDeviceInfo = () => {
+  const ua = navigator.userAgent;
+  let deviceName = "Unknown Device";
+  let deviceModel = "Unknown Model";
+
+  // Try to extract specific model from Android
+  if (/android/i.test(ua)) {
+    deviceName = "Android Device";
+    // Pattern: Android [version]; [Model] Build/
+    const modelMatch = ua.match(/Android\s+[^;]+;\s+([^;Build/]+)/);
+    if (modelMatch && modelMatch[1]) {
+      deviceModel = modelMatch[1].trim();
+      // If we found a specific model, use it as the name too if it looks better
+      if (deviceModel.length > 3) {
+        deviceName = deviceModel;
+      }
+    } else {
+      const versionMatch = ua.match(/Android\s+([^\s;]+)/);
+      if (versionMatch) deviceModel = `Android ${versionMatch[1]}`;
+    }
+  } else if (/iPad|iPhone|iPod/.test(ua)) {
+    deviceName = "iOS Device";
+    if (/iPhone/.test(ua)) deviceName = "iPhone";
+    if (/iPad/.test(ua)) deviceName = "iPad";
+    
+    const match = ua.match(/(iPhone|iPad|iPod)\s+OS\s+([^\s;]+)/);
+    if (match) deviceModel = `${match[1]} ${match[2].replace(/_/g, '.')}`;
+  } else if (/Windows/.test(ua)) {
+    deviceName = "Windows PC";
+    deviceModel = "Windows";
+    if (/Windows NT 10.0/.test(ua)) deviceModel = "Windows 10/11";
+    if (/Windows NT 6.3/.test(ua)) deviceModel = "Windows 8.1";
+  } else if (/Macintosh/.test(ua)) {
+    deviceName = "MacBook";
+    deviceModel = "macOS";
+  } else if (/Linux/.test(ua)) {
+    deviceName = "Linux PC";
+    deviceModel = "Linux";
+  }
+
+  return { deviceName, deviceModel, userAgent: ua };
+};
+
 // --- Custom Notification Page ---
 const CustomNotificationPage = ({ onClose, isDarkMode, allMembers, onSend }: { 
   onClose: () => void, 
@@ -1121,6 +1165,7 @@ function CloudPinPage({
   onClose: () => void, 
   isDarkMode: boolean 
 }) {
+  const [activeTab, setActiveTab] = useState<'pin' | 'sessions'>('pin');
   const [pin, setPin] = useState('');
   const [savedPin, setSavedPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -1134,6 +1179,57 @@ function CloudPinPage({
   const [showCurrentPin, setShowCurrentPin] = useState(false);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'sessions') {
+      setIsSessionsLoading(true);
+      const q = query(collection(db, 'sessions'), where('userId', '==', currentUser.id));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const sess = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Sort in memory to avoid composite index requirement
+        sess.sort((a: any, b: any) => {
+          const timeA = a.lastActive?.toMillis ? a.lastActive.toMillis() : 0;
+          const timeB = b.lastActive?.toMillis ? b.lastActive.toMillis() : 0;
+          return timeB - timeA;
+        });
+        setSessions(sess);
+        setIsSessionsLoading(false);
+      }, (err) => {
+        console.error("Error fetching sessions:", err);
+        setIsSessionsLoading(false);
+      });
+      return () => unsub();
+    }
+  }, [activeTab, currentUser.id]);
+
+  const handleLogoutSession = async (sessionId: string) => {
+    try {
+      const isCurrent = sessionId === localStorage.getItem('seba_session_id');
+      if (isCurrent) {
+        await deleteDoc(doc(db, 'sessions', sessionId))
+          .catch(e => handleFirestoreError(e, OperationType.DELETE, `sessions/${sessionId}`));
+        onClose();
+      } else {
+        await updateDoc(doc(db, 'sessions', sessionId), {
+          status: 'revoked',
+          lastActive: serverTimestamp()
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, `sessions/${sessionId}`));
+      }
+    } catch (e) {
+      console.error("Error logging out session:", e);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      await deleteDoc(doc(db, 'sessions', sessionId))
+        .catch(e => handleFirestoreError(e, OperationType.DELETE, `sessions/${sessionId}`));
+    } catch (e) {
+      console.error("Error deleting session:", e);
+    }
+  };
 
   useEffect(() => {
     if (isAdmin(currentUser) || isDeveloper(currentUser)) {
@@ -1194,6 +1290,25 @@ function CloudPinPage({
           setPin(data.pin);
           setSavedPin(data.pin);
           setIsEnabled(data.isEnabled);
+        }
+
+        // Ensure current session exists in CloudPinPage too
+        const sessionId = localStorage.getItem('seba_session_id');
+        if (!sessionId) {
+          const { deviceName, deviceModel, userAgent } = getDeviceInfo();
+          const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          
+          await setDoc(doc(db, 'sessions', newSessionId), {
+            id: newSessionId,
+            userId: currentUser.id,
+            deviceName,
+            deviceModel,
+            location: "Unknown Location",
+            userAgent,
+            status: 'active',
+            lastActive: serverTimestamp()
+          });
+          localStorage.setItem('seba_session_id', newSessionId);
         }
       } catch (e) {
         console.error("Error fetching PIN settings:", e);
@@ -1275,221 +1390,353 @@ function CloudPinPage({
   );
 
   return (
-    <OverlayPage title="Cloud PIN" onClose={handleBack} isDarkMode={isDarkMode}>
+    <OverlayPage title="Security & Sessions" onClose={handleBack} isDarkMode={isDarkMode}>
       <div className="space-y-6">
-        {mode === 'manage' && (
-          <div className="space-y-4">
-            <div className={cn(
-              "p-6 rounded-3xl border-2 flex flex-col items-center text-center space-y-4",
-              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-            )}>
-              <div className={cn(
-                "w-16 h-16 rounded-full flex items-center justify-center",
-                isEnabled ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-400"
-              )}>
-                <ShieldCheck className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold">Cloud PIN Security</h3>
-                <p className="text-sm opacity-60">যেকোনো ডিভাইসে লগইন করার সময় পিন কোড দিয়ে সুরক্ষা নিশ্চিত করুন।</p>
-              </div>
-              
-              <div className="flex items-center justify-between w-full p-4 bg-slate-500/5 rounded-2xl border border-slate-500/10">
-                <span className="font-bold">Status: {isEnabled ? 'ON' : 'OFF'}</span>
-                <button 
-                  onClick={() => handleToggle(!isEnabled)}
-                  disabled={isSaving}
-                  className={cn(
-                    "w-12 h-6 rounded-full relative transition-all",
-                    isEnabled ? "bg-emerald-500" : "bg-slate-300"
-                  )}
-                >
-                  <div className={cn(
-                    "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                    isEnabled ? "right-1" : "left-1"
-                  )} />
-                </button>
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className={cn(
+          "flex p-1 rounded-2xl",
+          isDarkMode ? "bg-slate-800" : "bg-slate-100"
+        )}>
+          <button 
+            onClick={() => setActiveTab('pin')}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2",
+              activeTab === 'pin' 
+                ? (isDarkMode ? "bg-slate-700 text-emerald-500 shadow-lg" : "bg-white text-emerald-500 shadow-sm")
+                : "text-slate-500"
+            )}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Cloud PIN
+          </button>
+          <button 
+            onClick={() => setActiveTab('sessions')}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2",
+              activeTab === 'sessions' 
+                ? (isDarkMode ? "bg-slate-700 text-emerald-500 shadow-lg" : "bg-white text-emerald-500 shadow-sm")
+                : "text-slate-500"
+            )}
+          >
+            <Smartphone className="w-4 h-4" />
+            Active Sessions
+          </button>
+        </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              <button 
-                onClick={() => {
-                  if (savedPin) {
-                    setMode('change');
-                    setIsVerified(false);
-                    setPin('');
-                    setConfirmPin('');
-                  } else {
-                    setMode('set');
-                    setPin('');
-                    setConfirmPin('');
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
+        {activeTab === 'pin' ? (
+          <div className="space-y-6">
+            {mode === 'manage' && (
+              <div className="space-y-4">
+                <div className={cn(
+                  "p-6 rounded-3xl border-2 flex flex-col items-center text-center space-y-4",
                   isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                )}
-              >
-                <Key className="w-5 h-5 text-emerald-500" />
-                {savedPin ? 'পিন পরিবর্তন করুন' : 'পিন সেট করুন'}
-              </button>
-            </div>
-          </div>
-        )}
+                )}>
+                  <div className={cn(
+                    "w-16 h-16 rounded-full flex items-center justify-center",
+                    isEnabled ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-400"
+                  )}>
+                    <ShieldCheck className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Cloud PIN Security</h3>
+                    <p className="text-sm opacity-60">যেকোনো ডিভাইসে লগইন করার সময় পিন কোড দিয়ে সুরক্ষা নিশ্চিত করুন।</p>
+                  </div>
+                  
+                  <div className="flex items-center justify-between w-full p-4 bg-slate-500/5 rounded-2xl border border-slate-500/10">
+                    <span className="font-bold">Status: {isEnabled ? 'ON' : 'OFF'}</span>
+                    <button 
+                      onClick={() => handleToggle(!isEnabled)}
+                      disabled={isSaving}
+                      className={cn(
+                        "w-12 h-6 rounded-full relative transition-all",
+                        isEnabled ? "bg-emerald-500" : "bg-slate-300"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                        isEnabled ? "right-1" : "left-1"
+                      )} />
+                    </button>
+                  </div>
+                </div>
 
-        {(mode === 'set' || mode === 'change') && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            <div className="space-y-4">
-                {mode === 'change' && !isVerified ? (
-                  <div className="space-y-4">
-                    <div className="text-center space-y-2 mb-4">
-                      <h3 className="text-lg font-bold">বর্তমান পিন যাচাই করুন</h3>
-                      <p className="text-xs opacity-60">পরিবর্তন করতে আপনার বর্তমান পিন কোডটি দিন।</p>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <input 
-                          type={showCurrentPin ? "text" : "password"} 
-                          placeholder="বর্তমান পিন" 
-                          value={currentPinInput}
-                          onChange={(e) => setCurrentPinInput(e.target.value)}
-                          className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                        />
-                        <button 
-                          onClick={() => setShowCurrentPin(!showCurrentPin)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                        >
-                          {showCurrentPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
+                <div className="grid grid-cols-1 gap-2">
+                  <button 
+                    onClick={() => {
+                      if (savedPin) {
+                        setMode('change');
+                        setIsVerified(false);
+                        setPin('');
+                        setConfirmPin('');
+                      } else {
+                        setMode('set');
+                        setPin('');
+                        setConfirmPin('');
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-2xl border-2 font-bold transition-all active:scale-95",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                    )}
+                  >
+                    <Key className="w-5 h-5 text-emerald-500" />
+                    {savedPin ? 'পিন পরিবর্তন করুন' : 'পিন সেট করুন'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(mode === 'set' || mode === 'change') && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                <div className="space-y-4">
+                    {mode === 'change' && !isVerified ? (
+                      <div className="space-y-4">
+                        <div className="text-center space-y-2 mb-4">
+                          <h3 className="text-lg font-bold">বর্তমান পিন যাচাই করুন</h3>
+                          <p className="text-xs opacity-60">পরিবর্তন করতে আপনার বর্তমান পিন কোডটি দিন।</p>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="relative">
+                            <input 
+                              type={showCurrentPin ? "text" : "password"} 
+                              placeholder="বর্তমান পিন" 
+                              value={currentPinInput}
+                              onChange={(e) => setCurrentPinInput(e.target.value)}
+                              className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            />
+                            <button 
+                              onClick={() => setShowCurrentPin(!showCurrentPin)}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                            >
+                              {showCurrentPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              if (currentPinInput === savedPin) {
+                                setIsVerified(true);
+                                setPin('');
+                                setConfirmPin('');
+                              } else {
+                                alert("ভুল পিন! আবার চেষ্টা করুন।");
+                              }
+                            }}
+                            className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
+                          >
+                            যাচাই করুন
+                          </button>
+                          <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
+                        </div>
                       </div>
-                      <button 
-                        onClick={() => {
-                          if (currentPinInput === savedPin) {
-                            setIsVerified(true);
-                            setPin('');
-                            setConfirmPin('');
-                          } else {
-                            alert("ভুল পিন! আবার চেষ্টা করুন।");
-                          }
-                        }}
-                        className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
-                      >
-                        যাচাই করুন
-                      </button>
-                      <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
-                    </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="text-center space-y-2 mb-4">
+                          <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'নতুন পিন দিন' : 'নতুন পিন দিন'}</h3>
+                          <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="relative">
+                            <input 
+                              type={showPin ? "text" : "password"} 
+                              placeholder="নতুন পিন" 
+                              value={pin}
+                              onChange={(e) => setPin(e.target.value)}
+                              className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            />
+                            <button 
+                              onClick={() => setShowPin(!showPin)}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                            >
+                              {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                          </div>
+                          <input 
+                            type={showPin ? "text" : "password"} 
+                            placeholder="পিন নিশ্চিত করুন" 
+                            value={confirmPin}
+                            onChange={(e) => setConfirmPin(e.target.value)}
+                            className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                          />
+                          <button 
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
+                          >
+                            {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
+                            সংরক্ষণ করুন
+                          </button>
+                          <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+              </div>
+            )}
+
+            {(isAdmin(currentUser) || isDeveloper(currentUser)) && mode === 'manage' && (
+              <div className="space-y-4 pt-4 border-t border-slate-500/10">
+                <div className="flex items-center gap-2 px-1">
+                  <ShieldAlert className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-lg font-bold">PIN Reset Requests</h3>
+                  {resetRequests.length > 0 && (
+                    <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                      {resetRequests.length}
+                    </span>
+                  )}
+                </div>
+                
+                {isRequestsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  </div>
+                ) : resetRequests.length === 0 ? (
+                  <div className="text-center py-8 opacity-50 text-sm">
+                    কোনো অনুরোধ পেন্ডিং নেই
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <div className="text-center space-y-2 mb-4">
-                      <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'নতুন পিন দিন' : 'নতুন পিন দিন'}</h3>
-                      <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <input 
-                          type={showPin ? "text" : "password"} 
-                          placeholder="নতুন পিন" 
-                          value={pin}
-                          onChange={(e) => setPin(e.target.value)}
-                          className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                        />
-                        <button 
-                          onClick={() => setShowPin(!showPin)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                        >
-                          {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                      <input 
-                        type={showPin ? "text" : "password"} 
-                        placeholder="পিন নিশ্চিত করুন" 
-                        value={confirmPin}
-                        onChange={(e) => setConfirmPin(e.target.value)}
-                        className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                      />
-                      <button 
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
+                  <div className="space-y-3">
+                    {resetRequests.map((req) => (
+                      <motion.div 
+                        key={req.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={cn(
+                          "p-4 rounded-2xl border-2 space-y-3",
+                          isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100"
+                        )}
                       >
-                        {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
-                        সংরক্ষণ করুন
-                      </button>
-                      <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
-                    </div>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-bold text-sm">{req.memberName}</h4>
+                            <p className="text-xs opacity-60">{req.memberId}</p>
+                            <p className="text-[10px] opacity-40 mt-1">
+                              {req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleString() : 'Just now'}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleApproveRequest(req)}
+                              className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
+                              title="Approve"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeclineRequest(req.id)}
+                              className="p-2 bg-red-500 text-white rounded-xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
+                              title="Decline"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex gap-4 text-[10px] opacity-60">
+                          <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {req.phone}</span>
+                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {req.email}</span>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
                 )}
               </div>
+            )}
           </div>
-        )}
-
-        {(isAdmin(currentUser) || isDeveloper(currentUser)) && mode === 'manage' && (
-          <div className="space-y-4 pt-4 border-t border-slate-500/10">
-            <div className="flex items-center gap-2 px-1">
-              <ShieldAlert className="w-5 h-5 text-orange-500" />
-              <h3 className="text-lg font-bold">PIN Reset Requests</h3>
-              {resetRequests.length > 0 && (
-                <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-                  {resetRequests.length}
-                </span>
-              )}
+        ) : (
+          <div className="space-y-4">
+            <div className="px-1">
+              <h3 className="text-lg font-bold">Active Sessions</h3>
+              <p className="text-xs opacity-60">এই মুহূর্তে আপনার একাউন্টটি যেসব ডিভাইসে লগইন করা আছে।</p>
             </div>
-            
-            {isRequestsLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+
+            {isSessionsLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
               </div>
-            ) : resetRequests.length === 0 ? (
-              <div className="text-center py-8 opacity-50 text-sm">
-                কোনো অনুরোধ পেন্ডিং নেই
+            ) : sessions.length === 0 ? (
+              <div className="text-center py-12 opacity-50">
+                কোনো একটিভ সেশন পাওয়া যায়নি
               </div>
             ) : (
               <div className="space-y-3">
-                {resetRequests.map((req) => (
-                  <motion.div 
-                    key={req.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn(
-                      "p-4 rounded-2xl border-2 space-y-3",
-                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100"
-                    )}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-bold text-sm">{req.memberName}</h4>
-                        <p className="text-xs opacity-60">{req.memberId}</p>
-                        <p className="text-[10px] opacity-40 mt-1">
-                          {req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleString() : 'Just now'}
+                {sessions.map((sess) => {
+                  const isCurrent = sess.id === localStorage.getItem('seba_session_id');
+                  const isRevoked = sess.status === 'revoked';
+                  
+                  return (
+                    <motion.div 
+                      key={sess.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={cn(
+                        "p-4 rounded-2xl border-2 flex items-center gap-4",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100",
+                        isCurrent && "border-emerald-500/30",
+                        isRevoked && "opacity-60 grayscale-[0.5]"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                        isDarkMode ? "bg-slate-700" : "bg-slate-100"
+                      )}>
+                        {sess.deviceName.includes('PC') || sess.deviceName.includes('Mac') || sess.deviceName.includes('Windows') 
+                          ? <Monitor className="w-6 h-6 text-emerald-500" />
+                          : <Smartphone className="w-6 h-6 text-emerald-500" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm truncate">{sess.deviceName}</h4>
+                          {isCurrent ? (
+                            <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase">Active</span>
+                          ) : isRevoked ? (
+                            <span className="bg-red-500/10 text-red-500 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase">Logged Out</span>
+                          ) : (
+                            <span className="bg-blue-500/10 text-blue-500 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase">Logged In</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] opacity-60 truncate">
+                          {isCurrent ? "This Device" : sess.deviceModel}
                         </p>
+                        <div className="flex items-center gap-2 mt-1 opacity-40 text-[9px]">
+                          <span className="flex items-center gap-1"><MapPin className="w-2 h-2" /> {sess.location}</span>
+                          <span>•</span>
+                          <span>{sess.lastActive?.toDate ? new Date(sess.lastActive.toDate()).toLocaleString() : 'Just now'}</span>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
+                      {isRevoked ? (
                         <button 
-                          onClick={() => handleApproveRequest(req)}
-                          className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
-                          title="Approve"
+                          onClick={() => handleDeleteSession(sess.id)}
+                          className={cn(
+                            "p-2 rounded-xl transition-all active:scale-90",
+                            isDarkMode ? "bg-slate-700 text-slate-400 hover:text-red-400" : "bg-slate-100 text-slate-400 hover:text-red-500"
+                          )}
+                          title="Remove from list"
                         >
-                          <Check className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
+                      ) : (
                         <button 
-                          onClick={() => handleDeclineRequest(req.id)}
-                          className="p-2 bg-red-500 text-white rounded-xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
-                          title="Decline"
+                          onClick={() => handleLogoutSession(sess.id)}
+                          className={cn(
+                            "p-2 rounded-xl transition-all active:scale-90",
+                            isDarkMode ? "bg-red-500/10 text-red-500 hover:bg-red-500/20" : "bg-red-50 text-red-500 hover:bg-red-100"
+                          )}
+                          title="Logout from this device"
                         >
-                          <X className="w-4 h-4" />
+                          <LogOut className="w-4 h-4" />
                         </button>
-                      </div>
-                    </div>
-                    <div className="flex gap-4 text-[10px] opacity-60">
-                      <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {req.phone}</span>
-                      <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {req.email}</span>
-                    </div>
-                  </motion.div>
-                ))}
+                      )}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
+            
+            <div className="pt-4">
+              <p className="text-[10px] text-center opacity-40 italic">
+                সেশন লিস্ট থেকে লগআউট করলে ওই ডিভাইস থেকে অটোমেটিক লগআউট হয়ে যাবে।
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -2806,6 +3053,49 @@ function AppContent() {
             localStorage.setItem('seba_payments', JSON.stringify(payments));
           }
         });
+
+        // Ensure session exists
+        const sessionId = localStorage.getItem('seba_session_id');
+        if (!sessionId) {
+          const { deviceName, deviceModel, userAgent } = getDeviceInfo();
+          const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          
+          // Get location (optional)
+          fetch('https://ipapi.co/json/')
+            .then(res => res.json())
+            .then(locData => {
+              let location = "Unknown Location";
+              if (locData.city && locData.country_name) {
+                location = `${locData.city}, ${locData.country_name}`;
+              }
+              return setDoc(doc(db, 'sessions', newSessionId), {
+                id: newSessionId,
+                userId: user.id,
+                deviceName,
+                deviceModel,
+                location,
+                userAgent,
+                status: 'active',
+                lastActive: serverTimestamp()
+              });
+            })
+            .catch(() => {
+              return setDoc(doc(db, 'sessions', newSessionId), {
+                id: newSessionId,
+                userId: user.id,
+                deviceName,
+                deviceModel,
+                location: "Unknown Location",
+                userAgent,
+                status: 'active',
+                lastActive: serverTimestamp()
+              });
+            })
+            .then(() => {
+              localStorage.setItem('seba_session_id', newSessionId);
+            })
+            .catch(err => console.error("Error bootstrapping session:", err));
+        }
       } catch (e) {
         console.error("Error parsing saved user data:", e);
       }
@@ -3238,6 +3528,40 @@ function AppContent() {
   const completeLogin = async (member: Member) => {
     setCurrentUser(member);
     localStorage.setItem('seba_user', JSON.stringify(member));
+    
+    // Record Session
+    try {
+      const { deviceName, deviceModel, userAgent } = getDeviceInfo();
+      const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // Get location (optional)
+      let location = "Unknown Location";
+      try {
+        const locRes = await fetch('https://ipapi.co/json/');
+        const locData = await locRes.json();
+        if (locData.city && locData.country_name) {
+          location = `${locData.city}, ${locData.country_name}`;
+        }
+      } catch (e) {
+        console.warn("Could not fetch location:", e);
+      }
+
+      await setDoc(doc(db, 'sessions', sessionId), {
+        id: sessionId,
+        userId: member.id,
+        deviceName,
+        deviceModel,
+        location,
+        userAgent,
+        status: 'active',
+        lastActive: serverTimestamp()
+      }).catch(e => handleFirestoreError(e, OperationType.WRITE, `sessions/${sessionId}`));
+      
+      localStorage.setItem('seba_session_id', sessionId);
+    } catch (e) {
+      console.error("Error recording session:", e);
+    }
+
     const payments = await fetchPaymentHistory(member.id, member.phone);
     setPaymentData(payments);
     localStorage.setItem('seba_payments', JSON.stringify(payments));
@@ -3291,11 +3615,33 @@ function AppContent() {
     }
   };
 
+  // Session validation
+  useEffect(() => {
+    if (currentUser) {
+      const sessionId = localStorage.getItem('seba_session_id');
+      if (sessionId) {
+        const unsub = onSnapshot(doc(db, 'sessions', sessionId), (docSnap) => {
+          if (!docSnap.exists() || docSnap.data()?.status === 'revoked') {
+            // Session revoked
+            logout();
+            alert("আপনার সেশনটি শেষ হয়ে গেছে বা অন্য ডিভাইস থেকে লগআউট করা হয়েছে।");
+          }
+        });
+        return () => unsub();
+      }
+    }
+  }, [currentUser]);
+
   const logout = () => {
+    const sessionId = localStorage.getItem('seba_session_id');
+    if (sessionId) {
+      deleteDoc(doc(db, 'sessions', sessionId)).catch(console.error);
+    }
     setCurrentUser(null);
     setPaymentData([]);
     localStorage.removeItem('seba_user');
     localStorage.removeItem('seba_payments');
+    localStorage.removeItem('seba_session_id');
     setIsMenuOpen(false);
     setActiveTab('home');
     setShowInfoPage(false);

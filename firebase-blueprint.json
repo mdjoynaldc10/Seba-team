@@ -173,6 +173,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "title", "message", "authorId", "authorName", "createdAt"]
+    },
+    "sessions": {
+      "title": "User Session",
+      "description": "Active login session for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Session ID" },
+        "userId": { "type": "string", "description": "User ID" },
+        "deviceName": { "type": "string" },
+        "deviceModel": { "type": "string" },
+        "location": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "deviceName", "deviceModel", "lastActive", "status"]
     }
   },
   "firestore": {
@@ -223,6 +239,10 @@
     "/global_notices/{noticeId}": {
       "schema": "global_notices",
       "description": "Collection of global notices displayed to all users"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "sessions",
+      "description": "Collection of active user login sessions"
     }
   }
 }
