@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /updates/{allPaths=**} {
+      // Allow anyone to download the APK
+      allow read: if true;
+      // Only authenticated users can upload (further restricted by app logic)
+      allow write: if request.auth != null;
+    }
+  }
+}

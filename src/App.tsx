@@ -58,7 +58,8 @@ import {
   Edit2,
   Megaphone,
   Volume2,
-  History
+  History,
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -67,8 +68,9 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
-import { db, auth } from './firebase';
+import { db, auth, storage } from './firebase';
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 
 // --- Types ---
@@ -887,6 +889,8 @@ interface CloudPinSettings {
 }
 
 // --- Components ---
+const APP_VERSION = "1.0.0";
+
 const BookImage = ({ book, isDarkMode, className }: { book: Book, isDarkMode: boolean, className?: string }) => {
   const sizeClasses = className || "w-10 h-14";
 
@@ -1026,6 +1030,136 @@ const fetchPreciseLocation = async (): Promise<string> => {
       { timeout: 10000 }
     );
   });
+};
+
+// --- Update Modal ---
+const UpdateModal = ({ 
+  onClose, 
+  isDarkMode, 
+  latestUpdate, 
+  APP_VERSION, 
+  currentUser 
+}: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  latestUpdate: { version: string, url: string, description: string } | null,
+  APP_VERSION: string,
+  currentUser: Member | null
+}) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [updateLink, setUpdateLink] = useState(latestUpdate?.url || '');
+
+  const handleSaveLink = async () => {
+    if (!updateLink) {
+      alert("লিঙ্কটি প্রদান করুন।");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'app_update'), {
+        version: '1.0.1', // Default or incremented version
+        url: updateLink,
+        description: 'New update available',
+        updatedAt: serverTimestamp()
+      });
+      alert("সফলভাবে লিঙ্কটি আপডেট হয়েছে!");
+      setIsSaving(false);
+      onClose();
+    } catch (err) {
+      console.error("Error updating link:", err);
+      alert("লিঙ্ক আপডেট করতে সমস্যা হয়েছে।");
+      setIsSaving(false);
+    }
+  };
+
+  const hasUpdate = latestUpdate && latestUpdate.url;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className={cn(
+          "w-full max-w-md rounded-3xl overflow-hidden shadow-2xl",
+          isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-white"
+        )}
+      >
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <RefreshCw className="w-6 h-6 text-emerald-500" />
+            App Update
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className={cn(
+            "p-6 rounded-2xl border text-center",
+            isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-emerald-50 border-emerald-100"
+          )}>
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Smartphone className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">সরাসরি আপডেট করুন</h3>
+            <p className="text-sm opacity-70 mb-6">নিচের বাটনে ক্লিক করে সরাসরি অ্যাপের সর্বশেষ ভার্সনটি ডাউনলোড বা আপডেট করে নিন।</p>
+            
+            {hasUpdate ? (
+              <button 
+                onClick={() => window.open(latestUpdate.url, '_blank')}
+                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <Download className="w-5 h-5" />
+                Update Now
+              </button>
+            ) : (
+              <div className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                You're using the current version
+              </div>
+            )}
+          </div>
+
+          {isDeveloper(currentUser) && (
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+              <h3 className="font-bold flex items-center gap-2">
+                <Settings className="w-5 h-5 text-emerald-500" />
+                Update Link (Developer Only)
+              </h3>
+              
+              <div className="space-y-3">
+                <input 
+                  type="text" 
+                  placeholder="Paste update link here..." 
+                  value={updateLink}
+                  onChange={(e) => setUpdateLink(e.target.value)}
+                  className={cn(
+                    "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                  )}
+                />
+
+                <button 
+                  onClick={handleSaveLink}
+                  disabled={isSaving}
+                  className="w-full py-3 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? "Saving..." : "Save Link"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 };
 
 // --- Custom Notification Page ---
@@ -2509,6 +2643,8 @@ function AppContent() {
   const [donationFilterEndDate, setDonationFilterEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [showCloudPinPage, setShowCloudPinPage] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [latestUpdate, setLatestUpdate] = useState<{ version: string, url: string, description: string } | null>(null);
   const [showPinEntry, setShowPinEntry] = useState(false);
   const [pendingLoginMember, setPendingLoginMember] = useState<Member | null>(null);
   const [cloudPinSettings, setCloudPinSettings] = useState<CloudPinSettings | null>(null);
@@ -3064,6 +3200,13 @@ function AppContent() {
   useEffect(() => {
     loadInitialData();
 
+    // Fetch latest app update
+    const unsubUpdate = onSnapshot(doc(db, 'settings', 'app_update'), (doc) => {
+      if (doc.exists()) {
+        setLatestUpdate(doc.data() as any);
+      }
+    });
+
     // Silent anonymous login to Firebase for Firestore access
     signInAnonymously(auth)
       .then(() => setIsAuthReady(true))
@@ -3124,7 +3267,10 @@ function AppContent() {
         setIsAppInitializing(false);
       }
     }, 4000); // Increased minimum time for stable experience
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      unsubUpdate();
+    };
   }, [isAuthReady]);
 
   // Sync initialization with auth ready
@@ -4973,6 +5119,20 @@ function AppContent() {
                       <button type="submit" className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
                         লগইন
                       </button>
+                      <button 
+                        type="button"
+                        onClick={() => setShowUpdateModal(true)}
+                        className={cn(
+                          "w-full h-12 rounded-xl font-bold border flex items-center justify-center gap-2 active:scale-95 transition-all relative",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                        )}
+                      >
+                        <RefreshCw className="w-5 h-5 text-emerald-500" />
+                        Update
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
+                          <span className="absolute top-3 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        )}
+                      </button>
                     </form>
                     <button 
                       onClick={() => setShowRegistration(true)}
@@ -5135,6 +5295,19 @@ function AppContent() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
+                    icon={
+                      <div className="relative">
+                        <RefreshCw className="w-5 h-5 text-emerald-500" />
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
+                        )}
+                      </div>
+                    } 
+                    label="Update" 
+                    onClick={() => setShowUpdateModal(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
                     icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
                     label="Dark Mode" 
                     onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -5216,6 +5389,19 @@ function AppContent() {
                     icon={<Lock className="w-5 h-5 text-emerald-500" />} 
                     label="Cloud PIN" 
                     onClick={() => setShowCloudPinPage(true)} 
+                    isDarkMode={isDarkMode}
+                  />
+                  <ProfileMenuLink 
+                    icon={
+                      <div className="relative">
+                        <RefreshCw className="w-5 h-5 text-emerald-500" />
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
+                        )}
+                      </div>
+                    } 
+                    label="Update" 
+                    onClick={() => setShowUpdateModal(true)} 
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
@@ -5679,6 +5865,19 @@ function AppContent() {
               setPendingLoginMember(null);
               setCloudPinSettings(null);
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Update Modal */}
+      <AnimatePresence>
+        {showUpdateModal && (
+          <UpdateModal 
+            onClose={() => setShowUpdateModal(false)}
+            isDarkMode={isDarkMode}
+            latestUpdate={latestUpdate}
+            APP_VERSION={APP_VERSION}
+            currentUser={currentUser}
           />
         )}
       </AnimatePresence>
@@ -7311,6 +7510,18 @@ function AppContent() {
                       >
                         <Mail className="w-6 h-6" />
                       </a>
+                    )}
+                    {currentUser?.id === selectedMemberProfile.id && (
+                      <button 
+                        onClick={() => setShowUpdateModal(true)}
+                        className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/30 active:scale-90 transition-all border-2 border-white/20 relative"
+                        title="Update"
+                      >
+                        <RefreshCw className="w-6 h-6" />
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
