@@ -2554,7 +2554,7 @@ function AppContent() {
     pdfLabelAmount: 'পরিমাণ',
     pdfLabelTotal: 'মোট পরিশোধিত',
     pdfLabelInvoiceTitle: 'পেমেন্ট ইনভয়েস',
-    pdfLabelSubTitle: 'Seba Member Payment Record',
+    pdfLabelSubTitle: 'SEBA Member Payment Record',
     pdfBrandText: 'SEBA',
     pdfBrandFontSize: 18,
     pdfBrandColor: '#10b981',
@@ -3846,7 +3846,7 @@ function AppContent() {
 
             <div class="footer">
               <p style="margin: 0;">${pdfFooterText}</p>
-              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} SEBA Team. All Rights Reserved.</p>
             </div>
           </div>
 
@@ -4046,7 +4046,7 @@ function AppContent() {
 
             <div class="footer">
               <p style="margin: 0;">${pdfFooterText}</p>
-              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} Seba Team. All Rights Reserved.</p>
+              <p style="margin: 6px 0 0 0;">© ${new Date().getFullYear()} SEBA Team. All Rights Reserved.</p>
             </div>
           </div>
           <script>
@@ -8838,7 +8838,7 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
               transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
             />
           )}
-          <span className="relative z-20">Vs Seba member</span>
+          <span className="relative z-20">Vs SEBA member</span>
         </button>
       </div>
 
