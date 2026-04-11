@@ -991,6 +991,43 @@ const getDeviceInfo = () => {
   return { deviceName, deviceModel, userAgent: ua };
 };
 
+const fetchPreciseLocation = async (): Promise<string> => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      // Fallback to IP if geolocation not supported
+      fetch('https://ipapi.co/json/')
+        .then(res => res.json())
+        .then(data => resolve(data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location"))
+        .catch(() => resolve("Unknown Location"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          // Reverse geocoding using OpenStreetMap (Free, no key required for low volume)
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
+          const data = await res.json();
+          const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "Unknown City";
+          const country = data.address.country || "Unknown Country";
+          resolve(`${city}, ${country}`);
+        } catch (e) {
+          // Fallback to coordinates if reverse geocoding fails
+          resolve(`${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
+        }
+      },
+      () => {
+        // Fallback to IP if user denies or error occurs
+        fetch('https://ipapi.co/json/')
+          .then(res => res.json())
+          .then(data => resolve(data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location"))
+          .catch(() => resolve("Unknown Location"));
+      },
+      { timeout: 10000 }
+    );
+  });
+};
+
 // --- Custom Notification Page ---
 const CustomNotificationPage = ({ onClose, isDarkMode, allMembers, onSend }: { 
   onClose: () => void, 
@@ -1298,12 +1335,13 @@ function CloudPinPage({
           const { deviceName, deviceModel, userAgent } = getDeviceInfo();
           const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
           
+          const location = await fetchPreciseLocation();
           await setDoc(doc(db, 'sessions', newSessionId), {
             id: newSessionId,
             userId: currentUser.id,
             deviceName,
             deviceModel,
-            location: "Unknown Location",
+            location,
             userAgent,
             status: 'active',
             lastActive: serverTimestamp()
@@ -3060,41 +3098,20 @@ function AppContent() {
           const { deviceName, deviceModel, userAgent } = getDeviceInfo();
           const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
           
-          // Get location (optional)
-          fetch('https://ipapi.co/json/')
-            .then(res => res.json())
-            .then(locData => {
-              let location = "Unknown Location";
-              if (locData.city && locData.country_name) {
-                location = `${locData.city}, ${locData.country_name}`;
-              }
-              return setDoc(doc(db, 'sessions', newSessionId), {
-                id: newSessionId,
-                userId: user.id,
-                deviceName,
-                deviceModel,
-                location,
-                userAgent,
-                status: 'active',
-                lastActive: serverTimestamp()
-              });
-            })
-            .catch(() => {
-              return setDoc(doc(db, 'sessions', newSessionId), {
-                id: newSessionId,
-                userId: user.id,
-                deviceName,
-                deviceModel,
-                location: "Unknown Location",
-                userAgent,
-                status: 'active',
-                lastActive: serverTimestamp()
-              });
-            })
-            .then(() => {
-              localStorage.setItem('seba_session_id', newSessionId);
-            })
-            .catch(err => console.error("Error bootstrapping session:", err));
+          fetchPreciseLocation().then(location => {
+            return setDoc(doc(db, 'sessions', newSessionId), {
+              id: newSessionId,
+              userId: user.id,
+              deviceName,
+              deviceModel,
+              location,
+              userAgent,
+              status: 'active',
+              lastActive: serverTimestamp()
+            });
+          }).then(() => {
+            localStorage.setItem('seba_session_id', newSessionId);
+          }).catch(err => console.error("Error bootstrapping session:", err));
         }
       } catch (e) {
         console.error("Error parsing saved user data:", e);
@@ -3534,17 +3551,7 @@ function AppContent() {
       const { deviceName, deviceModel, userAgent } = getDeviceInfo();
       const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
-      // Get location (optional)
-      let location = "Unknown Location";
-      try {
-        const locRes = await fetch('https://ipapi.co/json/');
-        const locData = await locRes.json();
-        if (locData.city && locData.country_name) {
-          location = `${locData.city}, ${locData.country_name}`;
-        }
-      } catch (e) {
-        console.warn("Could not fetch location:", e);
-      }
+      const location = await fetchPreciseLocation();
 
       await setDoc(doc(db, 'sessions', sessionId), {
         id: sessionId,

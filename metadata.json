@@ -1,5 +1,5 @@
 {
   "name": "Seba Blood Donor Management",
   "description": "A comprehensive blood donor management app with Google Sheets integration, profile management, and profile picture support.",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": ["camera", "geolocation"]
 }
