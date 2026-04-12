@@ -189,6 +189,31 @@
         "lastActive": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "deviceName", "deviceModel", "lastActive", "status"]
+    },
+    "blood_posts": {
+      "title": "Blood Donation Post",
+      "description": "Request for blood donation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhotoId": { "type": "string" },
+        "authorAddress": { "type": "string" },
+        "bloodGroup": { "type": "string" },
+        "patientName": { "type": "string" },
+        "address": { "type": "string" },
+        "donationDate": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "acceptorId": { "type": "string" },
+        "acceptorName": { "type": "string" },
+        "acceptorPhotoId": { "type": "string" },
+        "acceptorAddress": { "type": "string" },
+        "acceptorPhone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "authorId", "authorName", "bloodGroup", "patientName", "address", "donationDate", "contactNumber", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -243,6 +268,10 @@
     "/sessions/{sessionId}": {
       "schema": "sessions",
       "description": "Collection of active user login sessions"
+    },
+    "/blood_posts/{postId}": {
+      "schema": "blood_posts",
+      "description": "Collection of blood donation requests"
     }
   }
 }

@@ -69,9 +69,10 @@ import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth, storage } from './firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy, deleteField } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
+import { BD_DATA } from './constants/bdData';
 
 // --- Types ---
 interface Member {
@@ -178,6 +179,26 @@ interface DonationTransaction {
 interface Notice {
   title: string;
   message: string;
+}
+
+interface BloodPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorPhotoId?: string;
+  authorAddress: string;
+  bloodGroup: string;
+  patientName: string;
+  address: string;
+  donationDate: string;
+  contactNumber: string;
+  status: 'pending' | 'accepted';
+  acceptorId?: string;
+  acceptorName?: string;
+  acceptorPhotoId?: string;
+  acceptorAddress?: string;
+  acceptorPhone?: string;
+  createdAt: any;
 }
 
 interface AdvanceSettings {
@@ -1156,6 +1177,270 @@ const UpdateModal = ({
               </div>
             </div>
           )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// --- Blood Post Modals ---
+const CreateBloodPostModal = ({ 
+  onClose, 
+  isDarkMode, 
+  currentUser 
+}: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  currentUser: Member | null 
+}) => {
+  const [formData, setFormData] = useState({
+    bloodGroup: '',
+    patientName: '',
+    address: '',
+    donationDate: '',
+    contactNumber: currentUser?.phone || ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    if (!formData.bloodGroup || !formData.patientName || !formData.address || !formData.donationDate || !formData.contactNumber) {
+      alert("সবগুলো তথ্য পূরণ করুন।");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const postRef = doc(collection(db, 'blood_posts'));
+      await setDoc(postRef, {
+        id: postRef.id,
+        authorId: currentUser.id,
+        authorName: currentUser.name,
+        authorPhotoId: currentUser.photoId || '',
+        authorAddress: currentUser.area || '',
+        ...formData,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
+      onClose();
+    } catch (error) {
+      console.error("Error creating blood post:", error);
+      alert("পোস্ট করতে সমস্যা হয়েছে।");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className={cn(
+          "w-full max-w-md rounded-3xl overflow-hidden shadow-2xl",
+          isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-white"
+        )}
+      >
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Plus className="w-6 h-6 text-red-500" />
+            রক্তের অনুরোধ পোস্ট করুন
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">রক্তের গ্রুপ</label>
+            <select 
+              required
+              value={formData.bloodGroup}
+              onChange={(e) => setFormData({...formData, bloodGroup: e.target.value})}
+              className={cn(
+                "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors appearance-none",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+              )}
+            >
+              <option value="">নির্বাচন করুন</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">রোগীর নাম</label>
+            <input 
+              required
+              type="text" 
+              placeholder="রোগীর নাম লিখুন"
+              value={formData.patientName}
+              onChange={(e) => setFormData({...formData, patientName: e.target.value})}
+              className={cn(
+                "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+              )}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">রক্তদানের স্থান/ঠিকানা</label>
+            <input 
+              required
+              type="text" 
+              placeholder="হাসপাতাল বা এলাকার নাম"
+              value={formData.address}
+              onChange={(e) => setFormData({...formData, address: e.target.value})}
+              className={cn(
+                "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold opacity-60 ml-1">রক্তদানের তারিখ</label>
+              <input 
+                required
+                type="date" 
+                value={formData.donationDate}
+                onChange={(e) => setFormData({...formData, donationDate: e.target.value})}
+                className={cn(
+                  "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                )}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold opacity-60 ml-1">যোগাযোগ নম্বর</label>
+              <input 
+                required
+                type="tel" 
+                placeholder="01XXXXXXXXX"
+                value={formData.contactNumber}
+                onChange={(e) => setFormData({...formData, contactNumber: e.target.value})}
+                className={cn(
+                  "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                )}
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className={cn(
+              "w-full h-12 bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2 mt-4",
+              isSubmitting && "opacity-70 cursor-not-allowed"
+            )}
+          >
+            {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
+            পোস্ট করুন
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const AcceptorInfoModal = ({ 
+  onClose, 
+  isDarkMode, 
+  post 
+}: { 
+  onClose: () => void, 
+  isDarkMode: boolean, 
+  post: BloodPost 
+}) => {
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className={cn(
+          "w-full max-w-md rounded-3xl overflow-hidden shadow-2xl",
+          isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-white"
+        )}
+      >
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <User className="w-6 h-6 text-emerald-500" />
+            রক্তদাতার তথ্য
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-8 flex flex-col items-center text-center space-y-4">
+          {post.acceptorPhotoId ? (
+            <img 
+              src={`https://lh3.googleusercontent.com/d/${post.acceptorPhotoId}`} 
+              className="w-24 h-24 rounded-2xl object-cover shadow-xl border-4 border-emerald-500/20"
+              alt={post.acceptorName}
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500 shadow-xl border-4 border-emerald-500/20">
+              <User className="w-12 h-12" />
+            </div>
+          )}
+          
+          <div>
+            <h3 className="text-2xl font-bold">{post.acceptorName}</h3>
+            <p className="text-emerald-500 font-bold text-sm">রক্তদান করতে ইচ্ছুক</p>
+          </div>
+
+          <div className="w-full space-y-3 pt-4">
+            <div className={cn(
+              "p-4 rounded-2xl border flex items-center gap-4",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-100"
+            )}>
+              <MapPin className="w-5 h-5 text-emerald-500" />
+              <div className="text-left">
+                <p className="text-[10px] uppercase tracking-widest opacity-50">ঠিকানা</p>
+                <p className="text-sm font-bold">{post.acceptorAddress}</p>
+              </div>
+            </div>
+
+            <div className={cn(
+              "p-4 rounded-2xl border flex items-center gap-4",
+              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-100"
+            )}>
+              <Phone className="w-5 h-5 text-emerald-500" />
+              <div className="text-left">
+                <p className="text-[10px] uppercase tracking-widest opacity-50">মোবাইল</p>
+                <p className="text-sm font-bold">{post.acceptorPhone}</p>
+              </div>
+            </div>
+          </div>
+
+          <a 
+            href={`tel:${post.acceptorPhone}`}
+            className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2 mt-4"
+          >
+            <Phone className="w-5 h-5" /> কল করুন
+          </a>
         </div>
       </motion.div>
     </motion.div>
@@ -2448,6 +2733,11 @@ function AppContent() {
   const [donationProjects, setDonationProjects] = useState<DonationProject[]>([]);
   const [donationTransactions, setDonationTransactions] = useState<DonationTransaction[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [activeBloodTab, setActiveBloodTab] = useState<'donors' | 'posts'>('donors');
+  const [bloodPosts, setBloodPosts] = useState<BloodPost[]>([]);
+  const [showCreateBloodPostModal, setShowCreateBloodPostModal] = useState(false);
+  const [selectedBloodPost, setSelectedBloodPost] = useState<BloodPost | null>(null);
+  const [showAcceptorInfoModal, setShowAcceptorInfoModal] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isAppInitializing, setIsAppInitializing] = useState(true);
@@ -3441,6 +3731,91 @@ function AppContent() {
 
     return () => unsubscribe();
   }, [isAuthReady, currentUser]);
+
+  // Blood Posts Listener and Auto-deletion
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    const q = query(collection(db, 'blood_posts'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const posts: BloodPost[] = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as BloodPost;
+        const postDate = new Date(data.donationDate);
+        postDate.setHours(0, 0, 0, 0);
+
+        if (postDate < today) {
+          deleteDoc(doc(db, 'blood_posts', docSnap.id)).catch(err => console.error("Error auto-deleting blood post:", err));
+        } else {
+          posts.push({ ...data, id: docSnap.id });
+        }
+      });
+      setBloodPosts(posts);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'blood_posts');
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
+  const acceptBloodPost = async (post: BloodPost) => {
+    if (!currentUser) {
+      alert("লগইন করুন।");
+      return;
+    }
+    if (!bloodDonationEnabled) {
+      alert("আপনার 'Blood Donation' অপশনটি চালু থাকতে হবে।");
+      return;
+    }
+    if (post.status === 'accepted') {
+      alert("এই অনুরোধটি ইতিমধ্যে গ্রহণ করা হয়েছে।");
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'blood_posts', post.id), {
+        status: 'accepted',
+        acceptorId: currentUser.id,
+        acceptorName: currentUser.name,
+        acceptorPhotoId: currentUser.photoId || '',
+        acceptorAddress: currentUser.area || '',
+        acceptorPhone: currentUser.phone || ''
+      });
+      alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
+    } catch (error) {
+      console.error("Error accepting blood post:", error);
+      alert("অনুরোধ গ্রহণ করতে সমস্যা হয়েছে।");
+    }
+  };
+
+  const cancelBloodPostAcceptance = async (post: BloodPost) => {
+    if (!currentUser || currentUser.id !== post.acceptorId) {
+      alert("আপনি এই অনুরোধটি বাতিল করতে পারবেন না।");
+      return;
+    }
+
+    if (!confirm("আপনি কি নিশ্চিত যে আপনি এই রক্তদানের অনুরোধটি বাতিল করতে চান?")) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'blood_posts', post.id), {
+        status: 'pending',
+        acceptorId: deleteField(),
+        acceptorName: deleteField(),
+        acceptorPhotoId: deleteField(),
+        acceptorAddress: deleteField(),
+        acceptorPhone: deleteField()
+      });
+      alert("আপনি সফলভাবে রক্তদানের অনুরোধটি বাতিল করেছেন।");
+    } catch (error) {
+      console.error("Error cancelling blood post acceptance:", error);
+      alert("বাতিল করতে সমস্যা হয়েছে।");
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!currentUser || !isDeveloper(currentUser)) return;
@@ -4528,6 +4903,8 @@ function AppContent() {
     }
   };
 
+  const hasPendingBloodPosts = useMemo(() => bloodPosts.some(post => post.status === 'pending'), [bloodPosts]);
+
   return (
     <>
       <LandscapeBlocker isDarkMode={isDarkMode} />
@@ -5003,83 +5380,280 @@ function AppContent() {
             onScroll={handleBloodScroll}
             className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto relative"
           >
-            <div className="mb-6">
-              <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
-              <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
+            {/* Tabbed Header */}
+            <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 mb-6 relative">
+              <button 
+                onClick={() => setActiveBloodTab('donors')} 
+                className={cn(
+                  "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
+                  activeBloodTab === 'donors' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
+                )}
+              >
+                {activeBloodTab === 'donors' && (
+                  <motion.div 
+                    layoutId="activeBloodTab"
+                    className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10">রক্তদাতা</span>
+              </button>
+              <button 
+                onClick={() => setActiveBloodTab('posts')} 
+                className={cn(
+                  "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
+                  activeBloodTab === 'posts' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
+                )}
+              >
+                {activeBloodTab === 'posts' && (
+                  <motion.div 
+                    layoutId="activeBloodTab"
+                    className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center justify-center gap-1.5">
+                  পোস্ট
+                  {hasPendingBloodPosts && (
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  )}
+                </span>
+              </button>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <div className={cn(
-                "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
-                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-              )}>
-                <Search className="w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
-                  className="flex-1 py-3 bg-transparent outline-none text-sm"
-                  value={bloodSearchQuery}
-                  onChange={(e) => setBloodSearchQuery(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
-                  <select 
-                    value={selectedBloodGroup}
-                    onChange={(e) => setSelectedBloodGroup(e.target.value)}
-                    className={cn(
-                      "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                    )}
-                  >
-                    <option value="সব">সব গ্রুপ</option>
-                    {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
+            {activeBloodTab === 'donors' ? (
+              <>
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
+                  <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
                 </div>
-              </div>
-            </div>
 
-            {isSearchingDonors ? (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4 opacity-70">
-                <Loader2 className="w-10 h-10 animate-spin text-red-500" />
-                <p className="text-sm font-bold animate-pulse">সিস্টেম সার্চ করছে...</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredDonors.map((donor, idx) => (
-                  <div key={`donor-${idx}-${donor.phone}`} className={cn(
-                    "p-4 rounded-xl border shadow-sm",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                <div className="space-y-3 mb-6">
+                  <div className={cn(
+                    "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
                   )}>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
-                      <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
-                    </div>
-                    <p className="text-sm opacity-80 mb-1">
-                      <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
-                    </p>
-                    <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {currentUser ? donor.phone : 'লুকানো'}</p>
-                    {currentUser ? (
-                      <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
-                        কল করুন
-                      </a>
-                    ) : (
-                      <button 
-                        onClick={() => setActiveTab('profile')}
-                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
+                      className="flex-1 py-3 bg-transparent outline-none text-sm"
+                      value={bloodSearchQuery}
+                      onChange={(e) => setBloodSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
+                      <select 
+                        value={selectedBloodGroup}
+                        onChange={(e) => setSelectedBloodGroup(e.target.value)}
+                        className={cn(
+                          "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                        )}
                       >
-                        বিস্তারিত দেখতে লগইন করুন
-                      </button>
+                        <option value="সব">সব গ্রুপ</option>
+                        {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {isSearchingDonors ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4 opacity-70">
+                    <Loader2 className="w-10 h-10 animate-spin text-red-500" />
+                    <p className="text-sm font-bold animate-pulse">সিস্টেম সার্চ করছে...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredDonors.map((donor, idx) => (
+                      <div key={`donor-${idx}-${donor.phone}`} className={cn(
+                        "p-4 rounded-xl border shadow-sm",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
+                          <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
+                        </div>
+                        <p className="text-sm opacity-80 mb-1">
+                          <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
+                        </p>
+                        <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {currentUser ? donor.phone : 'লুকানো'}</p>
+                        {currentUser ? (
+                          <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
+                            কল করুন
+                          </a>
+                        ) : (
+                          <button 
+                            onClick={() => setActiveTab('profile')}
+                            className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                          >
+                            বিস্তারিত দেখতে লগইন করুন
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {filteredDonors.length === 0 && (
+                      <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
                     )}
                   </div>
-                ))}
-                {filteredDonors.length === 0 && (
-                  <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
                 )}
+              </>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold">রক্তের অনুরোধ</h2>
+                    <p className="text-sm opacity-70">জরুরী রক্তের প্রয়োজনে পোস্ট করুন।</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (!currentUser) {
+                        alert("লগইন করুন।");
+                        setActiveTab('profile');
+                        return;
+                      }
+                      setShowCreateBloodPostModal(true);
+                    }}
+                    className="p-3 bg-red-500 text-white rounded-2xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
+                  >
+                    <Plus className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {bloodPosts.length === 0 ? (
+                    <div className="text-center py-20 opacity-50">
+                      <Heart className="w-16 h-16 mx-auto mb-4 opacity-20 text-red-500" />
+                      <p>কোনো রক্তের অনুরোধ পাওয়া যায়নি</p>
+                    </div>
+                  ) : (
+                    bloodPosts.map((post) => (
+                      <div key={post.id} className={cn(
+                        "p-5 rounded-3xl border shadow-sm space-y-4 relative overflow-hidden",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        {/* Post Header */}
+                        <div className="flex items-center gap-3">
+                          {post.authorPhotoId ? (
+                            <img 
+                              src={`https://lh3.googleusercontent.com/d/${post.authorPhotoId}`} 
+                              className="w-10 h-10 rounded-xl object-cover"
+                              alt={post.authorName}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
+                              <User className="w-6 h-6" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-sm truncate">{post.authorName}</h4>
+                            <p className="text-[10px] opacity-50 truncate flex items-center gap-1">
+                              <MapPin className="w-3 h-3" /> {post.authorAddress}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="px-3 py-1 bg-red-500 text-white rounded-full text-[10px] font-black shadow-sm">
+                              {post.bloodGroup}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Post Content */}
+                        <div className={cn(
+                          "p-4 rounded-2xl space-y-2",
+                          isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
+                        )}>
+                          <div className="flex justify-between text-sm">
+                            <span className="opacity-60">রোগীর নাম:</span>
+                            <span className="font-bold">{post.patientName}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="opacity-60">স্থান:</span>
+                            <span className="font-bold">{post.address}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="opacity-60">তারিখ:</span>
+                            <span className="font-bold text-red-500">{formatDate(post.donationDate)}</span>
+                          </div>
+                          {post.status === 'accepted' && (currentUser?.id === post.authorId || currentUser?.id === post.acceptorId) && (
+                            <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-700">
+                              <span className="opacity-60">যোগাযোগ:</span>
+                              <a href={`tel:${post.contactNumber}`} className="font-bold text-emerald-500 flex items-center gap-1">
+                                <Phone className="w-3 h-3" /> {post.contactNumber}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Footer / Actions */}
+                        <div className="flex items-center justify-between pt-2">
+                          <div className="flex items-center gap-2">
+                            {post.status === 'accepted' ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 text-emerald-500 font-bold text-xs">
+                                  <CheckCircle2 className="w-4 h-4" /> {post.acceptorName}
+                                </div>
+                                {currentUser?.id === post.authorId && (
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedBloodPost(post);
+                                      setShowAcceptorInfoModal(true);
+                                    }}
+                                    className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {currentUser?.id === post.acceptorId && (
+                                  <button 
+                                    onClick={() => cancelBloodPostAcceptance(post)}
+                                    className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors text-[10px] font-bold"
+                                  >
+                                    বাতিল করুন
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs opacity-50 italic">অপেক্ষমান...</span>
+                            )}
+                          </div>
+
+                          {post.status === 'pending' && (
+                            <button 
+                              onClick={() => acceptBloodPost(post)}
+                              className={cn(
+                                "px-6 py-2 rounded-xl text-xs font-bold transition-all active:scale-95",
+                                bloodDonationEnabled 
+                                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" 
+                                  : "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
+                              )}
+                            >
+                              গ্রহণ করুন
+                            </button>
+                          )}
+                          
+                          {currentUser?.id === post.authorId && (
+                            <button 
+                              onClick={async () => {
+                                if (confirm("আপনি কি এই পোস্টটি মুছে ফেলতে চান?")) {
+                                  await deleteDoc(doc(db, 'blood_posts', post.id));
+                                }
+                              }}
+                              className="p-2 text-red-500/50 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -5882,6 +6456,27 @@ function AppContent() {
         )}
       </AnimatePresence>
 
+      {/* Blood Post Modals */}
+      <AnimatePresence>
+        {showCreateBloodPostModal && (
+          <CreateBloodPostModal 
+            onClose={() => setShowCreateBloodPostModal(false)}
+            isDarkMode={isDarkMode}
+            currentUser={currentUser}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAcceptorInfoModal && selectedBloodPost && (
+          <AcceptorInfoModal 
+            onClose={() => setShowAcceptorInfoModal(false)}
+            isDarkMode={isDarkMode}
+            post={selectedBloodPost}
+          />
+        )}
+      </AnimatePresence>
+
       </main>
 
       {/* Bottom Nav */}
@@ -5892,7 +6487,7 @@ function AppContent() {
         <NavItem active={activeTab === 'home'} icon={<Home />} label={advanceSettings.tabNames.home} onClick={() => setActiveTab('home')} />
         <NavItem active={activeTab === 'books'} icon={<BookOpen />} label={advanceSettings.tabNames.books} onClick={() => setActiveTab('books')} />
         <NavItem active={activeTab === 'members'} icon={<Users />} label={advanceSettings.tabNames.members} onClick={() => setActiveTab('members')} />
-        <NavItem active={activeTab === 'blood'} icon={<Heart />} label={advanceSettings.tabNames.blood} onClick={() => setActiveTab('blood')} />
+        <NavItem active={activeTab === 'blood'} icon={<Heart />} label={advanceSettings.tabNames.blood} onClick={() => setActiveTab('blood')} showDot={hasPendingBloodPosts} />
         <NavItem active={activeTab === 'profile'} icon={<User />} label={advanceSettings.tabNames.profile} onClick={() => setActiveTab('profile')} />
       </nav>
 
@@ -8604,7 +9199,7 @@ function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: {
   );
 }
 
-function NavItem({ active, icon, label, onClick }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void }) {
+function NavItem({ active, icon, label, onClick, showDot }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void, showDot?: boolean }) {
   return (
     <button 
       onClick={onClick}
@@ -8613,7 +9208,12 @@ function NavItem({ active, icon, label, onClick }: { active: boolean, icon: Reac
         active ? "text-emerald-500" : "text-slate-400"
       )}
     >
-      <div className={cn("mb-1", active ? "scale-110" : "scale-100 transition-transform")}>{icon}</div>
+      <div className={cn("mb-1 relative", active ? "scale-110" : "scale-100 transition-transform")}>
+        {icon}
+        {showDot && (
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
+        )}
+      </div>
       <span className="text-[10px] font-bold">{label}</span>
     </button>
   );
