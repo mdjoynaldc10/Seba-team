@@ -6253,15 +6253,18 @@ function AppContent() {
                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
                 
                 <div className="flex flex-col items-start text-left space-y-4 relative z-10">
-                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-2">
-                    <AlertCircle className="w-6 h-6 text-emerald-500" />
+                  <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center mb-2">
+                    <AlertCircle className="w-5 h-5 text-emerald-500" />
                   </div>
                   
-                  <h3 className="text-[16px] font-bold text-emerald-500 truncate w-full">{notice.title}</h3>
+                  <h3 className={cn(
+                    "text-[16px] font-bold truncate w-full",
+                    isDarkMode ? "text-white" : "text-black"
+                  )}>{notice.title}</h3>
                   
                   <div className={cn(
-                    "w-full p-4 rounded-2xl text-[14px] leading-relaxed whitespace-pre-wrap",
-                    isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
+                    "w-full text-[14px] leading-relaxed whitespace-pre-wrap",
+                    isDarkMode ? "text-white" : "text-black"
                   )}>
                     {notice.message}
                   </div>
@@ -6311,9 +6314,9 @@ function AppContent() {
                     initial={{ scale: 0, rotate: -20 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ delay: 0.2, type: 'spring' }}
-                    className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-emerald-500/40 mb-8"
+                    className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-6"
                   >
-                    <Megaphone className="w-10 h-10 text-white" />
+                    <Megaphone className="w-6 h-6 text-white" />
                   </motion.div>
 
                   <motion.div
@@ -6322,10 +6325,16 @@ function AppContent() {
                     transition={{ delay: 0.3 }}
                     className="space-y-2 w-full"
                   >
-                    <h2 className="text-[16px] font-bold tracking-tight text-emerald-500 leading-tight truncate w-full">
+                    <h2 className={cn(
+                      "text-[16px] font-bold tracking-tight leading-tight truncate w-full",
+                      isDarkMode ? "text-white" : "text-black"
+                    )}>
                       {activeGlobalNotice.title}
                     </h2>
-                    <div className="flex items-center justify-start gap-2 opacity-50 text-[10px] font-bold uppercase tracking-widest">
+                    <div className={cn(
+                      "flex items-center justify-start gap-2 text-[10px] font-bold uppercase tracking-widest",
+                      isDarkMode ? "text-white" : "text-black"
+                    )}>
                       <span>{formatDate(activeGlobalNotice.createdAt)}</span>
                       <span className="w-1 h-1 rounded-full bg-current" />
                       <span>{activeGlobalNotice.authorName}</span>
@@ -6337,8 +6346,8 @@ function AppContent() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                     className={cn(
-                      "mt-10 p-8 rounded-[2rem] text-[14px] leading-relaxed font-medium w-full border shadow-inner whitespace-pre-wrap",
-                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white/50 border-emerald-100"
+                      "mt-6 text-[14px] leading-relaxed font-medium w-full whitespace-pre-wrap",
+                      isDarkMode ? "text-white" : "text-black"
                     )}
                     style={{ textAlign: activeGlobalNotice.alignment || 'left' }}
                   >
