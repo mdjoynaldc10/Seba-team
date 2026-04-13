@@ -1,10 +1,9 @@
-const CACHE_NAME = 'seba-app-v1';
+const CACHE_NAME = 'seba-app-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  'https://via.placeholder.com/192',
-  'https://via.placeholder.com/512'
+  'https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj'
 ];
 
 self.addEventListener('install', (event) => {
