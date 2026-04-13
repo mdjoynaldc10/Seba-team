@@ -6244,10 +6244,7 @@ function AppContent() {
                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className={cn(
-                  "relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10 overflow-hidden",
-                  isDarkMode ? "bg-slate-800 text-white" : "bg-white text-slate-900"
-                )}
+                className="relative w-full max-w-sm p-6 rounded-3xl shadow-2xl z-10 overflow-hidden bg-slate-900/95 backdrop-blur-xl text-white"
               >
                 {/* Decorative background element */}
                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
@@ -6257,15 +6254,9 @@ function AppContent() {
                     <AlertCircle className="w-5 h-5 text-emerald-500" />
                   </div>
                   
-                  <h3 className={cn(
-                    "text-[16px] font-bold truncate w-full",
-                    isDarkMode ? "text-white" : "text-black"
-                  )}>{notice.title}</h3>
+                  <h3 className="text-[18px] font-bold text-emerald-500 truncate w-full">{notice.title}</h3>
                   
-                  <div className={cn(
-                    "w-full text-[14px] leading-relaxed whitespace-pre-wrap",
-                    isDarkMode ? "text-white" : "text-black"
-                  )}>
+                  <div className="w-full text-[14px] leading-relaxed whitespace-pre-wrap text-white">
                     {notice.message}
                   </div>
                   
@@ -6325,16 +6316,10 @@ function AppContent() {
                     transition={{ delay: 0.3 }}
                     className="space-y-2 w-full"
                   >
-                    <h2 className={cn(
-                      "text-[16px] font-bold tracking-tight leading-tight truncate w-full",
-                      isDarkMode ? "text-white" : "text-black"
-                    )}>
+                    <h2 className="text-[18px] font-bold tracking-tight leading-tight truncate w-full text-emerald-500">
                       {activeGlobalNotice.title}
                     </h2>
-                    <div className={cn(
-                      "flex items-center justify-start gap-2 text-[10px] font-bold uppercase tracking-widest",
-                      isDarkMode ? "text-white" : "text-black"
-                    )}>
+                    <div className="flex items-center justify-start gap-2 text-[10px] font-bold uppercase tracking-widest text-white">
                       <span>{formatDate(activeGlobalNotice.createdAt)}</span>
                       <span className="w-1 h-1 rounded-full bg-current" />
                       <span>{activeGlobalNotice.authorName}</span>
@@ -6345,10 +6330,7 @@ function AppContent() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className={cn(
-                      "mt-6 text-[14px] leading-relaxed font-medium w-full whitespace-pre-wrap",
-                      isDarkMode ? "text-white" : "text-black"
-                    )}
+                    className="mt-6 text-[14px] leading-relaxed font-medium w-full whitespace-pre-wrap text-white"
                     style={{ textAlign: activeGlobalNotice.alignment || 'left' }}
                   >
                     {activeGlobalNotice.message}
