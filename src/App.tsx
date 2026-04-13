@@ -2752,9 +2752,11 @@ function AppContent() {
         
         if (nextIndex >= 0 && nextIndex < tabs.length) {
           setTab(tabs[nextIndex]);
+          return true;
         }
       }
     }
+    return false;
   };
 
   const [bloodPosts, setBloodPosts] = useState<BloodPost[]>([]);
@@ -5055,7 +5057,13 @@ function AppContent() {
       {/* Main Content */}
       <main className="flex-1 mt-[60px] mb-[65px] relative overflow-hidden">
         <motion.div 
-          onPanEnd={(_, info) => handleSwipe(info, ['home', 'books', 'members', 'blood', 'profile'], activeTab, setActiveTab)}
+          onPanEnd={(_, info) => {
+            if (activeTab === 'blood') {
+              const handled = handleSwipe(info, ['donors', 'posts'], activeBloodTab, setActiveBloodTab);
+              if (handled) return;
+            }
+            handleSwipe(info, ['home', 'books', 'members', 'blood', 'profile'], activeTab, setActiveTab);
+          }}
           className="flex h-full transition-transform duration-300 ease-out"
           style={{ transform: `translateX(-${['home', 'books', 'members', 'blood', 'profile'].indexOf(activeTab) * 20}%)`, width: '500%' }}
         >
@@ -5408,10 +5416,7 @@ function AppContent() {
             onScroll={handleBloodScroll}
             className="w-1/5 h-full overflow-y-auto max-w-2xl mx-auto relative"
           >
-            <motion.div 
-              onPanEnd={(_, info) => handleSwipe(info, ['donors', 'posts'], activeBloodTab, setActiveBloodTab)}
-              className="min-h-full"
-            >
+            <div className="min-h-full">
             {/* Sticky Header */}
             <div className={cn(
               "sticky top-0 z-[60] p-4 pb-2 space-y-4",
@@ -5718,7 +5723,7 @@ function AppContent() {
                 </div>
             )}
             </div>
-            </motion.div>
+            </div>
           </div>
 
           {/* Profile Tab */}
@@ -7779,7 +7784,7 @@ function AppContent() {
               {/* Tab Content */}
               <motion.div 
                 onPanEnd={(_, info) => handleSwipe(info, ['my-books', 'requests', 'history'], activeBorrowedTab, setActiveBorrowedTab)}
-                className="space-y-4"
+                className="space-y-4 min-h-[80vh]"
               >
                 {/* Member View: All in one list */}
                 {!(isAdmin(currentUser) || isDeveloper(currentUser)) && (
@@ -8252,7 +8257,7 @@ function AppContent() {
               {/* Tab Content */}
               <motion.div 
                 onPanEnd={(_, info) => handleSwipe(info, ['info', 'payments', 'books', 'database'], activeProfileTab, setActiveProfileTab)}
-                className="space-y-4"
+                className="space-y-4 min-h-[80vh]"
               >
                 {activeProfileTab === 'info' && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -8593,7 +8598,7 @@ function AppContent() {
 
               <motion.div 
                 onPanEnd={(_, info) => handleSwipe(info, ['write', 'history'], activeGlobalNoticeTab, setActiveGlobalNoticeTab)}
-                className="mt-6"
+                className="mt-6 min-h-[80vh]"
               >
                 <AnimatePresence mode="wait">
                   {activeGlobalNoticeTab === 'write' ? (
@@ -8751,7 +8756,7 @@ function AppContent() {
 
               <motion.div 
                 onPanEnd={(_, info) => handleSwipe(info, ['details', 'borrowers'], activeBookDetailTab, setActiveBookDetailTab)}
-                className="mt-6"
+                className="mt-6 min-h-[80vh]"
               >
                 {activeBookDetailTab === 'details' ? (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
