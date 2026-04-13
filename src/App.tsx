@@ -2734,6 +2734,24 @@ function AppContent() {
   const [donationTransactions, setDonationTransactions] = useState<DonationTransaction[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [activeBloodTab, setActiveBloodTab] = useState<'donors' | 'posts'>('donors');
+  const handleSwipe = (info: any, tabs: string[], currentTab: string, setTab: (tab: any) => void) => {
+    const threshold = 30;
+    const velocityThreshold = 0.2;
+    const { offset, velocity } = info;
+    
+    if (Math.abs(offset.x) > Math.abs(offset.y) * 1.2) {
+      if (Math.abs(offset.x) > threshold || Math.abs(velocity.x) > velocityThreshold) {
+        const direction = offset.x > 0 ? -1 : 1;
+        const currentIndex = tabs.indexOf(currentTab);
+        const nextIndex = currentIndex + direction;
+        
+        if (nextIndex >= 0 && nextIndex < tabs.length) {
+          setTab(tabs[nextIndex]);
+        }
+      }
+    }
+  };
+
   const [bloodPosts, setBloodPosts] = useState<BloodPost[]>([]);
   const [showCreateBloodPostModal, setShowCreateBloodPostModal] = useState(false);
   const [selectedBloodPost, setSelectedBloodPost] = useState<BloodPost | null>(null);
@@ -5029,7 +5047,8 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="flex-1 mt-[60px] mb-[65px] relative overflow-hidden">
-        <div 
+        <motion.div 
+          onPanEnd={(_, info) => handleSwipe(info, ['home', 'books', 'members', 'blood', 'profile'], activeTab, setActiveTab)}
           className="flex h-full transition-transform duration-300 ease-out"
           style={{ transform: `translateX(-${['home', 'books', 'members', 'blood', 'profile'].indexOf(activeTab) * 20}%)`, width: '500%' }}
         >
@@ -5382,6 +5401,10 @@ function AppContent() {
             onScroll={handleBloodScroll}
             className="w-1/5 h-full overflow-y-auto max-w-2xl mx-auto relative"
           >
+            <motion.div 
+              onPanEnd={(_, info) => handleSwipe(info, ['donors', 'posts'], activeBloodTab, setActiveBloodTab)}
+              className="min-h-full"
+            >
             {/* Sticky Header */}
             <div className={cn(
               "sticky top-0 z-[60] p-4 pb-2 space-y-4",
@@ -5687,8 +5710,9 @@ function AppContent() {
                   )}
                 </div>
             )}
+            </div>
+            </motion.div>
           </div>
-        </div>
 
           {/* Profile Tab */}
           <div className="w-1/5 h-full overflow-y-auto p-4 pt-0 max-w-2xl mx-auto">
@@ -6195,7 +6219,8 @@ function AppContent() {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
+      </main>
 
         {/* Notice Modal */}
         <AnimatePresence>
@@ -6508,8 +6533,6 @@ function AppContent() {
           />
         )}
       </AnimatePresence>
-
-      </main>
 
       {/* Bottom Nav */}
       <nav className={cn(
@@ -7755,7 +7778,10 @@ function AppContent() {
               )}
 
               {/* Tab Content */}
-              <div className="space-y-4">
+              <motion.div 
+                onPanEnd={(_, info) => handleSwipe(info, ['my-books', 'requests', 'history'], activeBorrowedTab, setActiveBorrowedTab)}
+                className="space-y-4"
+              >
                 {/* Member View: All in one list */}
                 {!(isAdmin(currentUser) || isDeveloper(currentUser)) && (
                   <div className="space-y-6">
@@ -8006,7 +8032,7 @@ function AppContent() {
                     })()}
                   </div>
                 )}
-              </div>
+              </motion.div>
             </div>
           </OverlayPage>
         )}
@@ -8225,7 +8251,10 @@ function AppContent() {
               </div>
 
               {/* Tab Content */}
-              <div className="space-y-4">
+              <motion.div 
+                onPanEnd={(_, info) => handleSwipe(info, ['info', 'payments', 'books', 'database'], activeProfileTab, setActiveProfileTab)}
+                className="space-y-4"
+              >
                 {activeProfileTab === 'info' && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">ব্যক্তিগত তথ্য</h3>
@@ -8350,7 +8379,7 @@ function AppContent() {
                     </div>
                   </div>
                 )}
-              </div>
+              </motion.div>
             </div>
           </OverlayPage>
         )}
@@ -8563,8 +8592,12 @@ function AppContent() {
                 </button>
               </div>
 
-              <AnimatePresence mode="wait">
-                {activeGlobalNoticeTab === 'write' ? (
+              <motion.div 
+                onPanEnd={(_, info) => handleSwipe(info, ['write', 'history'], activeGlobalNoticeTab, setActiveGlobalNoticeTab)}
+                className="mt-6"
+              >
+                <AnimatePresence mode="wait">
+                  {activeGlobalNoticeTab === 'write' ? (
                   <motion.div 
                     key="write-tab"
                     initial={{ opacity: 0, x: -20 }}
@@ -8642,8 +8675,9 @@ function AppContent() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-          </OverlayPage>
+            </motion.div>
+          </div>
+        </OverlayPage>
         )}
 
 
@@ -8689,7 +8723,11 @@ function AppContent() {
                 </button>
               </div>
 
-              {activeBookDetailTab === 'details' ? (
+              <motion.div 
+                onPanEnd={(_, info) => handleSwipe(info, ['details', 'borrowers'], activeBookDetailTab, setActiveBookDetailTab)}
+                className="mt-6"
+              >
+                {activeBookDetailTab === 'details' ? (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <div className="flex justify-center mb-6">
                     <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-32 h-44 shadow-xl" />
@@ -8770,7 +8808,8 @@ function AppContent() {
                   </button>
                 </div>
               )}
-            </div>
+            </motion.div>
+          </div>
 
             {/* Floating Borrow Button */}
             <div className="absolute bottom-6 left-6 right-6 flex justify-center">
