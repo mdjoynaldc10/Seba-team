@@ -4904,6 +4904,8 @@ function AppContent() {
   };
 
   const hasPendingBloodPosts = useMemo(() => bloodPosts.some(post => post.status === 'pending'), [bloodPosts]);
+  const totalBloodRequests = useMemo(() => bloodPosts.length, [bloodPosts]);
+  const pendingBloodRequests = useMemo(() => bloodPosts.filter(p => p.status === 'pending').length, [bloodPosts]);
 
   return (
     <>
@@ -5378,57 +5380,108 @@ function AppContent() {
           <div 
             ref={bloodTabRef}
             onScroll={handleBloodScroll}
-            className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto relative"
+            className="w-1/5 h-full overflow-y-auto max-w-2xl mx-auto relative"
           >
-            {/* Tabbed Header */}
-            <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 mb-6 relative">
-              <button 
-                onClick={() => setActiveBloodTab('donors')} 
-                className={cn(
-                  "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
-                  activeBloodTab === 'donors' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
-                )}
-              >
-                {activeBloodTab === 'donors' && (
-                  <motion.div 
-                    layoutId="activeBloodTab"
-                    className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-                <span className="relative z-10">রক্তদাতা</span>
-              </button>
-              <button 
-                onClick={() => setActiveBloodTab('posts')} 
-                className={cn(
-                  "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
-                  activeBloodTab === 'posts' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
-                )}
-              >
-                {activeBloodTab === 'posts' && (
-                  <motion.div 
-                    layoutId="activeBloodTab"
-                    className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center justify-center gap-1.5">
-                  পোস্ট
-                  {hasPendingBloodPosts && (
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            {/* Sticky Header */}
+            <div className={cn(
+              "sticky top-0 z-[60] p-4 pb-2 space-y-4",
+              isDarkMode ? "bg-slate-900/95 backdrop-blur-md" : "bg-slate-50/95 backdrop-blur-md"
+            )}>
+              {/* Tabbed Header */}
+              <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
+                <button 
+                  onClick={() => setActiveBloodTab('donors')} 
+                  className={cn(
+                    "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
+                    activeBloodTab === 'donors' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
                   )}
-                </span>
-              </button>
-            </div>
+                >
+                  {activeBloodTab === 'donors' && (
+                    <motion.div 
+                      layoutId="activeBloodTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-10">রক্তদাতা</span>
+                </button>
+                <button 
+                  onClick={() => setActiveBloodTab('posts')} 
+                  className={cn(
+                    "flex-1 py-3 rounded-xl font-bold transition-all text-xs uppercase tracking-wider relative z-10",
+                    activeBloodTab === 'posts' ? "text-white" : "text-emerald-500/60 hover:text-emerald-500"
+                  )}
+                >
+                  {activeBloodTab === 'posts' && (
+                    <motion.div 
+                      layoutId="activeBloodTab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center justify-center gap-1.5">
+                    পোস্ট
+                    {hasPendingBloodPosts && (
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    )}
+                  </span>
+                </button>
+              </div>
 
-            {activeBloodTab === 'donors' ? (
-              <>
-                <div className="mb-6">
+              {activeBloodTab === 'posts' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-xl font-bold">রক্তের অনুরোধ</h2>
+                      <p className="text-sm opacity-70">জরুরী রক্তের প্রয়োজনে পোস্ট করুন।</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (!currentUser) {
+                          alert("লগইন করুন।");
+                          setActiveTab('profile');
+                          return;
+                        }
+                        setShowCreateBloodPostModal(true);
+                      }}
+                      className="p-3 bg-red-500 text-white rounded-2xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
+                    >
+                      <Plus className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  {/* Summary Section */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className={cn(
+                      "py-2 px-3 rounded-xl border flex items-center justify-center gap-2",
+                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white border-slate-100"
+                    )}>
+                      <span className="text-[10px] opacity-60 font-bold">মোট অনুরোধ:</span>
+                      <span className="text-sm font-black text-emerald-500">{String(totalBloodRequests).padStart(2, '0')}</span>
+                    </div>
+                    <div className={cn(
+                      "py-2 px-3 rounded-xl border flex items-center justify-center gap-2",
+                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white border-slate-100"
+                    )}>
+                      <span className="text-[10px] opacity-60 font-bold">অপেক্ষমান:</span>
+                      <span className="text-sm font-black text-red-500">{String(pendingBloodRequests).padStart(2, '0')}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeBloodTab === 'donors' && (
+                <div>
                   <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
                   <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-3 mb-6">
+            <div className="p-4 pt-2">
+              {activeBloodTab === 'donors' ? (
+                <>
+                  <div className="space-y-3 mb-6">
                   <div className={cn(
                     "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
                     isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
@@ -5504,29 +5557,8 @@ function AppContent() {
                 )}
               </>
             ) : (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-xl font-bold">রক্তের অনুরোধ</h2>
-                    <p className="text-sm opacity-70">জরুরী রক্তের প্রয়োজনে পোস্ট করুন।</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if (!currentUser) {
-                        alert("লগইন করুন।");
-                        setActiveTab('profile');
-                        return;
-                      }
-                      setShowCreateBloodPostModal(true);
-                    }}
-                    className="p-3 bg-red-500 text-white rounded-2xl shadow-lg shadow-red-500/20 active:scale-90 transition-all"
-                  >
-                    <Plus className="w-6 h-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {bloodPosts.length === 0 ? (
+              <div className="space-y-4">
+                {bloodPosts.length === 0 ? (
                     <div className="text-center py-20 opacity-50">
                       <Heart className="w-16 h-16 mx-auto mb-4 opacity-20 text-red-500" />
                       <p>কোনো রক্তের অনুরোধ পাওয়া যায়নি</p>
@@ -5654,9 +5686,9 @@ function AppContent() {
                     ))
                   )}
                 </div>
-              </div>
             )}
           </div>
+        </div>
 
           {/* Profile Tab */}
           <div className="w-1/5 h-full overflow-y-auto p-4 pt-0 max-w-2xl mx-auto">
