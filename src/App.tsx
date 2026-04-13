@@ -59,7 +59,11 @@ import {
   Megaphone,
   Volume2,
   History,
-  Upload
+  Upload,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -154,6 +158,7 @@ interface GlobalNotice {
   authorId: string;
   authorName: string;
   createdAt: any;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
 }
 
 interface DonationProject {
@@ -2942,6 +2947,7 @@ function AppContent() {
   const [activeGlobalNoticeTab, setActiveGlobalNoticeTab] = useState<'write' | 'history'>('write');
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
   const [newNoticeMessage, setNewNoticeMessage] = useState('');
+  const [newNoticeAlignment, setNewNoticeAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [isSavingNotice, setIsSavingNotice] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -3886,6 +3892,7 @@ function AppContent() {
       id,
       title: newNoticeTitle,
       message: newNoticeMessage,
+      alignment: newNoticeAlignment,
       authorId: currentUser.id,
       authorName: currentUser.name,
       createdAt: new Date().toISOString()
@@ -6245,15 +6252,15 @@ function AppContent() {
                 {/* Decorative background element */}
                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
                 
-                <div className="flex flex-col items-center text-center space-y-4 relative z-10">
-                  <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-2">
-                    <AlertCircle className="w-8 h-8 text-emerald-500" />
+                <div className="flex flex-col items-start text-left space-y-4 relative z-10">
+                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-2">
+                    <AlertCircle className="w-6 h-6 text-emerald-500" />
                   </div>
                   
-                  <h3 className="text-2xl font-bold text-emerald-500">{notice.title}</h3>
+                  <h3 className="text-[16px] font-bold text-emerald-500 truncate w-full">{notice.title}</h3>
                   
                   <div className={cn(
-                    "w-full p-4 rounded-2xl text-sm leading-relaxed",
+                    "w-full p-4 rounded-2xl text-[14px] leading-relaxed whitespace-pre-wrap",
                     isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
                   )}>
                     {notice.message}
@@ -6299,26 +6306,26 @@ function AppContent() {
                   <div className="absolute bottom-40 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl animate-pulse delay-1000" />
                 </div>
 
-                <div className="max-w-xl mx-auto w-full flex-1 flex flex-col items-center text-center relative z-10">
+                <div className="max-w-xl mx-auto w-full flex-1 flex flex-col items-start text-left relative z-10">
                   <motion.div 
                     initial={{ scale: 0, rotate: -20 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ delay: 0.2, type: 'spring' }}
-                    className="w-24 h-24 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-emerald-500/40 mb-8"
+                    className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-emerald-500/40 mb-8"
                   >
-                    <Megaphone className="w-12 h-12 text-white" />
+                    <Megaphone className="w-10 h-10 text-white" />
                   </motion.div>
 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="space-y-4 w-full"
+                    className="space-y-2 w-full"
                   >
-                    <h2 className="text-4xl font-black tracking-tight text-emerald-500 leading-tight">
+                    <h2 className="text-[16px] font-bold tracking-tight text-emerald-500 leading-tight truncate w-full">
                       {activeGlobalNotice.title}
                     </h2>
-                    <div className="flex items-center justify-center gap-2 opacity-50 text-sm font-bold uppercase tracking-widest">
+                    <div className="flex items-center justify-start gap-2 opacity-50 text-[10px] font-bold uppercase tracking-widest">
                       <span>{formatDate(activeGlobalNotice.createdAt)}</span>
                       <span className="w-1 h-1 rounded-full bg-current" />
                       <span>{activeGlobalNotice.authorName}</span>
@@ -6330,9 +6337,10 @@ function AppContent() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                     className={cn(
-                      "mt-10 p-8 rounded-[3rem] text-lg leading-relaxed font-medium w-full border shadow-inner",
+                      "mt-10 p-8 rounded-[2rem] text-[14px] leading-relaxed font-medium w-full border shadow-inner whitespace-pre-wrap",
                       isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white/50 border-emerald-100"
                     )}
+                    style={{ textAlign: activeGlobalNotice.alignment || 'left' }}
                   >
                     {activeGlobalNotice.message}
                   </motion.div>
@@ -8616,13 +8624,40 @@ function AppContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold opacity-50 ml-1">নোটিশের বার্তা</label>
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-xs font-bold opacity-50">নোটিশের বার্তা</label>
+                        <div className={cn(
+                          "flex p-1 rounded-lg gap-1",
+                          isDarkMode ? "bg-slate-800" : "bg-slate-100"
+                        )}>
+                          {[
+                            { id: 'left', icon: AlignLeft },
+                            { id: 'center', icon: AlignCenter },
+                            { id: 'right', icon: AlignRight },
+                            { id: 'justify', icon: AlignJustify }
+                          ].map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => setNewNoticeAlignment(item.id as any)}
+                              className={cn(
+                                "p-1.5 rounded-md transition-all",
+                                newNoticeAlignment === item.id 
+                                  ? "bg-emerald-500 text-white shadow-sm" 
+                                  : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700"
+                              )}
+                            >
+                              <item.icon className="w-4 h-4" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <textarea 
                         placeholder="বার্তা লিখুন..." 
                         rows={6}
                         className={cn("w-full p-4 rounded-2xl border text-sm resize-none", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
                         value={newNoticeMessage}
                         onChange={(e) => setNewNoticeMessage(e.target.value)}
+                        style={{ textAlign: newNoticeAlignment }}
                       />
                     </div>
                     <button 
