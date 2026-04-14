@@ -7,6 +7,11 @@ import {
   Menu, 
   Moon, 
   Sun, 
+  Sunrise,
+  Sunset,
+  CloudSun,
+  Sparkles,
+  Coffee,
   LogOut, 
   Search, 
   ChevronRight, 
@@ -2667,6 +2672,113 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
     return () => clearTimeout(timer);
   }, []);
 
+  const getLiveIcon = () => {
+    const main = greeting?.main || '';
+    
+    if (main.includes('সকাল')) {
+      return (
+        <motion.div
+          animate={{ 
+            y: [5, -5, 5],
+            scale: [1, 1.1, 1]
+          }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="relative"
+        >
+          <Sunrise className="w-12 h-12 text-yellow-200" />
+          <motion.div
+            animate={{ opacity: [0, 1, 0], scale: [0.8, 1.2, 0.8] }}
+            transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+            className="absolute -top-2 -right-2"
+          >
+            <Sparkles className="w-4 h-4 text-white" />
+          </motion.div>
+        </motion.div>
+      );
+    }
+    if (main.includes('অপরাহ্ন')) {
+      return (
+        <motion.div
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        >
+          <Sun className="w-12 h-12 text-yellow-400" />
+        </motion.div>
+      );
+    }
+    if (main.includes('বিকেল')) {
+      return (
+        <motion.div
+          animate={{ x: [-10, 10, -10] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <CloudSun className="w-12 h-12 text-orange-100" />
+        </motion.div>
+      );
+    }
+    if (main.includes('সন্ধ্যা')) {
+      return (
+        <motion.div
+          animate={{ 
+            rotate: [-10, 10, -10],
+            scale: [1, 1.05, 1]
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Moon className="w-12 h-12 text-blue-100 fill-blue-100/20" />
+        </motion.div>
+      );
+    }
+    if (main.includes('রাত্রি')) {
+      return (
+        <div className="relative">
+          <motion.div
+            animate={{ opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Moon className="w-12 h-12 text-slate-100 fill-slate-100/10" />
+          </motion.div>
+          <motion.div
+            animate={{ 
+              scale: [0, 1, 0],
+              opacity: [0, 1, 0],
+              rotate: [0, 90, 180]
+            }}
+            transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+            className="absolute -top-1 -right-1"
+          >
+            <Sparkles className="w-5 h-5 text-yellow-200" />
+          </motion.div>
+        </div>
+      );
+    }
+    if (main.includes('নববর্ষ')) {
+      return (
+        <motion.div
+          animate={{ 
+            scale: [1, 1.2, 1],
+            rotate: [0, 5, -5, 0]
+          }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Sparkles className="w-12 h-12 text-yellow-300" />
+        </motion.div>
+      );
+    }
+
+    return (
+      <motion.div
+        animate={{ 
+          scale: [1, 1.2, 1],
+          filter: ["drop-shadow(0 0 0px #fff)", "drop-shadow(0 0 10px #fff)", "drop-shadow(0 0 0px #fff)"]
+        }}
+        transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <Heart className="w-12 h-12 text-white fill-white" />
+      </motion.div>
+    );
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 1 }}
@@ -2684,7 +2796,7 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
           className="text-center space-y-4"
         >
           <div className="bg-white/20 p-6 rounded-full inline-block mb-4 backdrop-blur-sm">
-            <Heart className="w-12 h-12 text-white fill-white animate-pulse" />
+            {getLiveIcon()}
           </div>
           
           <div className="space-y-2">
