@@ -75,6 +75,19 @@
       },
       "required": ["uid"]
     },
+    "app_update": {
+      "title": "App Update",
+      "description": "Information about the latest app update",
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "url": { "type": "string" },
+        "description": { "type": "string" },
+        "available": { "type": "boolean", "description": "Whether the update is active/available" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["version", "url"]
+    },
     "settings": {
       "title": "Global Settings",
       "description": "Global application settings and customization",
