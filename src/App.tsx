@@ -1068,13 +1068,12 @@ const UpdateModal = ({
 }: { 
   onClose: () => void, 
   isDarkMode: boolean, 
-  latestUpdate: { version: string, url: string, description: string, available?: boolean } | null,
+  latestUpdate: { version: string, url: string, description: string } | null,
   APP_VERSION: string,
   currentUser: Member | null
 }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [updateLink, setUpdateLink] = useState(latestUpdate?.url || '');
-  const [isAvailable, setIsAvailable] = useState(latestUpdate?.available !== false);
 
   const handleSaveLink = async () => {
     if (!updateLink) {
@@ -1087,7 +1086,6 @@ const UpdateModal = ({
       await setDoc(doc(db, 'settings', 'app_update'), {
         version: '1.0.1', // Default or incremented version
         url: updateLink,
-        available: isAvailable,
         description: 'New update available',
         updatedAt: serverTimestamp()
       });
@@ -1101,16 +1099,7 @@ const UpdateModal = ({
     }
   };
 
-  const handleMarkAsSeen = () => {
-    if (latestUpdate) {
-      const updateId = `${latestUpdate.version}_${latestUpdate.url}_${latestUpdate.available}`;
-      localStorage.setItem('seba_seen_update_id', updateId);
-      // We don't need to set state here because the parent will re-render if we use a callback
-      // but since we are closing the modal, it's fine.
-    }
-  };
-
-  const hasUpdate = latestUpdate && latestUpdate.url && latestUpdate.available !== false;
+  const hasUpdate = latestUpdate && latestUpdate.url;
 
   return (
     <motion.div 
@@ -1150,10 +1139,7 @@ const UpdateModal = ({
             
             {hasUpdate ? (
               <button 
-                onClick={() => {
-                  handleMarkAsSeen();
-                  window.open(latestUpdate.url, '_blank');
-                }}
+                onClick={() => window.open(latestUpdate.url, '_blank')}
                 className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <Download className="w-5 h-5" />
@@ -1175,22 +1161,6 @@ const UpdateModal = ({
               </h3>
               
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 bg-slate-500/5 rounded-xl border border-slate-500/10">
-                  <span className="text-sm font-bold">Update Available</span>
-                  <button 
-                    onClick={() => setIsAvailable(!isAvailable)}
-                    className={cn(
-                      "w-12 h-6 rounded-full relative transition-all",
-                      isAvailable ? "bg-emerald-500" : "bg-slate-300"
-                    )}
-                  >
-                    <div className={cn(
-                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                      isAvailable ? "right-1" : "left-1"
-                    )} />
-                  </button>
-                </div>
-
                 <input 
                   type="text" 
                   placeholder="Paste update link here..." 
@@ -2990,8 +2960,7 @@ function AppContent() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [showCloudPinPage, setShowCloudPinPage] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [latestUpdate, setLatestUpdate] = useState<{ version: string, url: string, description: string, available?: boolean } | null>(null);
-  const [hasSeenLatestUpdate, setHasSeenLatestUpdate] = useState(true);
+  const [latestUpdate, setLatestUpdate] = useState<{ version: string, url: string, description: string } | null>(null);
   const [showPinEntry, setShowPinEntry] = useState(false);
   const [pendingLoginMember, setPendingLoginMember] = useState<Member | null>(null);
   const [cloudPinSettings, setCloudPinSettings] = useState<CloudPinSettings | null>(null);
@@ -3539,14 +3508,6 @@ function AppContent() {
     lastScrollTop.current = st <= 0 ? 0 : st;
   };
 
-
-  useEffect(() => {
-    if (latestUpdate) {
-      const updateId = `${latestUpdate.version}_${latestUpdate.url}_${latestUpdate.available}`;
-      const seenUpdateId = localStorage.getItem('seba_seen_update_id');
-      setHasSeenLatestUpdate(seenUpdateId === updateId);
-    }
-  }, [latestUpdate]);
 
   useEffect(() => {
     localStorage.setItem('seba_dark_mode', String(isDarkMode));
@@ -5810,7 +5771,7 @@ function AppContent() {
                       >
                         <RefreshCw className="w-5 h-5 text-emerald-500" />
                         Update
-                        {latestUpdate && latestUpdate.available !== false && latestUpdate.version !== APP_VERSION && !hasSeenLatestUpdate && (
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
                           <span className="absolute top-3 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                         )}
                       </button>
@@ -5979,7 +5940,7 @@ function AppContent() {
                     icon={
                       <div className="relative">
                         <RefreshCw className="w-5 h-5 text-emerald-500" />
-                        {latestUpdate && latestUpdate.available !== false && latestUpdate.version !== APP_VERSION && !hasSeenLatestUpdate && (
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
                           <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
                         )}
                       </div>
@@ -6076,7 +6037,7 @@ function AppContent() {
                     icon={
                       <div className="relative">
                         <RefreshCw className="w-5 h-5 text-emerald-500" />
-                        {latestUpdate && latestUpdate.available !== false && latestUpdate.version !== APP_VERSION && !hasSeenLatestUpdate && (
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
                           <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
                         )}
                       </div>
@@ -8214,7 +8175,7 @@ function AppContent() {
                         title="Update"
                       >
                         <RefreshCw className="w-6 h-6" />
-                        {latestUpdate && latestUpdate.available !== false && latestUpdate.version !== APP_VERSION && !hasSeenLatestUpdate && (
+                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
                           <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse" />
                         )}
                       </button>
