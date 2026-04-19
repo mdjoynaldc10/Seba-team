@@ -5558,55 +5558,33 @@ function AppContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredDonors.map((donor, idx) => {
-                      const isBusy = bloodPosts.some(p => p.status === 'accepted' && p.acceptorPhone === donor.phone);
-                      return (
-                        <div key={`donor-${idx}-${donor.phone}`} className={cn(
-                          "p-4 rounded-xl border shadow-sm",
-                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                        )}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
-                              {isBusy && (
-                                <div 
-                                  className="w-2 h-2 rounded-full bg-green-500 animate-blink shadow-[0_0_10px_rgba(34,197,94,0.8)]" 
-                                  title="ইতিমধ্যে রক্ত দিচ্ছেন"
-                                />
-                              )}
-                            </div>
-                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
-                          </div>
-                          <p className="text-sm opacity-80 mb-1">
-                            <strong>ঠিকানা:</strong> {(currentUser && !isBusy) ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
-                          </p>
-                          <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {(currentUser && !isBusy) ? donor.phone : 'লুকানো'}</p>
-                          {currentUser ? (
-                            isBusy ? (
-                              <div className={cn(
-                                "mt-3 py-3 rounded-lg text-sm font-bold text-center border border-dashed flex items-center justify-center gap-2",
-                                isDarkMode ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400" : "bg-emerald-50 border-emerald-200 text-emerald-600"
-                              )}>
-                                <Heart className="w-4 h-4 animate-pulse fill-current" />
-                                ইতিমধ্যে রক্ত দিচ্ছেন
-                              </div>
-                            ) : (
-                              <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
-                                <Phone className="w-4 h-4" />
-                                কল করুন
-                              </a>
-                            )
-                          ) : (
-                            <button 
-                              onClick={() => setActiveTab('profile')}
-                              className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
-                            >
-                              বিস্তারিত দেখতে লগইন করুন
-                            </button>
-                          )}
+                    {filteredDonors.map((donor, idx) => (
+                      <div key={`donor-${idx}-${donor.phone}`} className={cn(
+                        "p-4 rounded-xl border shadow-sm",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                      )}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
+                          <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
                         </div>
-                      );
-                    })}
+                        <p className="text-sm opacity-80 mb-1">
+                          <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
+                        </p>
+                        <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {currentUser ? donor.phone : 'লুকানো'}</p>
+                        {currentUser ? (
+                          <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
+                            কল করুন
+                          </a>
+                        ) : (
+                          <button 
+                            onClick={() => setActiveTab('profile')}
+                            className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                          >
+                            বিস্তারিত দেখতে লগইন করুন
+                          </button>
+                        )}
+                      </div>
+                    ))}
                     {filteredDonors.length === 0 && (
                       <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
                     )}
