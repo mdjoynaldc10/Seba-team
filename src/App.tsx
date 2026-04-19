@@ -5173,27 +5173,28 @@ function AppContent() {
                 )}
               </div>
               
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase opacity-50 ml-2">ক্যাটাগরি</label>
-                <div className="relative">
-                  <select 
-                    value={selectedBookCategory}
-                    onChange={(e) => setSelectedBookCategory(e.target.value)}
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar relative">
+                {['সব', ...Array.from(new Set(books.map(b => b.category || 'অন্যান্য')))].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedBookCategory(cat)}
                     className={cn(
-                      "w-full px-4 py-2.5 rounded-xl border outline-none text-sm appearance-none font-bold pr-10 transition-all",
-                      isDarkMode ? "bg-slate-800 border-slate-700 text-slate-200" : "bg-white border-slate-200 text-slate-700 shadow-sm"
+                      "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all relative z-10",
+                      selectedBookCategory === cat 
+                        ? "text-white border-emerald-500" 
+                        : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300" : "bg-white border-slate-200 text-slate-600"
                     )}
                   >
-                    {['সব', ...Array.from(new Set(books.map(b => b.category || 'অন্যান্য')))].map(cat => (
-                      <option key={cat} value={cat} className={isDarkMode ? "bg-slate-800" : "bg-white"}>
-                        {cat === 'সব' ? 'সব ক্যাটাগরি' : cat}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                    <ChevronRight className="w-4 h-4 rotate-90" />
-                  </div>
-                </div>
+                    {selectedBookCategory === cat && (
+                      <motion.div 
+                        layoutId="selectedBookCategoryTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-full shadow-md shadow-emerald-500/20"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">{cat}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -5530,25 +5531,22 @@ function AppContent() {
                     />
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
-                    <div className="relative">
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
                       <select 
                         value={selectedBloodGroup}
                         onChange={(e) => setSelectedBloodGroup(e.target.value)}
                         className={cn(
-                          "w-full px-4 py-2.5 rounded-xl border outline-none text-sm appearance-none font-bold pr-10 transition-all",
-                          isDarkMode ? "bg-slate-800 border-slate-700 text-slate-200" : "bg-white border-slate-200 text-slate-700 shadow-sm"
+                          "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
                         )}
                       >
-                        <option value="সব" className={isDarkMode ? "bg-slate-800" : "bg-white"}>সব গ্রুপ</option>
+                        <option value="সব">সব গ্রুপ</option>
                         {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
-                          <option key={g} value={g} className={isDarkMode ? "bg-slate-800" : "bg-white"}>{g}</option>
+                          <option key={g} value={g}>{g}</option>
                         ))}
                       </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                        <ChevronRight className="w-4 h-4 rotate-90" />
-                      </div>
                     </div>
                   </div>
                 </div>
