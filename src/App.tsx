@@ -6024,6 +6024,66 @@ function AppContent() {
                       </div>
                     {!currentUser.isNewSheet && <p className="text-slate-500 font-medium">{currentUser.designation}</p>}
                   </div>
+
+                  {/* Admin Shortcuts Row */}
+                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                    <div className="flex items-center justify-center gap-4 mt-4 px-2">
+                      <button 
+                        onClick={() => {
+                          setActiveBorrowedTab('requests');
+                          setShowBorrowedBooksPage(true);
+                        }}
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-sm active:scale-90 transition-all border relative",
+                          isDarkMode ? "bg-slate-800 border-slate-700 text-emerald-500" : "bg-white border-slate-100 text-emerald-500"
+                        )}
+                        title="Requests"
+                      >
+                        <ClipboardList className="w-5 h-5" />
+                        {bookRequests.filter(r => r.status === 'pending').length > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white dark:border-slate-800">
+                            {bookRequests.filter(r => r.status === 'pending').length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button 
+                        onClick={() => setShowGlobalNoticeManager(true)}
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-sm active:scale-90 transition-all border",
+                          isDarkMode ? "bg-slate-800 border-slate-700 text-emerald-500" : "bg-white border-slate-100 text-emerald-500"
+                        )}
+                        title="Global Notice"
+                      >
+                        <Megaphone className="w-5 h-5" />
+                      </button>
+
+                      <button 
+                        onClick={() => setShowGreetingsSettings(true)}
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-sm active:scale-90 transition-all border",
+                          isDarkMode ? "bg-slate-800 border-slate-700 text-emerald-500" : "bg-white border-slate-100 text-emerald-500"
+                        )}
+                        title="Greetings"
+                      >
+                        <Bell className="w-5 h-5" />
+                      </button>
+
+                      {((isAdmin(currentUser) && advanceSettings.controls.admin.database) || 
+                        (!isAdmin(currentUser) && advanceSettings.controls.member.database)) && (
+                        <button 
+                          onClick={() => setShowDatabasePage(true)}
+                          className={cn(
+                            "w-12 h-12 flex items-center justify-center rounded-2xl shadow-sm active:scale-90 transition-all border",
+                            isDarkMode ? "bg-slate-800 border-slate-700 text-emerald-500" : "bg-white border-slate-100 text-emerald-500"
+                          )}
+                          title="Database"
+                        >
+                          <Database className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 px-1">
@@ -6092,7 +6152,8 @@ function AppContent() {
                       isDarkMode={isDarkMode}
                     />
                   )}
-                  {((isAdmin(currentUser) && advanceSettings.controls.admin.database) || 
+                  {!(isAdmin(currentUser) || isDeveloper(currentUser)) && 
+                    ((isAdmin(currentUser) && advanceSettings.controls.admin.database) || 
                     (!isAdmin(currentUser) && advanceSettings.controls.member.database)) && (
                     <ProfileMenuLink 
                       icon={<Database className="w-5 h-5" />} 
@@ -6147,40 +6208,7 @@ function AppContent() {
                       isDarkMode={isDarkMode}
                     />
                   )}
-                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
-                    <ProfileMenuLink 
-                      icon={<ClipboardList className="w-5 h-5 text-emerald-500" />} 
-                      label="Requests" 
-                      onClick={() => {
-                        setActiveBorrowedTab('requests');
-                        setShowBorrowedBooksPage(true);
-                      }} 
-                      isDarkMode={isDarkMode}
-                      rightElement={
-                        bookRequests.filter(r => r.status === 'pending').length > 0 ? (
-                          <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            {bookRequests.filter(r => r.status === 'pending').length}
-                          </span>
-                        ) : undefined
-                      }
-                    />
-                  )}
-                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
-                    <ProfileMenuLink 
-                      icon={<Bell className="w-5 h-5 text-emerald-500" />} 
-                      label="Greetings" 
-                      onClick={() => setShowGreetingsSettings(true)} 
-                      isDarkMode={isDarkMode}
-                    />
-                  )}
-                  {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
-                    <ProfileMenuLink 
-                      icon={<Megaphone className="w-5 h-5 text-emerald-500" />} 
-                      label="Global Notice" 
-                      onClick={() => setShowGlobalNoticeManager(true)} 
-                      isDarkMode={isDarkMode}
-                    />
-                  )}
+
                   {isDeveloper(currentUser) && (
                     <ProfileMenuLink 
                       icon={<Bell className="w-5 h-5 text-emerald-500" />} 
