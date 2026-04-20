@@ -36,6 +36,7 @@ import {
   Download,
   Calendar,
   Settings,
+  Settings2,
   Palette,
   Layout,
   ToggleLeft,
@@ -2656,7 +2657,7 @@ const PushNotificationToast = ({ notification, onClose, isDarkMode }: { notifica
   );
 };
 
-const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
+const SplashScreen = React.memo(({ greetingsData, isDarkMode }: { greetingsData: any, isDarkMode: boolean }) => {
   const greeting = getGreeting(greetingsData);
   const [showLoadingBar, setShowLoadingBar] = useState(false);
 
@@ -2672,7 +2673,10 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.8, ease: "easeInOut" }}
-      className="fixed inset-0 z-[9999] bg-emerald-500 flex flex-col items-center justify-center text-white p-6"
+      className={cn(
+        "fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 transition-all duration-700",
+        isDarkMode ? "bg-black" : "bg-emerald-500"
+      )}
     >
       <AnimatePresence mode="wait">
         <motion.div 
@@ -2683,13 +2687,25 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="text-center space-y-4"
         >
-          <div className="bg-white/20 p-6 rounded-full inline-block mb-4 backdrop-blur-sm">
-            <Heart className="w-12 h-12 text-white fill-white animate-pulse" />
+          <div className={cn(
+            "p-6 rounded-full inline-block mb-4 backdrop-blur-sm transition-all duration-700",
+            isDarkMode ? "bg-emerald-500/10" : "bg-white/20"
+          )}>
+            <Heart className={cn(
+              "w-12 h-12 animate-pulse transition-all duration-700",
+              isDarkMode ? "text-emerald-500 fill-emerald-500" : "text-white fill-white"
+            )} />
           </div>
           
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight">{greeting?.main}</h1>
-            <p className="text-lg opacity-90 font-medium">{greeting?.sub}</p>
+            <h1 className={cn(
+              "text-4xl font-bold tracking-tight transition-all duration-700",
+              isDarkMode ? "text-emerald-500" : "text-white"
+            )}>{greeting?.main}</h1>
+            <p className={cn(
+              "text-lg font-medium transition-all duration-700",
+              isDarkMode ? "text-emerald-400" : "text-white opacity-90"
+            )}>{greeting?.sub}</p>
           </div>
         </motion.div>
       </AnimatePresence>
@@ -2702,16 +2718,25 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
             transition={{ duration: 0.8 }}
             className="absolute bottom-12 left-0 right-0 px-12 space-y-3"
           >
-            <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest opacity-80">
+            <div className={cn(
+              "flex justify-between items-center text-xs font-bold uppercase tracking-widest transition-all duration-700",
+              isDarkMode ? "text-emerald-500/80" : "text-white/80"
+            )}>
               <span>Loading...</span>
               <span>Please Wait</span>
             </div>
-            <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+            <div className={cn(
+              "h-1.5 w-full rounded-full overflow-hidden transition-all duration-700",
+              isDarkMode ? "bg-emerald-500/20" : "bg-white/20"
+            )}>
               <motion.div 
                 initial={{ width: "0%" }}
                 animate={{ width: "100%" }}
                 transition={{ duration: 3, ease: "linear" }}
-                className="h-full bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+                className={cn(
+                  "h-full rounded-full transition-all duration-700",
+                  isDarkMode ? "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-white shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+                )}
               />
             </div>
           </motion.div>
@@ -2724,7 +2749,18 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('seba_dark_mode') === 'true');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
+    const saved = localStorage.getItem('seba_theme');
+    return (saved as 'light' | 'dark' | 'system') || 'system';
+  });
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('seba_theme');
+    const t = (saved as 'light' | 'dark' | 'system') || 'system';
+    if (t === 'system') {
+      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return t === 'dark';
+  });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
@@ -3510,8 +3546,27 @@ function AppContent() {
 
 
   useEffect(() => {
-    localStorage.setItem('seba_dark_mode', String(isDarkMode));
-  }, [isDarkMode]);
+    localStorage.setItem('seba_theme', theme);
+    
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => setIsDarkMode(mediaQuery.matches);
+      
+      setIsDarkMode(mediaQuery.matches);
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    } else {
+      setIsDarkMode(theme === 'dark');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      if (prev === 'light') return 'dark';
+      if (prev === 'dark') return 'system';
+      return 'light';
+    });
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -4938,7 +4993,7 @@ function AppContent() {
     <>
       <LandscapeBlocker isDarkMode={isDarkMode} />
       <AnimatePresence mode="wait">
-        {isAppInitializing && <SplashScreen key="splash" greetingsData={greetingsData} />}
+        {isAppInitializing && <SplashScreen key="splash" greetingsData={greetingsData} isDarkMode={isDarkMode} />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -4982,10 +5037,13 @@ function AppContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[5000] flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm"
+            className={cn(
+              "fixed inset-0 z-[5000] flex flex-col items-center justify-center backdrop-blur-sm",
+              isDarkMode ? "bg-black/80" : "bg-emerald-500/80"
+            )}
           >
-            <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
-            <p className="text-white font-semibold">যাচাই করা হচ্ছে...</p>
+            <Loader2 className={cn("w-12 h-12 animate-spin mb-4", isDarkMode ? "text-emerald-500" : "text-white")} />
+            <p className={cn("font-semibold", isDarkMode ? "text-emerald-500" : "text-white")}>যাচাই করা হচ্ছে...</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -4997,8 +5055,19 @@ function AppContent() {
         </button>
         <h1 className="text-lg font-bold flex-1 ml-3">সেবা ফাউন্ডেশন</h1>
         <div className="flex items-center gap-4">
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2">
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          <button onClick={toggleTheme} className="p-2 flex items-center gap-1">
+            {theme === 'system' ? (
+              <div className="relative">
+                <Settings2 className="w-5 h-5" />
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                </div>
+              </div>
+            ) : theme === 'dark' ? (
+              <Moon className="w-5 h-5" />
+            ) : (
+              <Sun className="w-5 h-5" />
+            )}
           </button>
           <button onClick={() => setActiveTab('profile')} className="p-1">
             {currentUser?.photoId && !currentUser.isNewSheet ? (
@@ -5047,7 +5116,11 @@ function AppContent() {
               <MenuLink icon={<Heart />} label="ব্লাড" onClick={() => { setActiveTab('blood'); setIsMenuOpen(false); }} />
               <MenuLink icon={<User />} label="প্রোফাইল" onClick={() => { setActiveTab('profile'); setIsMenuOpen(false); }} />
               <div className="h-px bg-slate-200 dark:bg-slate-700 my-2 mx-6" />
-              <MenuLink icon={isDarkMode ? <Sun /> : <Moon />} label={isDarkMode ? "লাইট মোড" : "ডার্ক মোড"} onClick={() => setIsDarkMode(!isDarkMode)} />
+              <MenuLink 
+                icon={theme === 'system' ? <Settings2 /> : theme === 'dark' ? <Sun /> : <Moon />} 
+                label={theme === 'system' ? "সিস্টেম থিম (অটো)" : theme === 'dark' ? "লাইট মোড" : "ডার্ক মোড"} 
+                onClick={toggleTheme} 
+              />
               <MenuLink icon={<LogOut />} label="লগআউট" onClick={logout} className="text-red-500" />
             </nav>
           </motion.div>
@@ -5950,11 +6023,20 @@ function AppContent() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
-                    icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
-                    label="Dark Mode" 
-                    onClick={() => setIsDarkMode(!isDarkMode)} 
+                    icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
+                    label={theme === 'system' ? "থিম: সিস্টেম (অটো)" : theme === 'dark' ? "থিম: ডার্ক" : "থিম: লাইট"} 
+                    onClick={toggleTheme} 
                     isDarkMode={isDarkMode}
-                    rightElement={<div className={cn("w-10 h-5 rounded-full relative transition-colors", isDarkMode ? "bg-emerald-500" : "bg-slate-300")}><div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", isDarkMode ? "right-1" : "left-1")} /></div>}
+                    rightElement={
+                      <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", theme === 'system' ? "bg-slate-400" : theme === 'dark' ? "bg-emerald-500" : "bg-slate-300")}>
+                        <motion.div 
+                          animate={{ 
+                            x: theme === 'light' ? 0 : theme === 'dark' ? 32 : 16,
+                          }}
+                          className="w-4 h-4 bg-white rounded-full shadow-sm"
+                        />
+                      </div>
+                    }
                   />
                   <ProfileMenuLink 
                     icon={<Facebook className="w-5 h-5" />} 
@@ -6193,11 +6275,20 @@ function AppContent() {
                     />
                   )}
                   <ProfileMenuLink 
-                    icon={isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />} 
-                    label={advanceSettings.optionNames.darkMode} 
-                    onClick={() => setIsDarkMode(!isDarkMode)} 
+                    icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
+                    label={theme === 'system' ? "থিম: সিস্টেম (অটো)" : theme === 'dark' ? "থিম: ডার্ক" : "থিম: লাইট"} 
+                    onClick={toggleTheme} 
                     isDarkMode={isDarkMode}
-                    rightElement={<div className={cn("w-10 h-5 rounded-full relative transition-colors", isDarkMode ? "bg-emerald-500" : "bg-slate-300")}><div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", isDarkMode ? "right-1" : "left-1")} /></div>}
+                    rightElement={
+                      <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", theme === 'system' ? "bg-slate-400" : theme === 'dark' ? "bg-emerald-500" : "bg-slate-300")}>
+                        <motion.div 
+                          animate={{ 
+                            x: theme === 'light' ? 0 : theme === 'dark' ? 32 : 16,
+                          }}
+                          className="w-4 h-4 bg-white rounded-full shadow-sm"
+                        />
+                      </div>
+                    }
                   />
                   {((isAdmin(currentUser) && advanceSettings.controls.admin.donation) || 
                     (!isAdmin(currentUser) && advanceSettings.controls.member.donation)) && (
