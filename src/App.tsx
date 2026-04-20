@@ -5122,14 +5122,28 @@ function AppContent() {
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
               homePosts.map((post, idx) => (
-                <HomePostItem 
-                  key={`post-${idx}-${post.title}`}
-                  post={post}
-                  isDarkMode={isDarkMode}
-                  currentUser={currentUser}
-                  isAuthReady={isAuthReady}
-                  formatDate={formatDate}
-                />
+                <div key={`post-${idx}-${post.title}`} className={cn(
+                  "p-4 rounded-xl mb-5 border shadow-sm",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}>
+                  <h3 className="text-lg font-bold mb-1">{post.title}</h3>
+                  <p className="text-emerald-500 text-xs font-semibold mb-2">{formatDate(post.date)}</p>
+                  <p className="text-sm leading-relaxed opacity-90">{post.content}</p>
+                  {post.photoId && (
+                    <img 
+                      src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
+                      className="w-full rounded-lg mt-3 shadow-sm"
+                      alt="Post"
+                    />
+                  )}
+                  
+                  <PostReactionSection 
+                    postId={encodeURIComponent(post.title + post.date)}
+                    currentUser={currentUser}
+                    isDarkMode={isDarkMode}
+                    isAuthReady={isAuthReady}
+                  />
+                </div>
               ))
             )}
           </div>
@@ -9245,88 +9259,6 @@ function AppContent() {
   );
 }
 
-
-// --- Home Post Item Component ---
-const HomePostItem = ({ post, isDarkMode, currentUser, isAuthReady, formatDate }: any) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const paragraphs = post.content.split('\n').filter(p => p.trim() !== '');
-  const hasLongContent = post.content.length > 200 || paragraphs.length > 2;
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      className="mb-12 last:mb-5"
-    >
-      <div className="flex flex-col">
-        <h3 className="text-xl font-black mb-1.5 text-left leading-tight tracking-tight">
-          {post.title}
-        </h3>
-        <p className="text-emerald-500 text-[10px] font-black mb-4 text-left uppercase tracking-[0.15em] opacity-70">
-          {formatDate(post.date)}
-        </p>
-        
-        <div className="relative">
-          <motion.div
-            initial={false}
-            animate={{ height: isExpanded ? 'auto' : (hasLongContent ? '3.4rem' : 'auto') }}
-            transition={{ duration: 0.4, ease: "anticipate" }}
-            className="overflow-hidden"
-          >
-            <div className={cn(
-              "text-[15px] leading-[1.7] opacity-90 text-left space-y-4 font-medium",
-              !isExpanded && hasLongContent && "line-clamp-2"
-            )}>
-              {paragraphs.map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          </motion.div>
-
-          {hasLongContent && (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-emerald-500 text-[11px] font-black mt-3 flex items-center gap-1.5 hover:opacity-70 transition-all uppercase tracking-wider"
-            >
-              {isExpanded ? (
-                <>Show Less <X className="w-3 h-3 stroke-[3]" /></>
-              ) : (
-                <>See More...</>
-              )}
-            </button>
-          )}
-        </div>
-
-        {post.photoId && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="mt-6"
-          >
-            <img 
-              src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1200`} 
-              className="w-full rounded-2xl shadow-2xl border-4 border-white/5 object-cover max-h-[400px]"
-              referrerPolicy="no-referrer"
-              alt="Post"
-            />
-          </motion.div>
-        )}
-        
-        <div className="mt-4 pt-2 border-t border-slate-500/10">
-          <PostReactionSection 
-            postId={encodeURIComponent(post.title + post.date)}
-            currentUser={currentUser}
-            isDarkMode={isDarkMode}
-            isAuthReady={isAuthReady}
-          />
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
 function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: { 
   postId: string, 
   currentUser: Member | null, 
@@ -9379,7 +9311,7 @@ function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: {
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
       <div className="flex items-center gap-1.5">
         <button 
           onClick={toggleReact}
