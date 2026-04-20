@@ -2721,163 +2721,6 @@ const SplashScreen = React.memo(({ greetingsData }: { greetingsData: any }) => {
   );
 });
 
-// --- Home Post Item Component ---
-const HomePostItem = ({ post, isDarkMode, currentUser, isAuthReady, formatDate }: any) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const content = post?.content || '';
-  const title = post?.title || '';
-  const date = post?.date || '';
-  
-  const paragraphs = content.split('\n').filter((p: string) => p.trim() !== '');
-  const hasLongContent = content.length > 200 || paragraphs.length > 2;
-
-  if (!post) return null;
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      className="mb-8 last:mb-2"
-    >
-      <div className="flex flex-col">
-        <h3 className="text-xl font-bold mb-1 text-left line-clamp-2">
-          {title || 'Untitled Post'}
-        </h3>
-        <p className="text-emerald-500 text-[10px] font-bold mb-3 text-left uppercase tracking-wider opacity-60">
-          {formatDate(date)}
-        </p>
-        
-        <div className="relative">
-          <motion.div
-            initial={false}
-            animate={{ height: isExpanded ? 'auto' : (hasLongContent ? '3.5rem' : 'auto') }}
-            transition={{ duration: 0.3 }}
-            className="overflow-hidden"
-          >
-            <div className={cn(
-              "text-[15px] leading-relaxed text-left space-y-3",
-              !isExpanded && hasLongContent && "line-clamp-2"
-            )}>
-              {paragraphs.length > 0 ? paragraphs.map((p, i) => (
-                <p key={i}>{p}</p>
-              )) : <p>{content || 'No content provided.'}</p>}
-            </div>
-          </motion.div>
-
-          {hasLongContent && (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-emerald-500 text-[11px] font-black mt-1 flex items-center gap-1.5 hover:opacity-70 transition-all uppercase tracking-wider"
-            >
-              {isExpanded ? (
-                <>Show Less <X className="w-3 h-3 stroke-[3]" /></>
-              ) : (
-                <>See More...</>
-              )}
-            </button>
-          )}
-        </div>
-
-        {post.photoId && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="mt-6"
-          >
-            <img 
-              src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1200`} 
-              className="w-full rounded-2xl shadow-2xl border-4 border-white/5 object-cover max-h-[400px]"
-              referrerPolicy="no-referrer"
-              alt="Post"
-            />
-          </motion.div>
-        )}
-        
-        <div className="mt-2 pt-2 border-t border-slate-500/10">
-          <PostReactionSection 
-            postId={encodeURIComponent(title + date)}
-            currentUser={currentUser}
-            isDarkMode={isDarkMode}
-            isAuthReady={isAuthReady}
-          />
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: { 
-  postId: string, 
-  currentUser: Member | null, 
-  isDarkMode: boolean,
-  isAuthReady: boolean
-}) {
-  const [reactions, setReactions] = useState<PostReaction[]>([]);
-  const [isReacting, setIsReacting] = useState(false);
-
-  useEffect(() => {
-    if (!postId || !isAuthReady) return;
-    const q = query(collection(db, 'post_reactions'), where('postId', '==', postId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => doc.data() as PostReaction);
-      setReactions(list);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `post_reactions?postId=${postId}`);
-    });
-    return () => unsubscribe();
-  }, [postId, isAuthReady]);
-
-  const hasReacted = currentUser && reactions.some(r => r.userId === currentUser.id);
-
-  const toggleReact = async () => {
-    if (!currentUser) {
-      alert("রিঅ্যাক্ট দিতে লগইন করুন");
-      return;
-    }
-    
-    setIsReacting(true);
-    const reactId = `${postId}_${currentUser.id}`;
-    
-    try {
-      if (hasReacted) {
-        await deleteDoc(doc(db, 'post_reactions', reactId))
-          .catch(err => handleFirestoreError(err, OperationType.DELETE, `post_reactions/${reactId}`));
-      } else {
-        await setDoc(doc(db, 'post_reactions', reactId), {
-          postId,
-          userId: currentUser.id,
-          userName: currentUser.name,
-          createdAt: serverTimestamp()
-        }).catch(err => handleFirestoreError(err, OperationType.WRITE, `post_reactions/${reactId}`));
-      }
-    } catch (error) {
-      console.error("Error toggling react:", error);
-    } finally {
-      setIsReacting(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-1.5">
-        <button 
-          onClick={toggleReact}
-          disabled={isReacting}
-          className={cn(
-            "p-2 rounded-full transition-all active:scale-90",
-            hasReacted ? "bg-red-500/10 text-red-500" : "hover:bg-slate-100 text-slate-400"
-          )}
-        >
-          <Heart className={cn("w-5 h-5", hasReacted && "fill-red-500")} />
-        </button>
-        <span className="text-sm font-bold opacity-70">{reactions.length}</span>
-      </div>
-    </div>
-  );
-}
-
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
@@ -5279,14 +5122,28 @@ function AppContent() {
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
               homePosts.map((post, idx) => (
-                <HomePostItem 
-                  key={`post-${idx}-${post.title}`}
-                  post={post}
-                  isDarkMode={isDarkMode}
-                  currentUser={currentUser}
-                  isAuthReady={isAuthReady}
-                  formatDate={formatDate}
-                />
+                <div key={`post-${idx}-${post.title}`} className={cn(
+                  "p-4 rounded-xl mb-5 border shadow-sm",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}>
+                  <h3 className="text-lg font-bold mb-1">{post.title}</h3>
+                  <p className="text-emerald-500 text-xs font-semibold mb-2">{formatDate(post.date)}</p>
+                  <p className="text-sm leading-relaxed opacity-90">{post.content}</p>
+                  {post.photoId && (
+                    <img 
+                      src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
+                      className="w-full rounded-lg mt-3 shadow-sm"
+                      alt="Post"
+                    />
+                  )}
+                  
+                  <PostReactionSection 
+                    postId={encodeURIComponent(post.title + post.date)}
+                    currentUser={currentUser}
+                    isDarkMode={isDarkMode}
+                    isAuthReady={isAuthReady}
+                  />
+                </div>
               ))
             )}
           </div>
@@ -9402,6 +9259,75 @@ function AppContent() {
   );
 }
 
+function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: { 
+  postId: string, 
+  currentUser: Member | null, 
+  isDarkMode: boolean,
+  isAuthReady: boolean
+}) {
+  const [reactions, setReactions] = useState<PostReaction[]>([]);
+  const [isReacting, setIsReacting] = useState(false);
+
+  useEffect(() => {
+    if (!postId || !isAuthReady) return;
+    const q = query(collection(db, 'post_reactions'), where('postId', '==', postId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data() as PostReaction);
+      setReactions(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `post_reactions?postId=${postId}`);
+    });
+    return () => unsubscribe();
+  }, [postId, isAuthReady]);
+
+  const hasReacted = currentUser && reactions.some(r => r.userId === currentUser.id);
+
+  const toggleReact = async () => {
+    if (!currentUser) {
+      alert("রিঅ্যাক্ট দিতে লগইন করুন");
+      return;
+    }
+    
+    setIsReacting(true);
+    const reactId = `${postId}_${currentUser.id}`;
+    
+    try {
+      if (hasReacted) {
+        await deleteDoc(doc(db, 'post_reactions', reactId))
+          .catch(err => handleFirestoreError(err, OperationType.DELETE, `post_reactions/${reactId}`));
+      } else {
+        await setDoc(doc(db, 'post_reactions', reactId), {
+          postId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          createdAt: serverTimestamp()
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, `post_reactions/${reactId}`));
+      }
+    } catch (error) {
+      console.error("Error toggling react:", error);
+    } finally {
+      setIsReacting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
+      <div className="flex items-center gap-1.5">
+        <button 
+          onClick={toggleReact}
+          disabled={isReacting}
+          className={cn(
+            "p-2 rounded-full transition-all active:scale-90",
+            hasReacted ? "bg-red-500/10 text-red-500" : "hover:bg-slate-100 text-slate-400"
+          )}
+        >
+          <Heart className={cn("w-5 h-5", hasReacted && "fill-red-500")} />
+        </button>
+        <span className="text-sm font-bold opacity-70">{reactions.length}</span>
+      </div>
+    </div>
+  );
+}
 
 function NavItem({ active, icon, label, onClick, showDot }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void, showDot?: boolean }) {
   return (
