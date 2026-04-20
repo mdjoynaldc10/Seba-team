@@ -332,9 +332,6 @@ const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
-// --- Proxy Helper ---
-const getProxyUrl = (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`;
-
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -342,7 +339,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await fetch(getProxyUrl(url));
+    const res = await fetch(url);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -405,7 +402,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`));
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -426,7 +423,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`));
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -444,7 +441,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`));
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -465,7 +462,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -501,7 +498,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -532,7 +529,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`));
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -548,7 +545,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`));
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -624,7 +621,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
+      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -681,7 +678,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`));
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -758,7 +755,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 
     const fetchPromises = uniqueSheets.map(async (s) => {
       try {
-        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`));
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -822,7 +819,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`))
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -861,7 +858,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`))
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -5125,14 +5122,28 @@ function AppContent() {
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
               homePosts.map((post, idx) => (
-                <HomePostItem 
-                  key={`post-${idx}-${post.title}`}
-                  post={post}
-                  isDarkMode={isDarkMode}
-                  currentUser={currentUser}
-                  isAuthReady={isAuthReady}
-                  formatDate={formatDate}
-                />
+                <div key={`post-${idx}-${post.title}`} className={cn(
+                  "p-4 rounded-xl mb-5 border shadow-sm",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                )}>
+                  <h3 className="text-lg font-bold mb-1">{post.title}</h3>
+                  <p className="text-emerald-500 text-xs font-semibold mb-2">{formatDate(post.date)}</p>
+                  <p className="text-sm leading-relaxed opacity-90">{post.content}</p>
+                  {post.photoId && (
+                    <img 
+                      src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
+                      className="w-full rounded-lg mt-3 shadow-sm"
+                      alt="Post"
+                    />
+                  )}
+                  
+                  <PostReactionSection 
+                    postId={encodeURIComponent(post.title + post.date)}
+                    currentUser={currentUser}
+                    isDarkMode={isDarkMode}
+                    isAuthReady={isAuthReady}
+                  />
+                </div>
               ))
             )}
           </div>
@@ -9248,88 +9259,6 @@ function AppContent() {
   );
 }
 
-
-// --- Home Post Item Component ---
-const HomePostItem = ({ post, isDarkMode, currentUser, isAuthReady, formatDate }: any) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const paragraphs = post.content.split('\n').filter(p => p.trim() !== '');
-  const hasLongContent = post.content.length > 200 || paragraphs.length > 2;
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      className="mb-12 last:mb-5"
-    >
-      <div className="flex flex-col">
-        <h3 className="text-xl font-black mb-1.5 text-left leading-tight tracking-tight">
-          {post.title}
-        </h3>
-        <p className="text-emerald-500 text-[10px] font-black mb-4 text-left uppercase tracking-[0.15em] opacity-70">
-          {formatDate(post.date)}
-        </p>
-        
-        <div className="relative">
-          <motion.div
-            initial={false}
-            animate={{ height: isExpanded ? 'auto' : (hasLongContent ? '3.4rem' : 'auto') }}
-            transition={{ duration: 0.4, ease: "anticipate" }}
-            className="overflow-hidden"
-          >
-            <div className={cn(
-              "text-[15px] leading-[1.7] opacity-90 text-left space-y-4 font-medium",
-              !isExpanded && hasLongContent && "line-clamp-2"
-            )}>
-              {paragraphs.map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          </motion.div>
-
-          {hasLongContent && (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-emerald-500 text-[11px] font-black mt-3 flex items-center gap-1.5 hover:opacity-70 transition-all uppercase tracking-wider"
-            >
-              {isExpanded ? (
-                <>Show Less <X className="w-3 h-3 stroke-[3]" /></>
-              ) : (
-                <>See More...</>
-              )}
-            </button>
-          )}
-        </div>
-
-        {post.photoId && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="mt-6"
-          >
-            <img 
-              src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1200`} 
-              className="w-full rounded-2xl shadow-2xl border-4 border-white/5 object-cover max-h-[400px]"
-              referrerPolicy="no-referrer"
-              alt="Post"
-            />
-          </motion.div>
-        )}
-        
-        <div className="mt-4 pt-2 border-t border-slate-500/10">
-          <PostReactionSection 
-            postId={encodeURIComponent(post.title + post.date)}
-            currentUser={currentUser}
-            isDarkMode={isDarkMode}
-            isAuthReady={isAuthReady}
-          />
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
 function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: { 
   postId: string, 
   currentUser: Member | null, 
@@ -9382,7 +9311,7 @@ function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: {
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
       <div className="flex items-center gap-1.5">
         <button 
           onClick={toggleReact}
