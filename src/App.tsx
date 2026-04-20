@@ -332,6 +332,9 @@ const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
+// --- Proxy Helper ---
+const getProxyUrl = (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`;
+
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -339,7 +342,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await fetch(url);
+    const res = await fetch(getProxyUrl(url));
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -402,7 +405,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
+    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`));
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -423,7 +426,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
+    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`));
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -441,7 +444,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
+    const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`));
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -462,7 +465,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -498,7 +501,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -529,7 +532,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
+        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`));
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -545,7 +548,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
+        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`));
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -621,7 +624,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`))
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -678,7 +681,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
+        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`));
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -755,7 +758,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 
     const fetchPromises = uniqueSheets.map(async (s) => {
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
+        const res = await fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`));
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -819,7 +822,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
+      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`))
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -858,7 +861,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
+      fetch(getProxyUrl(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`))
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
