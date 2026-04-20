@@ -9314,7 +9314,7 @@ const HomePostItem = ({ post, isDarkMode, currentUser, isAuthReady, formatDate }
           </motion.div>
         )}
         
-        <div className="mt-4 pt-2 border-t border-slate-500/10">
+        <div className="mt-8 pt-4 border-t border-slate-500/10">
           <PostReactionSection 
             postId={encodeURIComponent(post.title + post.date)}
             currentUser={currentUser}
@@ -9379,7 +9379,7 @@ function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: {
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
       <div className="flex items-center gap-1.5">
         <button 
           onClick={toggleReact}
