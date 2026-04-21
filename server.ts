@@ -264,7 +264,11 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // In production, we assume we might be running from dist/server.js OR root/server.ts
+    // Use import.meta.url to find our location and resolve to the static assets
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const distPath = currentDir.endsWith('dist') ? currentDir : path.join(currentDir, 'dist');
+    
     app.use(express.static(distPath));
     app.get("*all", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
