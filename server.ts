@@ -106,19 +106,34 @@ app.post("/api/proxy", multer().any(), async (req, res) => {
     return res.status(400).json({ error: "Missing url parameter" });
   }
   try {
-    const formData = new URLSearchParams();
-    if (req.body) {
-      Object.entries(req.body).forEach(([key, value]) => {
-        formData.append(key, String(value));
-      });
+    let body: any;
+    let contentType = req.headers["content-type"];
+
+    if (contentType?.includes("application/json")) {
+      body = JSON.stringify(req.body);
+    } else {
+      const formData = new URLSearchParams();
+      if (req.body) {
+        Object.entries(req.body).forEach(([key, value]) => {
+          formData.append(key, String(value));
+        });
+      }
+      body = formData;
+      contentType = "application/x-www-form-urlencoded";
+    }
+
+    const headers: any = {};
+    if (req.headers["authorization"]) {
+      headers["Authorization"] = req.headers["authorization"];
+    }
+    if (contentType) {
+      headers["Content-Type"] = contentType;
     }
 
     const response = await fetch(url, {
       method: "POST",
-      body: formData,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      body,
+      headers
     });
     const text = await response.text();
     res.send(text);

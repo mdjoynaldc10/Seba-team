@@ -333,6 +333,17 @@ const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
+async function proxyFetch(url: string, options?: any) {
+  if (url.startsWith('https://docs.google.com') || 
+      url.startsWith('https://ipapi.co') || 
+      url.startsWith('https://nominatim.openstreetmap.org') ||
+      url.startsWith('https://onesignal.com')) {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    return fetch(proxyUrl, options);
+  }
+  return fetch(url, options);
+}
+
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -340,7 +351,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await fetch(url, { referrerPolicy: "no-referrer" });
+    const res = await proxyFetch(url, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -403,7 +414,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
+    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -424,7 +435,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
+    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -442,7 +453,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
+    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -463,7 +474,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      proxyFetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -499,7 +510,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      proxyFetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -530,7 +541,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -546,7 +557,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -622,7 +633,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      proxyFetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -679,7 +690,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -756,7 +767,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 
     const fetchPromises = uniqueSheets.map(async (s) => {
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
+        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -820,7 +831,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      proxyFetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -859,7 +870,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      proxyFetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -1022,37 +1033,41 @@ const getDeviceInfo = () => {
   return { deviceName, deviceModel, userAgent: ua };
 };
 
-const fetchPreciseLocation = async (): Promise<string> => {
+const fetchPreciseLocation = async (): Promise<{ name: string; coords: string }> => {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      // Fallback to IP if geolocation not supported
-      fetch('https://ipapi.co/json/')
+    const fallbackIP = () => {
+      proxyFetch('https://ipapi.co/json/')
         .then(res => res.json())
-        .then(data => resolve(data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location"))
-        .catch(() => resolve("Unknown Location"));
+        .then(data => {
+          const name = data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location";
+          const coords = data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : "Unknown Coords";
+          resolve({ name, coords });
+        })
+        .catch(() => resolve({ name: "Unknown Location", coords: "Unknown Coords" }));
+    };
+
+    if (!navigator.geolocation) {
+      fallbackIP();
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
         try {
-          // Reverse geocoding using OpenStreetMap (Free, no key required for low volume)
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
+          // Reverse geocoding using OpenStreetMap
+          const res = await proxyFetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
           const data = await res.json();
           const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "Unknown City";
           const country = data.address.country || "Unknown Country";
-          resolve(`${city}, ${country}`);
+          resolve({ name: `${city}, ${country}`, coords });
         } catch (e) {
-          // Fallback to coordinates if reverse geocoding fails
-          resolve(`${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
+          // Fallback to coordinates as name if reverse geocoding fails
+          resolve({ name: `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`, coords });
         }
       },
       () => {
-        // Fallback to IP if user denies or error occurs
-        fetch('https://ipapi.co/json/')
-          .then(res => res.json())
-          .then(data => resolve(data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location"))
-          .catch(() => resolve("Unknown Location"));
+        fallbackIP();
       },
       { timeout: 10000 }
     );
@@ -1640,6 +1655,25 @@ function CloudPinPage({
   const [isVerified, setIsVerified] = useState(false);
   const [showCurrentPin, setShowCurrentPin] = useState(false);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
+  
+  // Profile Verification States
+  const [verifyName, setVerifyName] = useState('');
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [verifyEmail, setVerifyEmail] = useState('');
+
+  const handleVerifyProfile = () => {
+    const nameMatch = verifyName.trim().toLowerCase() === currentUser.name.trim().toLowerCase();
+    const phoneMatch = verifyPhone.trim() && verifyPhone.trim() === currentUser.phone.trim();
+    const emailMatch = verifyEmail.trim().toLowerCase() && verifyEmail.trim().toLowerCase() === (currentUser.email || '').trim().toLowerCase();
+
+    if (nameMatch && (phoneMatch || emailMatch)) {
+      setIsVerified(true);
+      setPin('');
+      setConfirmPin('');
+    } else {
+      alert("তথ্য ভুল! আপনার নাম এবং (ইমেইল অথবা ফোন নম্বর) সঠিকভাবে দিন।");
+    }
+  };
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
@@ -1760,13 +1794,14 @@ function CloudPinPage({
           const { deviceName, deviceModel, userAgent } = getDeviceInfo();
           const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
           
-          const location = await fetchPreciseLocation();
+          const locationData = await fetchPreciseLocation();
           await setDoc(doc(db, 'sessions', newSessionId), {
             id: newSessionId,
             userId: currentUser.id,
             deviceName,
             deviceModel,
-            location,
+            location: locationData.name,
+            coords: locationData.coords,
             userAgent,
             status: 'active',
             lastActive: serverTimestamp()
@@ -1955,36 +1990,53 @@ function CloudPinPage({
                     {mode === 'change' && !isVerified ? (
                       <div className="space-y-4">
                         <div className="text-center space-y-2 mb-4">
-                          <h3 className="text-lg font-bold">বর্তমান পিন যাচাই করুন</h3>
-                          <p className="text-xs opacity-60">পরিবর্তন করতে আপনার বর্তমান পিন কোডটি দিন।</p>
+                          <h3 className="text-lg font-bold">প্রোফাইল যাচাইকরণ</h3>
+                          <p className="text-xs opacity-60">পিন পরিবর্তন করতে আপনার সঠিক তথ্য দিন।</p>
                         </div>
+                        
                         <div className="space-y-3">
-                          <div className="relative">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">পূর্ণ নাম</label>
                             <input 
-                              type={showCurrentPin ? "text" : "password"} 
-                              placeholder="বর্তমান পিন" 
-                              value={currentPinInput}
-                              onChange={(e) => setCurrentPinInput(e.target.value)}
-                              className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                              type="text" 
+                              placeholder="আপনার নাম" 
+                              value={verifyName}
+                              onChange={(e) => setVerifyName(e.target.value)}
+                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                             />
-                            <button 
-                              onClick={() => setShowCurrentPin(!showCurrentPin)}
-                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                            >
-                              {showCurrentPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
                           </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">ইমেইল (Gmail)</label>
+                            <input 
+                              type="email" 
+                              placeholder="আপনার জিমেইল" 
+                              value={verifyEmail}
+                              onChange={(e) => setVerifyEmail(e.target.value)}
+                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">মোবাইল নম্বর</label>
+                            <input 
+                              type="tel" 
+                              placeholder="আপনার মোবাইল নম্বর" 
+                              value={verifyPhone}
+                              onChange={(e) => setVerifyPhone(e.target.value)}
+                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm font-mono", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            />
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 mt-2">
+                             <p className="text-[10px] text-orange-500 font-medium leading-relaxed">
+                               পিন পরিবর্তন করতে নাম এবং (ইমেইল অথবা মোবাইল নম্বর) এর মধ্যে যেকোনো একটি মিলতে হবে।
+                             </p>
+                          </div>
+
                           <button 
-                            onClick={() => {
-                              if (currentPinInput === savedPin) {
-                                setIsVerified(true);
-                                setPin('');
-                                setConfirmPin('');
-                              } else {
-                                alert("ভুল পিন! আবার চেষ্টা করুন।");
-                              }
-                            }}
-                            className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95"
+                            onClick={handleVerifyProfile}
+                            className="w-full py-4 mt-2 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
                           >
                             যাচাই করুন
                           </button>
@@ -2160,11 +2212,15 @@ function CloudPinPage({
                         <p className="text-[10px] opacity-60 truncate">
                           {isCurrent ? "This Device" : sess.deviceModel}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 opacity-40 text-[9px]">
-                          <span className="flex items-center gap-1"><MapPin className="w-2 h-2" /> {sess.location}</span>
-                          <span>•</span>
-                          <span>{sess.lastActive?.toDate ? new Date(sess.lastActive.toDate()).toLocaleString() : 'Just now'}</span>
-                        </div>
+                          <div className="flex flex-col gap-0.5 mt-1 opacity-60 text-[9px]">
+                            <span className="flex items-center gap-1"><MapPin className="w-2 h-2 text-emerald-500" /> location: {sess.location}</span>
+                            {sess.coords && (
+                              <span className="flex items-center gap-1 pl-3 font-mono opacity-80">Exact: {sess.coords}</span>
+                            )}
+                            <div className="flex items-center gap-2 mt-0.5 opacity-60">
+                              <span>{sess.lastActive?.toDate ? new Date(sess.lastActive.toDate()).toLocaleString() : 'Just now'}</span>
+                            </div>
+                          </div>
                       </div>
                       {isRevoked ? (
                         <button 
@@ -3112,6 +3168,7 @@ function AppContent() {
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
   const [selectedBookAuthor, setSelectedBookAuthor] = useState<string>('সব');
   const [selectedBookStatus, setSelectedBookStatus] = useState<string>('সব');
+  const [activeHomeTab, setActiveHomeTab] = useState<'feed' | 'notices'>('feed');
 
   const closeAllOverlays = useCallback(() => {
     setShowInfoPage(false);
@@ -3190,7 +3247,7 @@ function AppContent() {
     }
 
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      await proxyFetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -3614,13 +3671,14 @@ function AppContent() {
           const { deviceName, deviceModel, userAgent } = getDeviceInfo();
           const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
           
-          fetchPreciseLocation().then(location => {
+          fetchPreciseLocation().then(locationData => {
             return setDoc(doc(db, 'sessions', newSessionId), {
               id: newSessionId,
               userId: user.id,
               deviceName,
               deviceModel,
-              location,
+              location: locationData.name,
+              coords: locationData.coords,
               userAgent,
               status: 'active',
               lastActive: serverTimestamp()
@@ -4142,7 +4200,7 @@ function AppContent() {
       const formData = new FormData();
       Object.entries(regFormData).forEach(([key, value]) => formData.append(key, String(value)));
 
-      const response = await fetch(scriptURL, { method: 'POST', body: formData });
+      const response = await proxyFetch(scriptURL, { method: 'POST', body: formData });
       // Google Apps Script usually returns a redirect or success
       setRegStatus({ text: 'সফলভাবে নিবন্ধিত হয়েছে!', type: 'success' });
       setRegFormData({ bloodGroup: '', name: '', district: '', city: '', username: '', contactNo: '' });
@@ -4162,14 +4220,15 @@ function AppContent() {
       const { deviceName, deviceModel, userAgent } = getDeviceInfo();
       const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
-      const location = await fetchPreciseLocation();
+      const locationData = await fetchPreciseLocation();
 
       await setDoc(doc(db, 'sessions', sessionId), {
         id: sessionId,
         userId: member.id,
         deviceName,
         deviceModel,
-        location,
+        location: locationData.name,
+        coords: locationData.coords,
         userAgent,
         status: 'active',
         lastActive: serverTimestamp()
@@ -4865,7 +4924,9 @@ function AppContent() {
     if (!dateValue) return 'তথ্য নেই';
     try {
       let date: Date;
-      if (typeof dateValue === 'string') {
+      if (dateValue && typeof dateValue.toDate === 'function') {
+        date = dateValue.toDate();
+      } else if (typeof dateValue === 'string') {
         const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
         date = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(dateValue);
       } else {
@@ -5139,6 +5200,10 @@ function AppContent() {
       <main className="flex-1 mt-[60px] mb-[65px] relative overflow-hidden">
         <motion.div 
           onPanEnd={(_, info) => {
+            if (activeTab === 'home') {
+              const handled = handleSwipe(info, ['feed', 'notices'], activeHomeTab, setActiveHomeTab);
+              if (handled) return;
+            }
             if (activeTab === 'blood') {
               const handled = handleSwipe(info, ['donors', 'posts'], activeBloodTab, setActiveBloodTab);
               if (handled) return;
@@ -5150,82 +5215,132 @@ function AppContent() {
         >
           {/* Home Tab */}
           <div className="w-1/5 shrink-0 h-full overflow-y-auto px-4 pb-4 scroll-smooth no-scrollbar">
-            {/* Global Notice Section (Sticky) */}
-            {currentUser && globalNotices.length > 0 && (
-              <div className={cn(
-                "sticky top-0 -mx-4 z-[100] px-4 pt-2 pb-4 mb-6 shadow-lg border-b",
-                isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
-              )}>
-                <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 global-notice-slider pt-2">
-                  {globalNotices.map((notice) => (
+            {/* Home Tabs Interface */}
+            <div className={cn(
+              "sticky top-0 -mx-4 z-[100] px-4 pt-4 mb-6 border-b",
+              isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+            )}>
+              <div className="flex gap-8 relative">
+                <button 
+                  onClick={() => setActiveHomeTab('feed')}
+                  className={cn(
+                    "pb-3 text-[15px] font-black transition-all relative",
+                    activeHomeTab === 'feed' ? "text-emerald-500" : "opacity-40"
+                  )}
+                >
+                  নিউজ ফিড
+                  {activeHomeTab === 'feed' && (
                     <motion.div 
-                      key={notice.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      onClick={() => {
-                        setActiveGlobalNotice(notice);
-                        setShowFullNotice(true);
-                      }}
-                      className={cn(
-                        "flex-shrink-0 w-[82%] snap-center p-4 rounded-[1.8rem] border-2 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all",
-                        isDarkMode ? "bg-slate-800 border-emerald-500/30 text-white" : "bg-white border-emerald-100 text-slate-900 shadow-sm"
-                      )}
-                    >
-                      {/* Green Reflection Effect */}
-                      <motion.div 
-                        initial={{ x: '-100%' }}
-                        animate={{ x: '200%' }}
-                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 4, ease: "linear" }}
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none"
-                      />
-                      
-                      <div className="flex items-start gap-3 relative z-10">
-                        <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                          <Megaphone className="w-4 h-4 text-white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-black text-emerald-500 mb-0.5 truncate">{notice.title}</h3>
-                          <p className="text-[11px] opacity-80 leading-tight line-clamp-2">{notice.message}</p>
-                          <div className="mt-1.5 flex items-center gap-2 opacity-40">
-                            <span className="text-[8px] font-bold uppercase tracking-wider">
-                              {formatDate(notice.createdAt)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {isLoading && homePosts.length === 0 ? (
-              <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
-            ) : (
-              homePosts.map((post, idx) => (
-                <div key={`post-${idx}-${post.title}`} className="mb-10 px-2">
-                  <h3 className="text-xl font-bold mb-1 text-left">{post.title}</h3>
-                  <p className="text-emerald-500 text-xs font-semibold mb-3 text-left">{formatDate(post.date)}</p>
-                  
-                  <ExpandableContent content={post.content} isDarkMode={isDarkMode} />
-                  
-                  {post.photoId && (
-                    <img 
-                      src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
-                      className="w-full rounded-2xl mt-4 shadow-sm"
-                      alt="Post"
+                      layoutId="homeTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 rounded-t-full"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                     />
                   )}
-                  
-                  <PostReactionSection 
-                    postId={encodeURIComponent(post.title + post.date)}
-                    currentUser={currentUser}
-                    isDarkMode={isDarkMode}
-                    isAuthReady={isAuthReady}
-                  />
-                </div>
-              ))
-            )}
+                </button>
+                <button 
+                  onClick={() => setActiveHomeTab('notices')}
+                  className={cn(
+                    "pb-3 text-[15px] font-black transition-all relative",
+                    activeHomeTab === 'notices' ? "text-emerald-500" : "opacity-40"
+                  )}
+                >
+                  নোটিশ
+                  {activeHomeTab === 'notices' && (
+                    <motion.div 
+                      layoutId="homeTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 rounded-t-full"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {activeHomeTab === 'feed' ? (
+                <motion.div 
+                  key="feed"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {isLoading && homePosts.length === 0 ? (
+                    <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+                  ) : (
+                    homePosts.map((post, idx) => (
+                      <div key={`post-${idx}-${post.title}`} className="mb-10 px-2">
+                        <h3 className="text-xl font-bold mb-1 text-left line-clamp-2">{post.title}</h3>
+                        <p className="text-emerald-500 text-xs font-semibold mb-3 text-left">{formatDate(post.date)}</p>
+                        
+                        <ExpandableContent content={post.content} isDarkMode={isDarkMode} />
+                        
+                        {post.photoId && (
+                          <img 
+                            src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
+                            referrerPolicy="no-referrer"
+                            className="w-full rounded-2xl mt-4 shadow-sm"
+                            alt="Post"
+                          />
+                        )}
+                        
+                        <PostReactionSection 
+                          postId={encodeURIComponent(post.title + post.date)}
+                          currentUser={currentUser}
+                          isDarkMode={isDarkMode}
+                          isAuthReady={isAuthReady}
+                        />
+                      </div>
+                    ))
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="notices"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-4"
+                >
+                  {globalNotices.length === 0 ? (
+                    <div className="text-center py-20 opacity-50">কোনো নোটিশ পাওয়া যায়নি</div>
+                  ) : (
+                    globalNotices.map((notice) => (
+                      <motion.div 
+                        key={notice.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        onClick={() => {
+                          setActiveGlobalNotice(notice);
+                          setShowFullNotice(true);
+                        }}
+                        className={cn(
+                          "p-4 rounded-3xl border-2 cursor-pointer active:scale-[0.98] transition-all",
+                          isDarkMode ? "bg-slate-800 border-white/5" : "bg-white border-slate-100 shadow-sm"
+                        )}
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 bg-emerald-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                            <Megaphone className="w-5 h-5 text-emerald-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-sm mb-1 truncate">{notice.title}</h3>
+                            <p className="text-[11px] opacity-60 line-clamp-2 leading-relaxed">{notice.message}</p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                                {formatDate(notice.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-20 self-center" />
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Books Tab */}
@@ -5446,7 +5561,7 @@ function AppContent() {
 
                   return filtered.map((m, idx) => (
                     <button 
-                      key={`member-${idx}-${m.id}`} 
+                      key={`member-special-${idx}-${m.id}`} 
                       onMouseDown={() => handleLongPressStart('member', m)}
                       onMouseUp={handleLongPressEnd}
                       onMouseLeave={handleLongPressEnd}

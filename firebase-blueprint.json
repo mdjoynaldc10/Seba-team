@@ -184,6 +184,7 @@
         "deviceName": { "type": "string" },
         "deviceModel": { "type": "string" },
         "location": { "type": "string" },
+        "coords": { "type": "string", "description": "Exact latitude and longitude coordinates" },
         "userAgent": { "type": "string" },
         "status": { "type": "string", "enum": ["active", "revoked"] },
         "lastActive": { "type": "string", "format": "date-time" }
