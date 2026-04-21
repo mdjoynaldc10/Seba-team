@@ -3828,7 +3828,13 @@ function AppContent() {
         const postDate = new Date(data.donationDate);
         postDate.setHours(0, 0, 0, 0);
 
-        if (postDate < today) {
+        // Standard 120-day wait period for accepted posts, otherwise delete day after donation date
+        const expiryDate = new Date(postDate);
+        if (data.status === 'accepted') {
+          expiryDate.setDate(expiryDate.getDate() + 120);
+        }
+
+        if (expiryDate < today) {
           deleteDoc(doc(db, 'blood_posts', docSnap.id)).catch(err => console.error("Error auto-deleting blood post:", err));
         } else {
           posts.push({ ...data, id: docSnap.id });
@@ -5195,17 +5201,16 @@ function AppContent() {
               <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
             ) : (
               homePosts.map((post, idx) => (
-                <div key={`post-${idx}-${post.title}`} className={cn(
-                  "p-4 rounded-xl mb-5 border shadow-sm",
-                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                )}>
-                  <h3 className="text-lg font-bold mb-1">{post.title}</h3>
-                  <p className="text-emerald-500 text-xs font-semibold mb-2">{formatDate(post.date)}</p>
-                  <p className="text-sm leading-relaxed opacity-90">{post.content}</p>
+                <div key={`post-${idx}-${post.title}`} className="mb-10 px-2">
+                  <h3 className="text-xl font-bold mb-1 text-left">{post.title}</h3>
+                  <p className="text-emerald-500 text-xs font-semibold mb-3 text-left">{formatDate(post.date)}</p>
+                  
+                  <ExpandableContent content={post.content} isDarkMode={isDarkMode} />
+                  
                   {post.photoId && (
                     <img 
                       src={`https://drive.google.com/thumbnail?id=${post.photoId}&sz=w1000`} 
-                      className="w-full rounded-lg mt-3 shadow-sm"
+                      className="w-full rounded-2xl mt-4 shadow-sm"
                       alt="Post"
                     />
                   )}
@@ -5631,33 +5636,69 @@ function AppContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredDonors.map((donor, idx) => (
-                      <div key={`donor-${idx}-${donor.phone}`} className={cn(
-                        "p-4 rounded-xl border shadow-sm",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                      )}>
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
-                          <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
+                    {filteredDonors.map((donor, idx) => {
+                      const activePost = bloodPosts.find(p => p.status === 'accepted' && p.acceptorPhone === donor.phone);
+                      const isCurrentlyDonating = !!activePost;
+                      
+                      // Calculate countdown progress for 120 days recovery
+                      let countdownProgress = 0;
+                      if (activePost) {
+                        const donationDate = new Date(activePost.donationDate).getTime();
+                        const totalWait = 120 * 24 * 60 * 60 * 1000; // 120 days in ms
+                        const elapsed = Date.now() - donationDate;
+                        countdownProgress = Math.max(0, Math.min(100, 100 - (elapsed / totalWait) * 100));
+                      }
+
+                      return (
+                        <div key={`donor-${idx}-${donor.phone}`} className={cn(
+                          "p-4 rounded-xl border shadow-sm relative overflow-hidden",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                        )}>
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
+                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
+                          </div>
+                          <p className="text-sm opacity-80 mb-1">
+                            <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
+                          </p>
+                          <p className={cn("text-sm opacity-80", isCurrentlyDonating && "text-emerald-500 font-bold")}>
+                            <strong>মোবাইল:</strong> {currentUser ? (isCurrentlyDonating ? `********${donor.phone.slice(-2)}` : donor.phone) : 'লুকানো'}
+                          </p>
+                          {currentUser ? (
+                            isCurrentlyDonating ? (
+                              <div className="mt-3 flex flex-col gap-2">
+                                <div className="flex items-center justify-center gap-2 py-2 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-lg text-sm font-semibold">
+                                  <CheckCircle2 className="w-4 h-4" /> ইতিমধ্যে রক্তদান করছেন...
+                                </div>
+                              </div>
+                            ) : (
+                              <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
+                                কল করুন
+                              </a>
+                            )
+                          ) : (
+                            <button 
+                              onClick={() => setActiveTab('profile')}
+                              className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                            >
+                              বিস্তারিত দেখতে লগইন করুন
+                            </button>
+                          )}
+
+                          {/* Countdown Timer Line */}
+                          {isCurrentlyDonating && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-100 dark:bg-slate-700">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${countdownProgress}%` }}
+                                transition={{ duration: 1 }}
+                                className="h-full bg-emerald-500"
+                              />
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm opacity-80 mb-1">
-                          <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
-                        </p>
-                        <p className="text-sm opacity-80"><strong>মোবাইল:</strong> {currentUser ? donor.phone : 'লুকানো'}</p>
-                        {currentUser ? (
-                          <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
-                            কল করুন
-                          </a>
-                        ) : (
-                          <button 
-                            onClick={() => setActiveTab('profile')}
-                            className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
-                          >
-                            বিস্তারিত দেখতে লগইন করুন
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                     {filteredDonors.length === 0 && (
                       <div className="text-center p-10 opacity-50">কোনো রক্তদাতা পাওয়া যায়নি</div>
                     )}
@@ -9350,6 +9391,40 @@ function AppContent() {
   );
 }
 
+function ExpandableContent({ content, isDarkMode }: { content: string, isDarkMode: boolean }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const paragraphs = content.split('\n').filter(p => p.trim() !== '');
+
+  return (
+    <div className="space-y-2 text-left">
+      <div className={cn(
+        "relative overflow-hidden transition-[max-height] duration-500 ease-in-out",
+        isExpanded ? "max-h-[2000px]" : "max-h-[3.2rem]"
+      )}>
+        {paragraphs.map((para, i) => (
+          <p key={i} className="text-sm leading-relaxed opacity-90 mb-3">
+            {para}
+          </p>
+        ))}
+        {!isExpanded && paragraphs.length > 0 && (
+          <div className={cn(
+            "absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t pointer-events-none",
+            isDarkMode ? "from-slate-900" : "from-slate-50"
+          )} />
+        )}
+      </div>
+      {content.length > 80 && (
+        <button 
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-emerald-500 font-bold text-[10px] hover:underline flex items-center gap-1 mt-1"
+        >
+          {isExpanded ? 'See Less' : 'See More...'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: { 
   postId: string, 
   currentUser: Member | null, 
@@ -9402,7 +9477,7 @@ function PostReactionSection({ postId, currentUser, isDarkMode, isAuthReady }: {
   };
 
   return (
-    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100/50">
+    <div className="flex items-center gap-4 mt-1 pt-1 border-t-2 border-slate-200/20 dark:border-slate-700/30">
       <div className="flex items-center gap-1.5">
         <button 
           onClick={toggleReact}
