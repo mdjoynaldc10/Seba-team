@@ -333,17 +333,6 @@ const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
-async function proxyFetch(url: string, options?: any) {
-  if (url.startsWith('https://docs.google.com') || 
-      url.startsWith('https://ipapi.co') || 
-      url.startsWith('https://nominatim.openstreetmap.org') ||
-      url.startsWith('https://onesignal.com')) {
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-    return fetch(proxyUrl, options);
-  }
-  return fetch(url, options);
-}
-
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -351,7 +340,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await proxyFetch(url, { referrerPolicy: "no-referrer" });
+    const res = await fetch(url, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -414,7 +403,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -435,7 +424,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -453,7 +442,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -474,7 +463,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      proxyFetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -510,7 +499,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      proxyFetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -541,7 +530,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -557,7 +546,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -633,7 +622,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      proxyFetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -690,7 +679,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -767,7 +756,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 
     const fetchPromises = uniqueSheets.map(async (s) => {
       try {
-        const res = await proxyFetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -831,7 +820,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      proxyFetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -870,7 +859,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      proxyFetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -1036,7 +1025,7 @@ const getDeviceInfo = () => {
 const fetchPreciseLocation = async (): Promise<{ name: string; coords: string }> => {
   return new Promise((resolve) => {
     const fallbackIP = () => {
-      proxyFetch('https://ipapi.co/json/')
+      fetch('https://ipapi.co/json/')
         .then(res => res.json())
         .then(data => {
           const name = data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location";
@@ -1056,7 +1045,7 @@ const fetchPreciseLocation = async (): Promise<{ name: string; coords: string }>
         const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
         try {
           // Reverse geocoding using OpenStreetMap
-          const res = await proxyFetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
           const data = await res.json();
           const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "Unknown City";
           const country = data.address.country || "Unknown Country";
@@ -1659,19 +1648,25 @@ function CloudPinPage({
   // Profile Verification States
   const [verifyName, setVerifyName] = useState('');
   const [verifyPhone, setVerifyPhone] = useState('');
-  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifyBlood, setVerifyBlood] = useState('');
+  const [verifyDOB, setVerifyDOB] = useState('');
+  const [verifyArea, setVerifyArea] = useState('');
 
   const handleVerifyProfile = () => {
-    const nameMatch = verifyName.trim().toLowerCase() === currentUser.name.trim().toLowerCase();
-    const phoneMatch = verifyPhone.trim() && verifyPhone.trim() === currentUser.phone.trim();
-    const emailMatch = verifyEmail.trim().toLowerCase() && verifyEmail.trim().toLowerCase() === (currentUser.email || '').trim().toLowerCase();
+    const profileMatch = (
+      verifyName.trim().toLowerCase() === currentUser.name.trim().toLowerCase() &&
+      verifyPhone.trim() === currentUser.phone.trim() &&
+      verifyBlood === currentUser.bloodGroup &&
+      verifyDOB === currentUser.dob &&
+      verifyArea.trim().toLowerCase() === currentUser.area.trim().toLowerCase()
+    );
 
-    if (nameMatch && (phoneMatch || emailMatch)) {
+    if (profileMatch) {
       setIsVerified(true);
       setPin('');
       setConfirmPin('');
     } else {
-      alert("তথ্য ভুল! আপনার নাম এবং (ইমেইল অথবা ফোন নম্বর) সঠিকভাবে দিন।");
+      alert("তথ্য ভুল! দয়া করে আপনার প্রোফাইলের সঠিক তথ্য দিন।");
     }
   };
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
@@ -2006,32 +2001,50 @@ function CloudPinPage({
                             />
                           </div>
 
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">ইমেইল (Gmail)</label>
-                            <input 
-                              type="email" 
-                              placeholder="আপনার জিমেইল" 
-                              value={verifyEmail}
-                              onChange={(e) => setVerifyEmail(e.target.value)}
-                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                            />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold opacity-40 uppercase ml-1">মোবাইল</label>
+                              <input 
+                                type="tel" 
+                                placeholder="মোবাইল নম্বর" 
+                                value={verifyPhone}
+                                onChange={(e) => setVerifyPhone(e.target.value)}
+                                className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm font-mono", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold opacity-40 uppercase ml-1">রক্তের গ্রুপ</label>
+                              <select 
+                                value={verifyBlood}
+                                onChange={(e) => setVerifyBlood(e.target.value)}
+                                className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                              >
+                                <option value="">সিলেক্ট করুন</option>
+                                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => <option key={g} value={g}>{g}</option>)}
+                              </select>
+                            </div>
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">মোবাইল নম্বর</label>
+                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">জন্ম তারিখ</label>
                             <input 
-                              type="tel" 
-                              placeholder="আপনার মোবাইল নম্বর" 
-                              value={verifyPhone}
-                              onChange={(e) => setVerifyPhone(e.target.value)}
+                              type="text" 
+                              placeholder="DD-MM-YYYY" 
+                              value={verifyDOB}
+                              onChange={(e) => setVerifyDOB(e.target.value)}
                               className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm font-mono", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                             />
                           </div>
 
-                          <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 mt-2">
-                             <p className="text-[10px] text-orange-500 font-medium leading-relaxed">
-                               পিন পরিবর্তন করতে নাম এবং (ইমেইল অথবা মোবাইল নম্বর) এর মধ্যে যেকোনো একটি মিলতে হবে।
-                             </p>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">বাসস্থান/এরিয়া</label>
+                            <input 
+                              type="text" 
+                              placeholder="আপনার এরিয়া" 
+                              value={verifyArea}
+                              onChange={(e) => setVerifyArea(e.target.value)}
+                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            />
                           </div>
 
                           <button 
@@ -3247,7 +3260,7 @@ function AppContent() {
     }
 
     try {
-      await proxyFetch("https://onesignal.com/api/v1/notifications", {
+      await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -4200,7 +4213,7 @@ function AppContent() {
       const formData = new FormData();
       Object.entries(regFormData).forEach(([key, value]) => formData.append(key, String(value)));
 
-      const response = await proxyFetch(scriptURL, { method: 'POST', body: formData });
+      const response = await fetch(scriptURL, { method: 'POST', body: formData });
       // Google Apps Script usually returns a redirect or success
       setRegStatus({ text: 'সফলভাবে নিবন্ধিত হয়েছে!', type: 'success' });
       setRegFormData({ bloodGroup: '', name: '', district: '', city: '', username: '', contactNo: '' });
@@ -5561,7 +5574,7 @@ function AppContent() {
 
                   return filtered.map((m, idx) => (
                     <button 
-                      key={`member-special-${idx}-${m.id}`} 
+                      key={`member-${idx}-${m.id}`} 
                       onMouseDown={() => handleLongPressStart('member', m)}
                       onMouseUp={handleLongPressEnd}
                       onMouseLeave={handleLongPressEnd}
