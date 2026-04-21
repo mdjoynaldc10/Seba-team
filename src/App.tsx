@@ -5375,22 +5375,22 @@ function AppContent() {
                               key={`book-${idx}-${book.name}`}
                               onClick={() => setSelectedBook(book)}
                               className={cn(
-                                "flex items-center justify-between p-4 rounded-3xl border text-left active:scale-[0.98] transition-all",
+                                "relative flex items-start p-4 pt-5 rounded-3xl border text-left active:scale-[0.98] transition-all",
                                 isDarkMode ? "bg-slate-800 border-slate-700 hover:border-emerald-500/30" : "bg-white border-slate-100 shadow-sm hover:border-emerald-500/30"
                               )}
                             >
-                              <div className="flex items-center gap-4">
-                                <div className="relative group">
+                              <div className="flex items-start gap-4 flex-1">
+                                <div className="relative group shrink-0">
                                   <BookImage book={book} isDarkMode={isDarkMode} />
                                   <div className="absolute -inset-1 bg-emerald-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
-                                <div className="min-w-0">
-                                  <span className="block font-bold text-sm truncate">{book.name}</span>
-                                  <span className="block text-[10px] font-bold opacity-40 uppercase tracking-widest mt-0.5">{book.author}</span>
+                                <div className="min-w-0 pr-16">
+                                  <span className="block font-bold text-sm leading-tight break-words">{book.name}</span>
+                                  <span className="block text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">{book.author}</span>
                                 </div>
                               </div>
                               <span className={cn(
-                                "text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter shrink-0 ml-2",
+                                "absolute top-3 right-3 text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter shrink-0",
                                 book.status === 'উপলব্ধ' 
                                   ? isDarkMode ? "bg-emerald-500/10 text-emerald-500" : "bg-emerald-100 text-emerald-600" 
                                   : isDarkMode ? "bg-red-500/10 text-red-400" : "bg-red-100 text-red-600"
