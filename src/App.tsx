@@ -340,7 +340,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -403,7 +403,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -424,7 +424,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -442,7 +442,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -463,7 +463,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -499,7 +499,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -530,7 +530,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -546,7 +546,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -622,7 +622,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -679,7 +679,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -820,7 +820,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -859,7 +859,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
+      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -5149,7 +5149,7 @@ function AppContent() {
           style={{ transform: `translateX(-${['home', 'books', 'members', 'blood', 'profile'].indexOf(activeTab) * 20}%)`, width: '500%' }}
         >
           {/* Home Tab */}
-          <div className="w-1/5 h-full overflow-y-auto px-4 pb-4 max-w-2xl mx-auto scroll-smooth no-scrollbar">
+          <div className="w-1/5 shrink-0 h-full overflow-y-auto px-4 pb-4 scroll-smooth no-scrollbar">
             {/* Global Notice Section (Sticky) */}
             {currentUser && globalNotices.length > 0 && (
               <div className={cn(
@@ -5229,9 +5229,9 @@ function AppContent() {
           </div>
 
           {/* Books Tab */}
-          <div className="w-1/5 h-full overflow-y-auto px-0 pt-0 pb-4 max-w-2xl mx-auto no-scrollbar">
+          <div className="w-1/5 shrink-0 h-full overflow-y-auto overflow-x-hidden px-4 pt-0 pb-4 no-scrollbar">
             <div className={cn(
-              "sticky top-0 z-[100] px-4 pt-4 pb-3 space-y-3 transition-colors",
+              "sticky top-0 z-[100] -mx-4 px-4 pt-4 pb-3 space-y-3 transition-colors",
               isDarkMode ? "bg-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)]" : "bg-slate-50 shadow-sm"
             )}>
               <div className={cn(
@@ -5360,7 +5360,7 @@ function AppContent() {
                     return Object.entries(grouped).map(([category, catBooks]) => (
                       <div key={category} className="space-y-4">
                         <div className={cn(
-                          "sticky top-[154px] z-[90] -mx-4 px-4 py-2 flex items-center justify-between transition-colors",
+                          "sticky top-[154px] z-[90] -mx-4 px-4 py-2 flex items-center justify-between transition-colors outline-none",
                           isDarkMode ? "bg-slate-900 border-b border-white/5" : "bg-slate-50 border-b border-black/5"
                         )}>
                           <div className="flex items-center gap-2">
@@ -5409,7 +5409,7 @@ function AppContent() {
           </div>
 
           {/* Members Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 max-w-2xl mx-auto">
+          <div className="w-1/5 shrink-0 h-full overflow-y-auto px-4 py-4 no-scrollbar">
             <div className="sticky top-0 z-50 bg-inherit py-2">
               <div className={cn(
                 "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
@@ -5538,7 +5538,7 @@ function AppContent() {
           <div 
             ref={bloodTabRef}
             onScroll={handleBloodScroll}
-            className="w-1/5 h-full overflow-y-auto max-w-2xl mx-auto relative"
+            className="w-1/5 shrink-0 h-full overflow-y-auto relative no-scrollbar"
           >
             <div className="min-h-full">
             {/* Sticky Header */}
@@ -5887,7 +5887,7 @@ function AppContent() {
           </div>
 
           {/* Profile Tab */}
-          <div className="w-1/5 h-full overflow-y-auto p-4 pt-0 max-w-2xl mx-auto">
+          <div className="w-1/5 shrink-0 h-full overflow-y-auto px-4 pt-0 pb-4 no-scrollbar">
             {!currentUser ? (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 py-10">
                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
