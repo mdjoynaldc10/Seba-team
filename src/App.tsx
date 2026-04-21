@@ -1646,29 +1646,8 @@ function CloudPinPage({
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   
   // Profile Verification States
-  const [verifyName, setVerifyName] = useState('');
-  const [verifyPhone, setVerifyPhone] = useState('');
-  const [verifyBlood, setVerifyBlood] = useState('');
-  const [verifyDOB, setVerifyDOB] = useState('');
-  const [verifyArea, setVerifyArea] = useState('');
+  const [verifyValue, setVerifyValue] = useState('');
 
-  const handleVerifyProfile = () => {
-    const profileMatch = (
-      verifyName.trim().toLowerCase() === currentUser.name.trim().toLowerCase() &&
-      verifyPhone.trim() === currentUser.phone.trim() &&
-      verifyBlood === currentUser.bloodGroup &&
-      verifyDOB === currentUser.dob &&
-      verifyArea.trim().toLowerCase() === currentUser.area.trim().toLowerCase()
-    );
-
-    if (profileMatch) {
-      setIsVerified(true);
-      setPin('');
-      setConfirmPin('');
-    } else {
-      alert("তথ্য ভুল! দয়া করে আপনার প্রোফাইলের সঠিক তথ্য দিন।");
-    }
-  };
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
@@ -1958,7 +1937,6 @@ function CloudPinPage({
                     onClick={() => {
                       if (savedPin) {
                         setMode('change');
-                        setIsVerified(false);
                         setPin('');
                         setConfirmPin('');
                       } else {
@@ -1982,121 +1960,45 @@ function CloudPinPage({
             {(mode === 'set' || mode === 'change') && (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                 <div className="space-y-4">
-                    {mode === 'change' && !isVerified ? (
-                      <div className="space-y-4">
-                        <div className="text-center space-y-2 mb-4">
-                          <h3 className="text-lg font-bold">প্রোফাইল যাচাইকরণ</h3>
-                          <p className="text-xs opacity-60">পিন পরিবর্তন করতে আপনার সঠিক তথ্য দিন।</p>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">পূর্ণ নাম</label>
-                            <input 
-                              type="text" 
-                              placeholder="আপনার নাম" 
-                              value={verifyName}
-                              onChange={(e) => setVerifyName(e.target.value)}
-                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold opacity-40 uppercase ml-1">মোবাইল</label>
-                              <input 
-                                type="tel" 
-                                placeholder="মোবাইল নম্বর" 
-                                value={verifyPhone}
-                                onChange={(e) => setVerifyPhone(e.target.value)}
-                                className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm font-mono", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold opacity-40 uppercase ml-1">রক্তের গ্রুপ</label>
-                              <select 
-                                value={verifyBlood}
-                                onChange={(e) => setVerifyBlood(e.target.value)}
-                                className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                              >
-                                <option value="">সিলেক্ট করুন</option>
-                                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => <option key={g} value={g}>{g}</option>)}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">জন্ম তারিখ</label>
-                            <input 
-                              type="text" 
-                              placeholder="DD-MM-YYYY" 
-                              value={verifyDOB}
-                              onChange={(e) => setVerifyDOB(e.target.value)}
-                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm font-mono", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold opacity-40 uppercase ml-1">বাসস্থান/এরিয়া</label>
-                            <input 
-                              type="text" 
-                              placeholder="আপনার এরিয়া" 
-                              value={verifyArea}
-                              onChange={(e) => setVerifyArea(e.target.value)}
-                              className={cn("w-full p-3.5 rounded-2xl border outline-none text-sm", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                            />
-                          </div>
-
-                          <button 
-                            onClick={handleVerifyProfile}
-                            className="w-full py-4 mt-2 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
-                          >
-                            যাচাই করুন
-                          </button>
-                          <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
-                        </div>
+                    <div className="space-y-4">
+                      <div className="text-center space-y-2 mb-4">
+                        <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'নতুন পিন দিন' : 'নতুন পিন দিন'}</h3>
+                        <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
                       </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="text-center space-y-2 mb-4">
-                          <h3 className="text-lg font-bold">{mode === 'set' ? 'নতুন পিন সেট করুন' : mode === 'change' ? 'নতুন পিন দিন' : 'নতুন পিন দিন'}</h3>
-                          <p className="text-xs opacity-60">কমপক্ষে ৪ সংখ্যার পিন কোড দিন।</p>
-                        </div>
-                        <div className="space-y-3">
-                          <div className="relative">
-                            <input 
-                              type={showPin ? "text" : "password"} 
-                              placeholder="নতুন পিন" 
-                              value={pin}
-                              onChange={(e) => setPin(e.target.value)}
-                              className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
-                            />
-                            <button 
-                              onClick={() => setShowPin(!showPin)}
-                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                            >
-                              {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
-                          </div>
+                      <div className="space-y-3">
+                        <div className="relative">
                           <input 
                             type={showPin ? "text" : "password"} 
-                            placeholder="পিন নিশ্চিত করুন" 
-                            value={confirmPin}
-                            onChange={(e) => setConfirmPin(e.target.value)}
-                            className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                            placeholder="নতুন পিন" 
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            className={cn("w-full p-4 rounded-2xl border outline-none pr-12", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
                           />
                           <button 
-                            onClick={handleSave}
-                            disabled={isSaving}
-                            className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
+                            onClick={() => setShowPin(!showPin)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
                           >
-                            {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
-                            সংরক্ষণ করুন
+                            {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                           </button>
-                          <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
                         </div>
+                        <input 
+                          type={showPin ? "text" : "password"} 
+                          placeholder="পিন নিশ্চিত করুন" 
+                          value={confirmPin}
+                          onChange={(e) => setConfirmPin(e.target.value)}
+                          className={cn("w-full p-4 rounded-2xl border outline-none", isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}
+                        />
+                        <button 
+                          onClick={handleSave}
+                          disabled={isSaving}
+                          className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
+                          সংরক্ষণ করুন
+                        </button>
+                        <button onClick={() => setMode('manage')} className="w-full text-center text-slate-500 font-bold text-sm">বাতিল করুন</button>
                       </div>
-                    )}
+                    </div>
                   </div>
               </div>
             )}
@@ -2125,7 +2027,7 @@ function CloudPinPage({
                   <div className="space-y-3">
                     {resetRequests.map((req) => (
                       <motion.div 
-                        key={req.id}
+                        key={`pin-reset-${req.id}`}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         className={cn(
@@ -2192,7 +2094,7 @@ function CloudPinPage({
                   
                   return (
                     <motion.div 
-                      key={sess.id}
+                      key={`session-${sess.id}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className={cn(
@@ -5321,7 +5223,7 @@ function AppContent() {
                   ) : (
                     globalNotices.map((notice) => (
                       <motion.div 
-                        key={notice.id}
+                        key={`home-notice-${notice.id}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         onClick={() => {
@@ -8243,7 +8145,7 @@ function AppContent() {
 
                         return pendingRequests.map((req) => (
                           <div 
-                            key={req.id} 
+                            key={`user-pending-${req.id}`} 
                             onMouseDown={() => handleLongPressStart('request', req)}
                             onMouseUp={handleLongPressEnd}
                             onMouseLeave={handleLongPressEnd}
@@ -8283,7 +8185,7 @@ function AppContent() {
                     ) : (
                       bookRequests.filter(r => r.status === 'pending').map((req) => (
                         <div 
-                          key={req.id}
+                          key={`admin-pending-${req.id}`}
                           onMouseDown={() => handleLongPressStart('request', req)}
                           onMouseUp={handleLongPressEnd}
                           onMouseLeave={handleLongPressEnd}
@@ -8327,7 +8229,7 @@ function AppContent() {
 
                       return filteredRequests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()).map((req) => (
                         <div 
-                          key={req.id}
+                          key={`admin-history-${req.id}`}
                           onMouseDown={() => handleLongPressStart('request', req)}
                           onMouseUp={handleLongPressEnd}
                           onMouseLeave={handleLongPressEnd}
@@ -8812,7 +8714,7 @@ function AppContent() {
                 ) : (
                   adminDatabaseLinks.map((link) => (
                     <div 
-                      key={link.id} 
+                      key={`admin-settings-db-link-${link.id}`} 
                       className={cn(
                         "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
                         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -9015,7 +8917,7 @@ function AppContent() {
                     ) : (
                       globalNotices.map((notice) => (
                         <div 
-                          key={notice.id} 
+                          key={`admin-history-notice-${notice.id}`} 
                           className={cn(
                             "p-4 rounded-2xl border space-y-3 transition-all",
                             isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
