@@ -8,6 +8,7 @@ import {
   Moon, 
   Sun, 
   LogOut, 
+  LogIn,
   Search, 
   ChevronRight, 
   ArrowLeft, 
@@ -9372,20 +9373,37 @@ function AppContent() {
 
             {/* Floating Action Buttons */}
             <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-3">
-              {selectedBook.isOnline && (
-                <button 
-                  onClick={() => setShowOnlineViewer(true)}
-                  className="w-full h-14 bg-white text-emerald-600 rounded-2xl font-bold shadow-lg shadow-black/10 flex items-center justify-center gap-2 active:scale-95 transition-all border-2 border-emerald-500"
-                >
-                  <BookOpen className="w-5 h-5" /> বই পড়ুন
-                </button>
-              )}
-
               {(() => {
+                if (!currentUser) {
+                  return (
+                    <button 
+                      onClick={() => {
+                        window.history.back(); // Close modal
+                        setActiveTab('profile'); // Go to profile/login
+                      }}
+                      className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    >
+                      <LogIn className="w-5 h-5" /> লগইন করুন
+                    </button>
+                  );
+                }
+
                 const existingRequest = bookRequests.find(r => r.bookId === selectedBook.id && r.requesterId === currentUser?.id && (r.status === 'pending' || r.status === 'approved'));
                 const isAlreadyBorrowed = books.some(b => b.id === selectedBook.id && b.recipientId === currentUser?.id);
+                const isApproved = existingRequest && existingRequest.status === 'approved';
 
-                if (isAlreadyBorrowed || (existingRequest && existingRequest.status === 'approved')) {
+                if (selectedBook.isOnline && (isApproved || isAlreadyBorrowed)) {
+                  return (
+                    <button 
+                      onClick={() => setShowOnlineViewer(true)}
+                      className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                    >
+                      <BookOpen className="w-5 h-5" /> বই পড়ুন
+                    </button>
+                  );
+                }
+
+                if (isAlreadyBorrowed || isApproved) {
                   return (
                     <div className="w-full h-14 bg-emerald-100 text-emerald-600 rounded-2xl font-bold flex items-center justify-center gap-2 border border-emerald-200">
                       <CheckCircle2 className="w-5 h-5" /> আপনি এই বইটি নিয়েছেন
@@ -9401,16 +9419,12 @@ function AppContent() {
                   );
                 }
 
-                // Don't show borrow button for purely online books if requested, but usually they might want to track it
-                // For now, keep it unless it's ONLY online without a physical counterpart (which isOnline usually implies here)
-                if (selectedBook.isOnline) return null;
-
                 return (
                   <button 
                     onClick={() => setShowBorrowForm(true)}
                     className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
-                    <BookOpen className="w-5 h-5" /> Borrow a book
+                    <BookOpen className="w-5 h-5" /> {selectedBook.isOnline ? "বইটি পড়তে অনুরোধ পাঠান" : "সংগ্রহের অনুরোধ পাঠান"}
                   </button>
                 );
               })()}
@@ -9419,7 +9433,7 @@ function AppContent() {
         )}
 
         {showBorrowForm && selectedBook && (
-          <OverlayPage key="borrow-form-overlay" title="বই সংগ্রহের ফর্ম" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+          <OverlayPage key="borrow-form-overlay" title={selectedBook.isOnline ? "বই পড়ার অনুরোধ" : "বই সংগ্রহের ফর্ম"} onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-emerald-500 border border-emerald-600 mb-4 text-white shadow-lg shadow-emerald-500/20 flex gap-4 items-center">
                 <BookImage book={selectedBook} isDarkMode={isDarkMode} className="w-12 h-16 border-white/20" />
