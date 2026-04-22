@@ -187,6 +187,17 @@ interface Notice {
   message: string;
 }
 
+interface QA {
+  id: string;
+  title: string;
+  text: string;
+  link?: string;
+  alignment: 'left' | 'center' | 'right' | 'justify';
+  authorId: string;
+  authorName: string;
+  createdAt: any;
+}
+
 interface BloodPost {
   id: string;
   authorId: string;
@@ -2958,6 +2969,14 @@ function AppContent() {
   const [newNoticeMessage, setNewNoticeMessage] = useState('');
   const [newNoticeAlignment, setNewNoticeAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [isSavingNotice, setIsSavingNotice] = useState(false);
+  const [isSavingQA, setIsSavingQA] = useState(false);
+  const [qaList, setQaList] = useState<QA[]>([]);
+  const [showQAManager, setShowQAManager] = useState(false);
+  const [activeQATab, setActiveQATab] = useState<'write' | 'history'>('write');
+  const [newQATitle, setNewQATitle] = useState('');
+  const [newQAText, setNewQAText] = useState('');
+  const [newQALink, setNewQALink] = useState('');
+  const [newQAAlignment, setNewQAAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -3083,7 +3102,7 @@ function AppContent() {
   const [selectedBookCategory, setSelectedBookCategory] = useState<string>('সব');
   const [selectedBookAuthor, setSelectedBookAuthor] = useState<string>('সব');
   const [selectedBookStatus, setSelectedBookStatus] = useState<string>('সব');
-  const [activeHomeTab, setActiveHomeTab] = useState<'feed' | 'notices'>('feed');
+  const [activeHomeTab, setActiveHomeTab] = useState<'feed' | 'notices' | 'qa'>('feed');
 
   const closeAllOverlays = useCallback(() => {
     setShowInfoPage(false);
@@ -3103,6 +3122,7 @@ function AppContent() {
     setShowBorrowForm(false);
     setShowNotice(false);
     setShowGlobalNoticeManager(false);
+    setShowQAManager(false);
     setShowFullNotice(false);
     setActiveBookDetailTab('details');
   }, []);
@@ -3115,7 +3135,7 @@ function AppContent() {
     showDonationProjectsPage || showTicTacToe || showDatabasePage || showBookshelfPage || 
     selectedMemberProfile !== null || selectedBook !== null || selectedPayment !== null || 
     showNotificationsPage || selectedNotification !== null || showDonatePopup || 
-    showBorrowForm || showNotice || showGlobalNoticeManager || showFullNotice;
+    showBorrowForm || showNotice || showGlobalNoticeManager || showQAManager || showFullNotice;
 
   useEffect(() => {
     if (isAnyOverlayOpen) {
@@ -3788,6 +3808,21 @@ function AppContent() {
     return () => unsubscribe();
   }, [isAuthReady, currentUser]);
 
+  // QA Listener
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    const q = query(collection(db, 'qa'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QA));
+      setQaList(list);
+    }, (error) => {
+      console.error("QA Listener Error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
   // Blood Posts Listener and Auto-deletion
   useEffect(() => {
     if (!isAuthReady) return;
@@ -3960,6 +3995,54 @@ function AppContent() {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `global_notices/${id}`);
       alert('নোটিশ ডিলেট করতে সমস্যা হয়েছে।');
+    }
+  };
+
+  const handleSaveQA = async () => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    if (!newQATitle.trim() || !newQAText.trim()) {
+      alert('শিরোনাম এবং টেক্সট উভয়ই প্রয়োজন।');
+      return;
+    }
+
+    setIsSavingQA(true);
+    const id = `qa_${Date.now()}`;
+    const qaData: QA = {
+      id,
+      title: newQATitle,
+      text: newQAText,
+      link: newQALink,
+      alignment: newQAAlignment,
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'qa', id), qaData);
+      setNewQATitle('');
+      setNewQAText('');
+      setNewQALink('');
+      setActiveQATab('history');
+      alert('Q&A সফলভাবে পাবলিশ করা হয়েছে!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'qa');
+      alert('Q&A পাবলিশ করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSavingQA(false);
+    }
+  };
+
+  const handleDeleteQA = async (id: string) => {
+    if (!currentUser || (!isAdmin(currentUser) && !isDeveloper(currentUser))) return;
+    if (!window.confirm('আপনি কি নিশ্চিত যে এই Q&A টি ডিলেট করতে চান?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'qa', id));
+      alert('Q&A ডিলেট করা হয়েছে।');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `qa/${id}`);
+      alert('Q&A ডিলেট করতে সমস্যা হয়েছে।');
     }
   };
 
@@ -5116,7 +5199,7 @@ function AppContent() {
         <motion.div 
           onPanEnd={(_, info) => {
             if (activeTab === 'home') {
-              const handled = handleSwipe(info, ['feed', 'notices'], activeHomeTab, setActiveHomeTab);
+              const handled = handleSwipe(info, ['feed', 'notices', 'qa'], activeHomeTab, setActiveHomeTab);
               if (handled) return;
             }
             if (activeTab === 'blood') {
@@ -5168,6 +5251,22 @@ function AppContent() {
                     />
                   )}
                 </button>
+                <button 
+                  onClick={() => setActiveHomeTab('qa')}
+                  className={cn(
+                    "pb-3 text-[15px] font-black transition-all relative",
+                    activeHomeTab === 'qa' ? "text-emerald-500" : "opacity-40"
+                  )}
+                >
+                  Q&A
+                  {activeHomeTab === 'qa' && (
+                    <motion.div 
+                      layoutId="homeTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 rounded-t-full"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -5209,7 +5308,7 @@ function AppContent() {
                     ))
                   )}
                 </motion.div>
-              ) : (
+              ) : activeHomeTab === 'notices' ? (
                 <motion.div 
                   key="notices"
                   initial={{ opacity: 0, x: 10 }}
@@ -5249,6 +5348,63 @@ function AppContent() {
                             </div>
                           </div>
                           <ChevronRight className="w-4 h-4 opacity-20 self-center" />
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="qa"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-4"
+                >
+                  {qaList.length === 0 ? (
+                    <div className="text-center py-20 opacity-50">কোনো প্রশ্নোত্তর পাওয়া যায়নি</div>
+                  ) : (
+                    qaList.map((qa) => (
+                      <motion.div 
+                        key={`home-qa-${qa.id}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={cn(
+                          "p-4 rounded-3xl border-2 transition-all",
+                          isDarkMode ? "bg-slate-800 border-white/5" : "bg-white border-slate-100 shadow-sm"
+                        )}
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 bg-emerald-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                            <MessageSquare className="w-5 h-5 text-emerald-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-sm mb-2">{qa.title}</h3>
+                            <div 
+                              className="text-[12px] opacity-70 leading-relaxed whitespace-pre-wrap"
+                              style={{ textAlign: qa.alignment || 'left' }}
+                            >
+                              {qa.text}
+                            </div>
+                            
+                            {qa.link && (
+                              <button 
+                                onClick={() => window.open(qa.link, '_blank')}
+                                className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-full hover:bg-emerald-500/20 transition-all"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                ভিজিট লিঙ্ক
+                              </button>
+                            )}
+
+                            <div className="mt-3 flex items-center gap-2 pt-3 border-t border-slate-500/5">
+                              <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-500/10 opacity-60">
+                                {formatDate(qa.createdAt)}
+                              </span>
+                              <span className="text-[8px] font-medium opacity-40">দ্বারা: {qa.authorName}</span>
+                            </div>
+                          </div>
                         </div>
                       </motion.div>
                     ))
@@ -6266,6 +6422,17 @@ function AppContent() {
                         title="Greetings"
                       >
                         <Bell className="w-5 h-5" />
+                      </button>
+
+                      <button 
+                        onClick={() => setShowQAManager(true)}
+                        className={cn(
+                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-sm active:scale-90 transition-all border",
+                          isDarkMode ? "bg-slate-800 border-slate-700 text-emerald-500" : "bg-white border-slate-100 text-emerald-500"
+                        )}
+                        title="Q&A Manager"
+                      >
+                        <MessageSquare className="w-5 h-5" />
                       </button>
 
                       {((isAdmin(currentUser) && advanceSettings.controls.admin.database) || 
@@ -8947,6 +9114,182 @@ function AppContent() {
         </OverlayPage>
         )}
 
+        {showQAManager && (isAdmin(currentUser) || isDeveloper(currentUser)) && (
+          <OverlayPage key="qa-manager-overlay" title="Q&A Manager" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-6 pb-10">
+              {/* Tab Navigation */}
+              <div className={cn(
+                "flex p-1 rounded-2xl mb-6 relative",
+                isDarkMode ? "bg-slate-800" : "bg-slate-100"
+              )}>
+                <button 
+                  onClick={() => setActiveQATab('write')}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeQATab === 'write' ? "text-white" : "text-slate-500"
+                  )}
+                >
+                  {activeQATab === 'write' && (
+                    <motion.div 
+                      layoutId="activeQATab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20 flex items-center justify-center gap-2">
+                    <Edit2 className="w-4 h-4" />
+                    প্রশ্ন যোগ করুন
+                  </span>
+                </button>
+                <button 
+                  onClick={() => setActiveQATab('history')}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10",
+                    activeQATab === 'history' ? "text-white" : "text-slate-500"
+                  )}
+                >
+                  {activeQATab === 'history' && (
+                    <motion.div 
+                      layoutId="activeQATab"
+                      className="absolute inset-0 bg-emerald-500 rounded-xl shadow-lg"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-20 flex items-center justify-center gap-2">
+                    <History className="w-4 h-4" />
+                    ইতিহাস
+                  </span>
+                </button>
+              </div>
+
+              <motion.div 
+                onPanEnd={(_, info) => handleSwipe(info, ['write', 'history'], activeQATab, setActiveQATab)}
+                className="mt-6 min-h-[80vh]"
+              >
+                <AnimatePresence mode="wait">
+                  {activeQATab === 'write' ? (
+                  <motion.div 
+                    key="qa-write-tab"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold opacity-50 ml-1">Title</label>
+                      <input 
+                        type="text" 
+                        placeholder="প্রশ্ন বা শিরোনাম..." 
+                        className={cn("w-full p-4 rounded-2xl border text-sm font-bold", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
+                        value={newQATitle}
+                        onChange={(e) => setNewQATitle(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold opacity-50 ml-1">Link (Optional)</label>
+                      <input 
+                        type="url" 
+                        placeholder="লিঙ্ক দিন (যেমন: https://...)" 
+                        className={cn("w-full p-4 rounded-2xl border text-sm", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
+                        value={newQALink}
+                        onChange={(e) => setNewQALink(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-xs font-bold opacity-50">উত্তর / টেক্সট</label>
+                        <div className={cn(
+                          "flex p-1 rounded-lg gap-1",
+                          isDarkMode ? "bg-slate-800" : "bg-slate-100"
+                        )}>
+                          {[
+                            { id: 'left', icon: AlignLeft },
+                            { id: 'center', icon: AlignCenter },
+                            { id: 'right', icon: AlignRight },
+                            { id: 'justify', icon: AlignJustify }
+                          ].map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => setNewQAAlignment(item.id as any)}
+                              className={cn(
+                                "p-1.5 rounded-md transition-all",
+                                newQAAlignment === item.id 
+                                  ? "bg-emerald-500 text-white shadow-sm" 
+                                  : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700"
+                              )}
+                            >
+                              <item.icon className="w-4 h-4" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea 
+                        placeholder="উত্তর লিখুন..." 
+                        rows={6}
+                        className={cn("w-full p-4 rounded-2xl border text-sm resize-none", isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 shadow-sm")}
+                        value={newQAText}
+                        onChange={(e) => setNewQAText(e.target.value)}
+                        style={{ textAlign: newQAAlignment }}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSaveQA}
+                      disabled={isSavingQA}
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                    >
+                      {isSavingQA ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                      পাবলিশ করুন
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="qa-history-tab"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-3"
+                  >
+                    {qaList.length === 0 ? (
+                      <div className="text-center py-20 opacity-50 flex flex-col items-center gap-3">
+                        <History className="w-12 h-12 opacity-20" />
+                        <p className="text-sm">কোনো প্রশ্নোত্তরের ইতিহাস পাওয়া যায়নি।</p>
+                      </div>
+                    ) : (
+                      qaList.map((qa) => (
+                        <div 
+                          key={`admin-history-qa-${qa.id}`} 
+                          className={cn(
+                            "p-4 rounded-2xl border space-y-3 transition-all",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                          )}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm text-emerald-500">{qa.title}</h4>
+                              <p className="text-[10px] opacity-50">{formatDate(qa.createdAt)} • {qa.authorName}</p>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteQA(qa.id)}
+                              className="p-2 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-xs opacity-80 leading-relaxed line-clamp-3">{qa.text}</p>
+                          {qa.link && <p className="text-[10px] text-emerald-500 truncate">{qa.link}</p>}
+                        </div>
+                      ))
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
+        </OverlayPage>
+      )}
+
 
         {selectedBook && (
           <OverlayPage key="book-overlay" title="বইয়ের বিস্তারিত তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
@@ -9213,7 +9556,6 @@ function AppContent() {
             bookshelves={bookshelves} 
           />
         )}
-      </AnimatePresence>
 
         {showNotificationsPage && currentUser && (
           <OverlayPage 
@@ -9402,6 +9744,8 @@ function AppContent() {
               onSend={sendRealTimeNotification}
             />
           )}
+        </AnimatePresence>
+
         </AnimatePresence>
 
       {/* Invoice Modal - Outside main AnimatePresence to stay on top of background pages */}
