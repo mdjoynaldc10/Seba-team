@@ -135,6 +135,8 @@ interface Book {
   address: string;
   returnableDate: string;
   imageUrl?: string;
+  link?: string;
+  isOnline?: boolean;
 }
 
 interface BookRequest {
@@ -150,6 +152,8 @@ interface BookRequest {
   dueDate?: string;
   approvedBy?: string;
   approvedAt?: string;
+  isOnline?: boolean;
+  link?: string;
 }
 
 interface GlobalNotice {
@@ -920,10 +924,15 @@ const APP_VERSION = "1.0.0";
 
 const BookImage = ({ book, isDarkMode, className }: { book: Book, isDarkMode: boolean, className?: string }) => {
   const sizeClasses = className || "w-10 h-14";
+  const thumbnail = getBookThumbnail(book.link);
 
   return (
-    <div className={cn(sizeClasses, "bg-emerald-100 dark:bg-emerald-900/30 rounded-md flex items-center justify-center text-emerald-500")}>
-      <BookOpen className="w-5 h-5" />
+    <div className={cn(sizeClasses, "bg-emerald-100 dark:bg-emerald-900/30 rounded-md overflow-hidden flex items-center justify-center text-emerald-500 shadow-sm")}>
+      {book.isOnline && thumbnail ? (
+        <img src={thumbnail} alt={book.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      ) : (
+        <BookOpen className="w-5 h-5" />
+      )}
     </div>
   );
 };
@@ -2480,6 +2489,24 @@ class ErrorBoundary extends Component<any, any> {
 }
 
 // --- Components ---
+const getBookThumbnail = (link: string | undefined) => {
+  if (!link) return '';
+  if (link.includes('drive.google.com')) {
+    const id = link.split('/d/')[1]?.split('/')[0];
+    return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w500` : '';
+  }
+  return '';
+};
+
+const getSafeViewerLink = (link: string | undefined) => {
+  if (!link) return '';
+  if (link.includes('drive.google.com')) {
+    const id = link.split('/d/')[1]?.split('/')[0];
+    return id ? `https://drive.google.com/file/d/${id}/preview?rm=minimal` : link;
+  }
+  return link;
+};
+
 const LandscapeBlocker = ({ isDarkMode }: { isDarkMode: boolean }) => (
   <div className={clsx(
     "landscape-warning fixed inset-0 z-[99999] flex-col items-center justify-center p-6 text-center",
@@ -2746,6 +2773,56 @@ function AppContent() {
   const [donationTransactions, setDonationTransactions] = useState<DonationTransaction[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [activeBloodTab, setActiveBloodTab] = useState<'donors' | 'posts'>('donors');
+  const [activeBookTab, setActiveBookTab] = useState<'general' | 'online'>('general');
+  const [onlineBooks, setOnlineBooks] = useState<any[]>([]);
+  const [onlineBookSearchQuery, setOnlineBookSearchQuery] = useState('');
+  const [selectedOnlineCategory, setSelectedOnlineCategory] = useState('সব');
+  const [showOnlineViewer, setShowOnlineViewer] = useState(false);
+  
+  const onlineBooksUrl = `https://docs.google.com/spreadsheets/d/1LN9997aF6rbK3OYALBkLWoZkG8ss-4lA34Zvi9Z_ZPk/gviz/tq?tqx=out:json&gid=0`;
+
+  const fetchOnlineBooks = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(onlineBooksUrl);
+      const text = await response.text();
+      // Improved parsing to handle Google Visualization API response format variations
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}') + 1;
+      if (startIdx === -1 || endIdx === 0) throw new Error('Invalid JSON format from Sheet');
+      
+      const jsonData = JSON.parse(text.substring(startIdx, endIdx));
+      const headers = jsonData.table.cols.map((col: any) => col.label || '');
+      const rows = jsonData.table.rows.map((row: any) => {
+        const item: any = {};
+        row.c.forEach((cell: any, i: number) => {
+          const header = headers[i];
+          if (header) {
+            // Map Bengali headers to English keys
+            if (header.includes('বইয়ের নাম')) item.name = cell ? cell.v : '';
+            else if (header.includes('লেখক')) item.author = cell ? cell.v : '';
+            else if (header.includes('ধরণ')) item.category = cell ? cell.v : '';
+            else if (header.includes('লিংক')) item.link = cell ? (cell.v || cell.u) : ''; // Handle both string and hyperlink
+            else item[header.toLowerCase()] = cell ? cell.v : '';
+          }
+        });
+        // Ensure book has an ID (use link or generate one)
+        if (!item.id && item.link) {
+          item.id = `online_${btoa(item.link).substring(0, 16)}`;
+        }
+        return item;
+      });
+      setOnlineBooks(rows.filter((r: any) => r.name && r.link)); // Filter out empty or broken rows
+    } catch (error) {
+      console.error('Error fetching online books:', error);
+    }
+    setIsLoading(false);
+  }, [onlineBooksUrl]);
+
+  useEffect(() => {
+    fetchOnlineBooks();
+  }, [fetchOnlineBooks]);
+
   const handleSwipe = (info: any, tabs: string[], currentTab: string, setTab: (tab: any) => void) => {
     const threshold = 30;
     const velocityThreshold = 0.2;
@@ -3235,7 +3312,9 @@ function AppContent() {
       requesterName: currentUser.name,
       requesterAddress: borrowFormData.address,
       requestDate: new Date().toISOString(),
-      status: 'pending'
+      status: 'pending',
+      isOnline: selectedBook.isOnline,
+      link: selectedBook.link
     };
 
     try {
@@ -3351,6 +3430,7 @@ function AppContent() {
         setShowTicTacToe(!!event.state.showTicTacToe);
         setShowDatabasePage(!!event.state.showDatabasePage);
         setSelectedBook(event.state.selectedBook || null);
+        setShowOnlineViewer(!!event.state.showOnlineViewer);
         setSelectedPayment(event.state.selectedPayment || null);
         setSelectedMemberProfile(event.state.selectedMemberProfile || null);
         setShowNotificationsPage(!!event.state.showNotificationsPage);
@@ -3397,7 +3477,8 @@ function AppContent() {
       showRegistration,
       showCloudPinPage,
       showCustomNotificationPage,
-      selectedBookRequest
+      selectedBookRequest,
+      showOnlineViewer
     }, '');
 
     window.addEventListener('popstate', handlePopState);
@@ -3432,10 +3513,11 @@ function AppContent() {
         showRegistration,
         showCloudPinPage,
         showCustomNotificationPage,
-        selectedBookRequest
+        selectedBookRequest,
+        showOnlineViewer
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showCustomNotificationPage, selectedBookRequest]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showCustomNotificationPage, selectedBookRequest, showOnlineViewer]);
 
   // Refs for swipe
   const extractSheetId = (input: string) => {
@@ -5123,6 +5205,10 @@ function AppContent() {
               const handled = handleSwipe(info, ['donors', 'posts'], activeBloodTab, setActiveBloodTab);
               if (handled) return;
             }
+            if (activeTab === 'books') {
+              const handled = handleSwipe(info, ['general', 'online'], activeBookTab, setActiveBookTab);
+              if (handled) return;
+            }
             handleSwipe(info, ['home', 'books', 'members', 'blood', 'profile'], activeTab, setActiveTab);
           }}
           className="flex h-full transition-transform duration-300 ease-out"
@@ -5264,176 +5350,333 @@ function AppContent() {
               "sticky top-0 z-[100] -mx-4 px-4 pt-4 pb-3 space-y-3 transition-colors",
               isDarkMode ? "bg-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)]" : "bg-slate-50 shadow-sm"
             )}>
-              <div className={cn(
-                "flex items-center gap-3 px-4 py-1 rounded-2xl border transition-all",
-                isDarkMode ? "bg-slate-800 border-slate-700 focus-within:border-emerald-500/50" : "bg-white border-slate-200 focus-within:border-emerald-500/50 shadow-sm"
-              )}>
-                <Search className="w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="বইয়ের নাম, লেখক বা তথ্য দিয়ে খুঁজুন..."
-                  className="flex-1 bg-transparent py-3 outline-none text-sm font-medium"
-                  value={bookSearchQuery}
-                  onChange={(e) => setBookSearchQuery(e.target.value)}
-                />
-                {bookSearchQuery && (
-                  <button onClick={() => setBookSearchQuery('')} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
-                    <X className="w-4 h-4 text-slate-400" />
-                  </button>
-                )}
+              {/* Tab Navigation */}
+              <div className="flex gap-4 mb-2">
+                <button 
+                  onClick={() => setActiveBookTab('general')}
+                  className={cn(
+                    "pb-1 text-sm font-black transition-all relative",
+                    activeBookTab === 'general' ? "text-emerald-500" : "opacity-40"
+                  )}
+                >
+                  সাধারণ বই
+                  {activeBookTab === 'general' && (
+                    <motion.div 
+                      layoutId="bookSubTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full"
+                    />
+                  )}
+                </button>
+                <button 
+                  onClick={() => setActiveBookTab('online')}
+                  className={cn(
+                    "pb-1 text-sm font-black transition-all relative",
+                    activeBookTab === 'online' ? "text-emerald-500" : "opacity-40"
+                  )}
+                >
+                  অনলাইন বই
+                  {activeBookTab === 'online' && (
+                    <motion.div 
+                      layoutId="bookSubTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full"
+                    />
+                  )}
+                </button>
               </div>
-              
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold opacity-50 ml-1">বিভাগ</label>
-                  <select
-                    value={selectedBookCategory}
-                    onChange={(e) => setSelectedBookCategory(e.target.value)}
-                    className={cn(
-                      "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
-                    )}
-                  >
-                    <option value="সব">সব বিভাগ</option>
-                    {Array.from(new Set(books.map(b => b.category || 'অন্যান্য'))).filter(Boolean).sort().map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold opacity-50 ml-1">লেখক</label>
-                  <select
-                    value={selectedBookAuthor}
-                    onChange={(e) => setSelectedBookAuthor(e.target.value)}
-                    className={cn(
-                      "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+              {activeBookTab === 'general' ? (
+                <>
+                  <div className={cn(
+                    "flex items-center gap-3 px-4 py-1 rounded-2xl border transition-all",
+                    isDarkMode ? "bg-slate-800 border-slate-700 focus-within:border-emerald-500/50" : "bg-white border-slate-200 focus-within:border-emerald-500/50 shadow-sm"
+                  )}>
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="বইয়ের নাম, লেখক বা তথ্য দিয়ে খুঁজুন..."
+                      className="flex-1 bg-transparent py-3 outline-none text-sm font-medium"
+                      value={bookSearchQuery}
+                      onChange={(e) => setBookSearchQuery(e.target.value)}
+                    />
+                    {bookSearchQuery && (
+                      <button onClick={() => setBookSearchQuery('')} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+                        <X className="w-4 h-4 text-slate-400" />
+                      </button>
                     )}
-                  >
-                    <option value="সব">সব লেখক</option>
-                    {Array.from(new Set(books.map(b => b.author))).filter(Boolean).sort().map(author => (
-                      <option key={author} value={author}>{author}</option>
-                    ))}
-                  </select>
-                </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold opacity-50 ml-1">বিভাগ</label>
+                      <select
+                        value={selectedBookCategory}
+                        onChange={(e) => setSelectedBookCategory(e.target.value)}
+                        className={cn(
+                          "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+                        )}
+                      >
+                        <option value="সব">সব বিভাগ</option>
+                        {Array.from(new Set(books.map(b => b.category || 'অন্যান্য'))).filter(Boolean).sort().map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold opacity-50 ml-1">ধরণ</label>
-                  <select
-                    value={selectedBookStatus}
-                    onChange={(e) => setSelectedBookStatus(e.target.value)}
-                    className={cn(
-                      "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
-                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold opacity-50 ml-1">লেখক</label>
+                      <select
+                        value={selectedBookAuthor}
+                        onChange={(e) => setSelectedBookAuthor(e.target.value)}
+                        className={cn(
+                          "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+                        )}
+                      >
+                        <option value="সব">সব লেখক</option>
+                        {Array.from(new Set(books.map(b => b.author))).filter(Boolean).sort().map(author => (
+                          <option key={author} value={author}>{author}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold opacity-50 ml-1">ধরণ</label>
+                      <select
+                        value={selectedBookStatus}
+                        onChange={(e) => setSelectedBookStatus(e.target.value)}
+                        className={cn(
+                          "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+                        )}
+                      >
+                        <option value="সব">সব ধরণ</option>
+                        <option value="উপলব্ধ">উপলব্ধ</option>
+                        <option value="গৃহীত">গৃহীত</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={cn(
+                    "flex items-center gap-3 px-4 py-1 rounded-2xl border transition-all",
+                    isDarkMode ? "bg-slate-800 border-slate-700 focus-within:border-emerald-500/50" : "bg-white border-slate-200 focus-within:border-emerald-500/50 shadow-sm"
+                  )}>
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="বইয়ের নাম বা লেখক দিয়ে খুঁজুন..."
+                      className="flex-1 bg-transparent py-3 outline-none text-sm font-medium"
+                      value={onlineBookSearchQuery}
+                      onChange={(e) => setOnlineBookSearchQuery(e.target.value)}
+                    />
+                    {onlineBookSearchQuery && (
+                      <button onClick={() => setOnlineBookSearchQuery('')} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+                        <X className="w-4 h-4 text-slate-400" />
+                      </button>
                     )}
-                  >
-                    <option value="সব">সব ধরণ</option>
-                    <option value="উপলব্ধ">উপলব্ধ</option>
-                    <option value="গৃহীত">গৃহীত</option>
-                  </select>
-                </div>
-              </div>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold opacity-50 ml-1">বিভাগ</label>
+                    <select
+                      value={selectedOnlineCategory}
+                      onChange={(e) => setSelectedOnlineCategory(e.target.value)}
+                      className={cn(
+                        "w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none appearance-none cursor-pointer",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200 shadow-sm"
+                      )}
+                    >
+                      <option value="সব">সব বিভাগ</option>
+                      {Array.from(new Set(onlineBooks.map(b => b.category))).filter(Boolean).sort().map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="px-4 pb-4">
-              {isLoading && books.length === 0 ? (
-                <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
-              ) : (
-                <div className="space-y-8 mt-4">
-                  {(() => {
-                    const filtered = books.map(book => {
-                      const activeRequest = bookRequests.find(r => r.bookId === book.id && r.status === 'approved');
-                      if (activeRequest) {
-                        return {
-                          ...book,
-                          status: 'গৃহীত',
-                          recipient: activeRequest.requesterName,
-                          recipientId: activeRequest.requesterId,
-                          date: activeRequest.approvedAt || activeRequest.requestDate,
-                          returnableDate: activeRequest.dueDate || '',
-                          address: activeRequest.requesterAddress || ''
-                        };
-                      }
-                      return book;
-                    }).filter(book => {
-                      const query = bookSearchQuery.toLowerCase();
-                      const matchesSearch = !query || 
-                        (book.name || '').toLowerCase().includes(query) ||
-                        (book.author || '').toLowerCase().includes(query) ||
-                        (book.category || '').toLowerCase().includes(query);
-                      
-                      const matchesCategory = selectedBookCategory === 'সব' || (book.category || 'অন্যান্য') === selectedBookCategory;
-                      const matchesAuthor = selectedBookAuthor === 'সব' || book.author === selectedBookAuthor;
-                      const matchesStatus = selectedBookStatus === 'সব' || book.status === selectedBookStatus;
-                      
-                      return matchesSearch && matchesCategory && matchesAuthor && matchesStatus;
-                    });
+            <div className="pb-4">
+              {activeBookTab === 'general' ? (
+                isLoading && books.length === 0 ? (
+                  <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+                ) : (
+                  <div className="space-y-8 mt-4">
+                    {(() => {
+                      const filtered = books.map(book => {
+                        const activeRequest = bookRequests.find(r => r.bookId === book.id && r.status === 'approved');
+                        if (activeRequest) {
+                          return {
+                            ...book,
+                            status: 'গৃহীত',
+                            recipient: activeRequest.requesterName,
+                            recipientId: activeRequest.requesterId,
+                            date: activeRequest.approvedAt || activeRequest.requestDate,
+                            returnableDate: activeRequest.dueDate || '',
+                            address: activeRequest.requesterAddress || ''
+                          };
+                        }
+                        return book;
+                      }).filter(book => {
+                        const query = bookSearchQuery.toLowerCase();
+                        const matchesSearch = !query || 
+                          (book.name || '').toLowerCase().includes(query) ||
+                          (book.author || '').toLowerCase().includes(query) ||
+                          (book.category || '').toLowerCase().includes(query);
+                        
+                        const matchesCategory = selectedBookCategory === 'সব' || (book.category || 'অন্যান্য') === selectedBookCategory;
+                        const matchesAuthor = selectedBookAuthor === 'সব' || book.author === selectedBookAuthor;
+                        const matchesStatus = selectedBookStatus === 'সব' || book.status === selectedBookStatus;
+                        
+                        return matchesSearch && matchesCategory && matchesAuthor && matchesStatus;
+                      });
 
-                    if (filtered.length === 0) {
-                      return (
-                        <div className="text-center py-20 opacity-50">
-                          <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-10" />
-                          <p className="font-bold">কোনো বই পাওয়া যায়নি</p>
-                          <p className="text-xs mt-1">অনুগ্রহ করে ফিল্টার পরিবর্তন করে দেখুন</p>
-                        </div>
-                      );
-                    }
-
-                    const grouped = filtered.reduce((acc, book) => {
-                      const cat = book.category || 'অন্যান্য';
-                      if (!acc[cat]) acc[cat] = [];
-                      acc[cat].push(book);
-                      return acc;
-                    }, {} as Record<string, Book[]>);
-
-                    return Object.entries(grouped).map(([category, catBooks]) => (
-                      <div key={category} className="space-y-4">
-                        <div className={cn(
-                          "sticky top-[154px] z-[90] -mx-4 px-4 py-2 flex items-center justify-between transition-colors outline-none",
-                          isDarkMode ? "bg-slate-900 border-b border-white/5" : "bg-slate-50 border-b border-black/5"
-                        )}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                            <h2 className="text-sm font-black tracking-tight uppercase opacity-50">{category}</h2>
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-20 opacity-50">
+                            <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                            <p className="font-bold">কোনো বই পাওয়া যায়নি</p>
+                            <p className="text-xs mt-1">অনুগ্রহ করে ফিল্টার পরিবর্তন করে দেখুন</p>
                           </div>
-                          <span className="text-[10px] font-bold opacity-30 px-2 py-0.5 rounded-full border border-current">{(catBooks as Book[]).length} টি বই</span>
+                        );
+                      }
+
+                      const grouped = filtered.reduce((acc, book) => {
+                        const cat = book.category || 'অন্যান্য';
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push(book);
+                        return acc;
+                      }, {} as Record<string, Book[]>);
+
+                      return Object.entries(grouped).map(([category, catBooks]) => (
+                        <div key={category} className="space-y-4">
+                          <div className={cn(
+                            "sticky top-[165px] z-[90] -mx-4 px-4 py-2 flex items-center justify-between transition-colors outline-none",
+                            isDarkMode ? "bg-slate-900 border-b border-white/5" : "bg-slate-50 border-b border-black/5"
+                          )}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                              <h2 className="text-sm font-black tracking-tight uppercase opacity-50">{category}</h2>
+                            </div>
+                            <span className="text-[10px] font-bold opacity-30 px-2 py-0.5 rounded-full border border-current">{(catBooks as Book[]).length} টি বই</span>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3">
+                            {(catBooks as Book[]).map((book, idx) => (
+                              <button 
+                                key={`book-${idx}-${book.name}`}
+                                onClick={() => setSelectedBook(book)}
+                                className={cn(
+                                  "relative flex items-start p-4 pt-5 rounded-3xl border text-left active:scale-[0.98] transition-all",
+                                  isDarkMode ? "bg-slate-800 border-slate-700 hover:border-emerald-500/30" : "bg-white border-slate-100 shadow-sm hover:border-emerald-500/30"
+                                )}
+                              >
+                                <div className="flex items-start gap-4 flex-1">
+                                  <div className="relative group shrink-0">
+                                    <BookImage book={book} isDarkMode={isDarkMode} />
+                                    <div className="absolute -inset-1 bg-emerald-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
+                                  <div className="min-w-0 pr-16">
+                                    <span className="block font-bold text-sm leading-tight break-words">{book.name}</span>
+                                    <span className="block text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">{book.author}</span>
+                                  </div>
+                                </div>
+                                <span className={cn(
+                                  "absolute top-3 right-3 text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter shrink-0",
+                                  book.status === 'উপলব্ধ' 
+                                    ? isDarkMode ? "bg-emerald-500/10 text-emerald-500" : "bg-emerald-100 text-emerald-600" 
+                                    : isDarkMode ? "bg-red-500/10 text-red-400" : "bg-red-100 text-red-600"
+                                )}>
+                                  {book.status}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 gap-3">
-                          {(catBooks as Book[]).map((book, idx) => (
-                            <button 
-                              key={`book-${idx}-${book.name}`}
-                              onClick={() => setSelectedBook(book)}
-                              className={cn(
-                                "relative flex items-start p-4 pt-5 rounded-3xl border text-left active:scale-[0.98] transition-all",
-                                isDarkMode ? "bg-slate-800 border-slate-700 hover:border-emerald-500/30" : "bg-white border-slate-100 shadow-sm hover:border-emerald-500/30"
-                              )}
-                            >
-                              <div className="flex items-start gap-4 flex-1">
-                                <div className="relative group shrink-0">
-                                  <BookImage book={book} isDarkMode={isDarkMode} />
-                                  <div className="absolute -inset-1 bg-emerald-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                                <div className="min-w-0 pr-16">
-                                  <span className="block font-bold text-sm leading-tight break-words">{book.name}</span>
-                                  <span className="block text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">{book.author}</span>
-                                </div>
+                      ));
+                    })()}
+                  </div>
+                )
+              ) : (
+                isLoading && onlineBooks.length === 0 ? (
+                  <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 mt-4">
+                    {(() => {
+                      const filtered = onlineBooks.filter(book => {
+                        const query = onlineBookSearchQuery.toLowerCase();
+                        const matchesSearch = !query || 
+                          (book.name || '').toLowerCase().includes(query) ||
+                          (book.author || '').toLowerCase().includes(query);
+                        const matchesCategory = selectedOnlineCategory === 'সব' || book.category === selectedOnlineCategory;
+                        return matchesSearch && matchesCategory;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-20 opacity-50">
+                            <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                            <p className="font-bold">কোনো অনলাইন বই পাওয়া যায়নি</p>
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((book, idx) => {
+                        const isBorrowed = bookRequests.some(r => r.bookId === book.id && r.requesterId === currentUser?.id && r.status === 'approved');
+                        
+                        // Wrap online book into Book interface
+                        const wrappedBook: Book = {
+                          id: book.id,
+                          name: book.name,
+                          author: book.author,
+                          category: book.category,
+                          status: isBorrowed ? 'গৃহীত' : 'উপলব্ধ',
+                          link: book.link,
+                          isOnline: true,
+                          recipient: '',
+                          date: '',
+                          recipientId: '',
+                          address: '',
+                          returnableDate: ''
+                        };
+
+                        return (
+                          <button 
+                            key={`online-book-${idx}`}
+                            onClick={() => setSelectedBook(wrappedBook)}
+                            className={cn(
+                              "relative flex items-start gap-4 p-4 rounded-3xl border text-left active:scale-[0.98] transition-all overflow-hidden",
+                              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"
+                            )}
+                          >
+                            <div className="shrink-0 relative group">
+                              <BookImage book={wrappedBook} isDarkMode={isDarkMode} className="w-12 h-16" />
+                              <div className="absolute -inset-1 bg-emerald-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            <div className="flex-1 min-w-0 pr-10">
+                              <h4 className="font-bold text-sm truncate">{book.name}</h4>
+                              <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">{book.author}</p>
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/50">
+                                  {book.category}
+                                </span>
                               </div>
-                              <span className={cn(
-                                "absolute top-3 right-3 text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter shrink-0",
-                                book.status === 'উপলব্ধ' 
-                                  ? isDarkMode ? "bg-emerald-500/10 text-emerald-500" : "bg-emerald-100 text-emerald-600" 
-                                  : isDarkMode ? "bg-red-500/10 text-red-400" : "bg-red-100 text-red-600"
-                              )}>
-                                {book.status}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
+                            </div>
+                            <span className={cn(
+                              "absolute top-3 right-3 text-[8px] px-2 py-1 rounded-full font-black uppercase tracking-tighter",
+                              isBorrowed 
+                                ? isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
+                                : isDarkMode ? "bg-slate-700 text-slate-400" : "bg-slate-100 text-slate-500"
+                            )}>
+                              {isBorrowed ? 'গৃহীত' : 'অনলাইন'}
+                            </span>
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -6323,11 +6566,7 @@ function AppContent() {
                       icon={<BookOpen className="w-5 h-5" />} 
                       label={advanceSettings.optionNames.borrowedBooks} 
                       onClick={() => {
-                        if (isAdmin(currentUser) || isDeveloper(currentUser)) {
-                          setActiveBorrowedTab('requests');
-                        } else {
-                          setActiveBorrowedTab('my-books');
-                        }
+                        setActiveBorrowedTab('my-books');
                         setShowBorrowedBooksPage(true);
                       }} 
                       isDarkMode={isDarkMode}
@@ -7974,9 +8213,25 @@ function AppContent() {
         {showBorrowedBooksPage && currentUser && (
           <OverlayPage key="borrowed-books-overlay" title="বই সংগ্রহ ও অনুরোধ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-6">
-              {/* Tabs for Admin/Dev */}
-              {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+              {/* Tabs for Admin/Dev - ONLY show if not viewing personal books to keep personal view clean */}
+              {(isAdmin(currentUser) || isDeveloper(currentUser)) && activeBorrowedTab !== 'my-books' && (
                 <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
+                  <button 
+                    onClick={() => setActiveBorrowedTab('my-books')} 
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-[10px] uppercase tracking-wider relative z-10",
+                      activeBorrowedTab === 'my-books' ? "text-white" : "text-emerald-500/60 hover:bg-emerald-500/5"
+                    )}
+                  >
+                    {activeBorrowedTab === 'my-books' && (
+                      <motion.div 
+                        layoutId="activeBorrowedTab"
+                        className="absolute inset-0 bg-emerald-500 rounded-xl shadow-md"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-20">আমার বই</span>
+                  </button>
                   <button 
                     onClick={() => setActiveBorrowedTab('requests')} 
                     className={cn(
@@ -8019,11 +8274,20 @@ function AppContent() {
 
               {/* Tab Content */}
               <motion.div 
-                onPanEnd={(_, info) => handleSwipe(info, ['my-books', 'requests', 'history'], activeBorrowedTab, setActiveBorrowedTab)}
+                onPanEnd={(_, info) => {
+                  const allowedTabs = (isAdmin(currentUser) || isDeveloper(currentUser)) 
+                    ? (activeBorrowedTab === 'my-books' ? ['my-books'] : ['requests', 'history', 'my-books']) 
+                    : ['my-books'];
+                  
+                  // If we are in my-books as admin, we effectively disabled swiping because allowedTabs is just ['my-books']
+                  if (allowedTabs.length > 1) {
+                    handleSwipe(info, allowedTabs, activeBorrowedTab, setActiveBorrowedTab);
+                  }
+                }}
                 className="space-y-4 min-h-[80vh]"
               >
-                {/* Member View: All in one list */}
-                {!(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+                {/* My Books View (Shared by members and admins via tab) */}
+                {activeBorrowedTab === 'my-books' && (
                   <div className="space-y-6">
                     {/* Approved Books Section */}
                     <div className="space-y-4">
@@ -8043,7 +8307,9 @@ function AppContent() {
                             date: r.approvedAt || r.requestDate,
                             returnableDate: r.dueDate || '',
                             recipientId: r.requesterId,
-                            source: 'firestore'
+                            source: 'firestore',
+                            isOnline: r.isOnline || false,
+                            link: r.link || ''
                           }))
                         ];
 
@@ -8089,6 +8355,32 @@ function AppContent() {
                                     <h4 className="text-lg font-bold leading-tight mb-1">{book.name}</h4>
                                     <p className="text-sm text-white/80 italic">{book.author}</p>
                                   </div>
+                                  {book.isOnline && (
+                                    <button 
+                                      onClick={() => {
+                                        // Wrap online book into Book interface
+                                        const wrapped: Book = {
+                                          id: book.id,
+                                          name: book.name,
+                                          author: book.author,
+                                          category: (book as any).category || 'Online',
+                                          status: 'Requested',
+                                          link: book.link,
+                                          isOnline: true,
+                                          recipient: '',
+                                          date: '',
+                                          recipientId: '',
+                                          address: '',
+                                          returnableDate: ''
+                                        };
+                                        setSelectedBook(wrapped);
+                                        setShowOnlineViewer(true);
+                                      }}
+                                      className="p-3 bg-white text-emerald-600 rounded-xl font-bold shadow-lg shadow-black/10 active:scale-95 transition-all text-xs"
+                                    >
+                                      পড়ুন
+                                    </button>
+                                  )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 mb-5">
@@ -8948,7 +9240,7 @@ function AppContent() {
         )}
 
 
-        {selectedBook && (
+        {selectedBook && !showOnlineViewer && (
           <OverlayPage key="book-overlay" title="বইয়ের বিস্তারিত তথ্য" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-4 pb-24">
               {/* Tab Navigation */}
@@ -9078,8 +9370,17 @@ function AppContent() {
             </motion.div>
           </div>
 
-            {/* Floating Borrow Button */}
-            <div className="absolute bottom-6 left-6 right-6 flex justify-center">
+            {/* Floating Action Buttons */}
+            <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-3">
+              {selectedBook.isOnline && (
+                <button 
+                  onClick={() => setShowOnlineViewer(true)}
+                  className="w-full h-14 bg-white text-emerald-600 rounded-2xl font-bold shadow-lg shadow-black/10 flex items-center justify-center gap-2 active:scale-95 transition-all border-2 border-emerald-500"
+                >
+                  <BookOpen className="w-5 h-5" /> বই পড়ুন
+                </button>
+              )}
+
               {(() => {
                 const existingRequest = bookRequests.find(r => r.bookId === selectedBook.id && r.requesterId === currentUser?.id && (r.status === 'pending' || r.status === 'approved'));
                 const isAlreadyBorrowed = books.some(b => b.id === selectedBook.id && b.recipientId === currentUser?.id);
@@ -9099,6 +9400,10 @@ function AppContent() {
                     </div>
                   );
                 }
+
+                // Don't show borrow button for purely online books if requested, but usually they might want to track it
+                // For now, keep it unless it's ONLY online without a physical counterpart (which isOnline usually implies here)
+                if (selectedBook.isOnline) return null;
 
                 return (
                   <button 
@@ -9459,6 +9764,78 @@ function AppContent() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Online Book Viewer Modal */}
+      <AnimatePresence>
+        {showOnlineViewer && selectedBook && selectedBook.isOnline && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-[10000] flex flex-col bg-black overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 bg-slate-900/50 backdrop-blur-md border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white truncate">{selectedBook.name}</h3>
+                  <p className="text-[10px] text-white/50 uppercase tracking-widest">{selectedBook.author}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  window.history.back();
+                  // Small delay to ensure state clears properly and doesn't bounce to details
+                  setTimeout(() => setSelectedBook(null), 100);
+                }}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Security Info */}
+            <div className="p-3 bg-red-500/10 border-b border-red-500/20 flex items-center gap-3">
+              <ShieldAlert className="w-5 h-5 text-red-500" />
+              <p className="text-[10px] font-bold text-red-400">নিরাপদ ভিউয়ার: কপি, শেয়ার বা ডাউনলোড করা সম্ভব নয়।</p>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 relative bg-slate-900 overflow-hidden">
+              {/* Protective Overlays to block header/footer buttons and UI interaction */}
+              {/* Top toolbar blocker */}
+              <div className="absolute top-0 left-0 right-0 h-12 bg-transparent z-[30] pointer-events-auto" />
+              {/* Right side pop-out blocker */}
+              <div className="absolute top-0 right-0 w-16 h-16 bg-transparent z-[30] pointer-events-auto" />
+              
+              <div className="absolute inset-0 select-none pointer-events-none z-[10] cursor-default" onContextMenu={(e) => e.preventDefault()} />
+              
+              <div className="absolute inset-0 select-none pointer-events-none z-[20] flex items-center justify-center opacity-[0.03]">
+                <div className="text-white text-6xl font-black rotate-[-45deg] scale-150 whitespace-nowrap">
+                  SF SEBA CLOUD
+                </div>
+              </div>
+              
+              <iframe
+                src={getSafeViewerLink(selectedBook.link)}
+                className="w-full h-full border-none relative z-[5]"
+                sandbox="allow-scripts allow-same-origin"
+                title="Book Viewer"
+                onContextMenu={(e) => e.preventDefault()}
+              />
+            </div>
+
+            {/* Lock Bar */}
+            <div className="p-4 bg-slate-900 border-t border-white/5 flex items-center justify-center gap-2">
+              <Lock className="w-4 h-4 text-emerald-500" />
+              <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest leading-none">Protected by SF Seba Cloud Security</span>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
