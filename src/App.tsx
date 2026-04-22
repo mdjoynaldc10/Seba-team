@@ -8849,20 +8849,47 @@ function AppContent() {
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">গৃহীত বইসমূহ</h3>
                     {(() => {
-                      const userBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
-                      if (userBooks.length === 0) {
+                      const sheetBooks = books.filter(b => b.recipientId === selectedMemberProfile.id);
+                      const appBooks = bookRequests.filter(r => r.requesterId === selectedMemberProfile.id && r.status === 'approved');
+                      
+                      const allUserBooks = [
+                        ...sheetBooks.map(b => ({
+                          id: b.id,
+                          name: b.name,
+                          author: b.author,
+                          date: b.date,
+                          isOnline: false
+                        })),
+                        ...appBooks.filter(r => !sheetBooks.some(sb => sb.id === r.bookId)).map(r => ({
+                          id: r.bookId,
+                          name: r.bookName,
+                          author: r.bookAuthor,
+                          date: r.approvedAt || r.requestDate,
+                          isOnline: r.isOnline
+                        }))
+                      ];
+
+                      if (allUserBooks.length === 0) {
                         return <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো বই পাওয়া যায়নি</div>;
                       }
                       return (
                         <div className="space-y-2">
-                          {userBooks.map((book, idx) => (
-                            <div key={`prof-book-${idx}`} className={cn("p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <span className="block font-bold text-sm">{book.name}</span>
-                                  <span className="text-[10px] opacity-60">{book.author}</span>
+                          {allUserBooks.map((book, idx) => (
+                            <div key={`prof-book-${idx}`} className={cn("p-4 rounded-2xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm")}>
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="block font-bold text-[15px] leading-tight text-emerald-500">{book.name}</span>
+                                    {book.isOnline && (
+                                      <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 text-[8px] font-black uppercase tracking-tighter shrink-0 border border-blue-500/20">Online</span>
+                                    )}
+                                  </div>
+                                  <span className="block text-[11px] font-bold opacity-40 uppercase tracking-widest">{book.author}</span>
                                 </div>
-                                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-bold">{formatDate(book.date)}</span>
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] font-black text-emerald-500 opacity-60">গ্রহণের তারিখ:</span>
+                                  <span className="block text-[11px] font-bold opacity-80">{formatDate(book.date)}</span>
+                                </div>
                               </div>
                             </div>
                           ))}
