@@ -2807,9 +2807,19 @@ function AppContent() {
             else item[header.toLowerCase()] = cell ? cell.v : '';
           }
         });
-        // Ensure book has an ID (use link or generate one)
+        // Ensure book has an ID (use link and name to generate a more unique ID)
         if (!item.id && item.link) {
-          item.id = `online_${btoa(item.link).substring(0, 16)}`;
+          try {
+            // Include name and link to ensure uniqueness, and use a longer substring of base64
+            // and remove characters that might be problematic in some contexts
+            const uniqueString = `${item.name || ''}_${item.link}`;
+            const base64 = btoa(unescape(encodeURIComponent(uniqueString)));
+            // Use 64 characters instead of 16 to avoid "protocol prefix" collision
+            item.id = `online_${base64.replace(/[^a-zA-Z0-9]/g, '').substring(0, 64)}`;
+          } catch (e) {
+            // Fallback if btoa fails
+            item.id = `online_${(item.name || 'book').replace(/\s+/g, '_')}_${Math.random().toString(36).substring(2, 9)}`;
+          }
         }
         return item;
       });
