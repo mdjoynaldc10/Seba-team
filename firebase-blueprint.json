@@ -215,22 +215,6 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "authorId", "authorName", "bloodGroup", "patientName", "address", "donationDate", "contactNumber", "status", "createdAt"]
-    },
-    "qa": {
-      "title": "Q&A",
-      "description": "Question and Answer entries",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "text": { "type": "string" },
-        "link": { "type": "string" },
-        "alignment": { "type": "string", "enum": ["left", "center", "right", "justify"] },
-        "authorId": { "type": "string" },
-        "authorName": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "title", "text", "alignment", "authorId", "authorName", "createdAt"]
     }
   },
   "firestore": {
@@ -289,10 +273,6 @@
     "/blood_posts/{postId}": {
       "schema": "blood_posts",
       "description": "Collection of blood donation requests"
-    },
-    "/qa/{qaId}": {
-      "schema": "qa",
-      "description": "Collection of Q&A entries"
     }
   }
 }
