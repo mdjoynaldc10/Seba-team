@@ -2780,55 +2780,70 @@ function AppContent() {
   const [selectedOnlineCategory, setSelectedOnlineCategory] = useState('সব');
   const [showOnlineViewer, setShowOnlineViewer] = useState(false);
   
-  const onlineBooksUrl = `https://docs.google.com/spreadsheets/d/1LN9997aF6rbK3OYALBkLWoZkG8ss-4lA34Zvi9Z_ZPk/gviz/tq?tqx=out:json&gid=0`;
+  const ONLINE_BOOKS_SHEET_ID = '1LN9997aF6rbK3OYALBkLWoZkG8ss-4lA34Zvi9Z_ZPk';
+  const ONLINE_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
   const fetchOnlineBooks = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(onlineBooksUrl);
-      const text = await response.text();
-      // Improved parsing to handle Google Visualization API response format variations
-      const startIdx = text.indexOf('{');
-      const endIdx = text.lastIndexOf('}') + 1;
-      if (startIdx === -1 || endIdx === 0) throw new Error('Invalid JSON format from Sheet');
-      
-      const jsonData = JSON.parse(text.substring(startIdx, endIdx));
-      const headers = jsonData.table.cols.map((col: any) => col.label || '');
-      const rows = jsonData.table.rows.map((row: any) => {
-        const item: any = {};
-        row.c.forEach((cell: any, i: number) => {
-          const header = headers[i];
-          if (header) {
-            // Map Bengali headers to English keys
-            if (header.includes('বইয়ের নাম')) item.name = cell ? cell.v : '';
-            else if (header.includes('লেখক')) item.author = cell ? cell.v : '';
-            else if (header.includes('ধরণ')) item.category = cell ? cell.v : '';
-            else if (header.includes('লিংক')) item.link = cell ? (cell.v || cell.u) : ''; // Handle both string and hyperlink
-            else item[header.toLowerCase()] = cell ? cell.v : '';
-          }
-        });
-        // Ensure book has an ID (use link and name to generate a more unique ID)
-        if (!item.id && item.link) {
-          try {
-            // Include name and link to ensure uniqueness, and use a longer substring of base64
-            // and remove characters that might be problematic in some contexts
-            const uniqueString = `${item.name || ''}_${item.link}`;
-            const base64 = btoa(unescape(encodeURIComponent(uniqueString)));
-            // Use 64 characters instead of 16 to avoid "protocol prefix" collision
-            item.id = `online_${base64.replace(/[^a-zA-Z0-9]/g, '').substring(0, 64)}`;
-          } catch (e) {
-            // Fallback if btoa fails
-            item.id = `online_${(item.name || 'book').replace(/\s+/g, '_')}_${Math.random().toString(36).substring(2, 9)}`;
-          }
+      const fetchPromises = ONLINE_SHEETS.map(async (sheetName) => {
+        try {
+          const url = `https://docs.google.com/spreadsheets/d/${ONLINE_BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+          const response = await fetch(url);
+          const text = await response.text();
+          const startIdx = text.indexOf('{');
+          const endIdx = text.lastIndexOf('}') + 1;
+          if (startIdx === -1 || endIdx === 0) return [];
+          
+          const jsonData = JSON.parse(text.substring(startIdx, endIdx));
+          const headers = jsonData.table.cols.map((col: any) => col.label || '');
+          return jsonData.table.rows.map((row: any) => {
+            const item: any = {};
+            row.c.forEach((cell: any, i: number) => {
+              const header = headers[i];
+              if (header) {
+                if (header.includes('বইয়ের নাম')) item.name = cell ? cell.v : '';
+                else if (header.includes('লেখক')) item.author = cell ? cell.v : '';
+                else if (header.includes('ধরণ')) item.category = cell ? cell.v : '';
+                else if (header.includes('লিংক')) item.link = cell ? (cell.v || cell.u) : '';
+                else item[header.toLowerCase()] = cell ? cell.v : '';
+              }
+            });
+            
+            if (!item.id && item.link) {
+              try {
+                const uniqueString = `${item.name || ''}_${item.link}`;
+                const base64 = btoa(unescape(encodeURIComponent(uniqueString)));
+                item.id = `online_${base64.replace(/[^a-zA-Z0-9]/g, '').substring(0, 64)}`;
+              } catch (e) {
+                item.id = `online_${(item.name || 'book').replace(/\s+/g, '_')}_${Math.random().toString(36).substring(2, 9)}`;
+              }
+            }
+            return item;
+          }).filter((r: any) => r.name && r.link);
+        } catch (err) {
+          console.error(`Error fetching sheet ${sheetName}:`, err);
+          return [];
         }
-        return item;
       });
-      setOnlineBooks(rows.filter((r: any) => r.name && r.link)); // Filter out empty or broken rows
+
+      const allResults = await Promise.all(fetchPromises);
+      const flattened = allResults.flat();
+      
+      // Deduplicate by ID to prevent items showing multiple times
+      const uniqueBooksMap = new Map();
+      flattened.forEach(book => {
+        if (book.id && !uniqueBooksMap.has(book.id)) {
+          uniqueBooksMap.set(book.id, book);
+        }
+      });
+      
+      setOnlineBooks(Array.from(uniqueBooksMap.values()));
     } catch (error) {
       console.error('Error fetching online books:', error);
     }
     setIsLoading(false);
-  }, [onlineBooksUrl]);
+  }, []);
 
   useEffect(() => {
     fetchOnlineBooks();
