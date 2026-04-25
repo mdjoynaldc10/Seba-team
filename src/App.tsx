@@ -199,7 +199,9 @@ interface BloodPost {
   authorPhotoId?: string;
   authorAddress: string;
   bloodGroup: string;
-  patientName: string;
+  patientProblem: string;
+  bloodBags: string;
+  donationTime?: string;
   address: string;
   donationDate: string;
   contactNumber: string;
@@ -338,6 +340,20 @@ const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
 const TRANSACTION_SHEETS = ['Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 300): Promise<Response> {
+  try {
+    const res = await fetch(url, { referrerPolicy: "no-referrer", ...options });
+    if (!res.ok && retries > 0) throw new Error(`HTTP ${res.status}`);
+    return res;
+  } catch (e) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw e;
+  }
+}
+
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -345,7 +361,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&tq=${q}`;
   
   try {
-    const res = await fetch(url, { referrerPolicy: "no-referrer" });
+    const res = await fetchWithRetry(url);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (json.table.rows.length) {
@@ -408,7 +424,7 @@ async function loginMember(id: string, phone: string): Promise<Member | null> {
 
 async function fetchHomePosts(): Promise<HomePost[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`, { referrerPolicy: "no-referrer" });
+    const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -429,7 +445,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
 
 async function fetchNotice(): Promise<Notice | null> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`, { referrerPolicy: "no-referrer" });
+    const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
@@ -447,7 +463,7 @@ async function fetchNotice(): Promise<Notice | null> {
 
 async function fetchNotifications(): Promise<Notification[]> {
   try {
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`, { referrerPolicy: "no-referrer" });
+    const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
     const text = await res.text();
     const json = JSON.parse(text.substring(47).slice(0, -2));
     if (!json.table || !json.table.rows) return [];
@@ -468,7 +484,7 @@ async function fetchNotifications(): Promise<Notification[]> {
 async function fetchBooks(): Promise<Book[]> {
   try {
     const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -504,7 +520,7 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
     const fetchPromises = SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -535,7 +551,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         return json.table.rows.map((r: any) => ({
@@ -551,7 +567,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     const newPromises = NEW_PAYMENT_DATA_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -627,7 +643,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
     const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetch(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`, { referrerPolicy: "no-referrer" })
+      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
           const temp = text.substring(47).slice(0, -2);
@@ -684,7 +700,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const fetchPromises = uniqueSheets.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE G CONTAINS '${phone}' OR D = '${phone}' OR E = '${phone}' OR F = '${phone}'`);
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`, { referrerPolicy: "no-referrer" });
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -761,7 +777,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 
     const fetchPromises = uniqueSheets.map(async (s) => {
       try {
-        const res = await fetch(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
         const text = await res.text();
         const json = JSON.parse(text.substring(47).slice(0, -2));
         if (!json.table || !json.table.rows) return [];
@@ -825,7 +841,7 @@ async function fetchAllMembers(): Promise<Member[]> {
 async function fetchDonationProjects(): Promise<DonationProject[]> {
   try {
     const fetchPromises = PROJECT_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -864,7 +880,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
 async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
   try {
     const fetchPromises = TRANSACTION_SHEETS.map(sheet =>
-      fetch(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`, { referrerPolicy: "no-referrer" })
+      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
           const json = JSON.parse(text.substring(47).slice(0, -2));
@@ -1035,7 +1051,7 @@ const getDeviceInfo = () => {
 const fetchPreciseLocation = async (): Promise<{ name: string; coords: string }> => {
   return new Promise((resolve) => {
     const fallbackIP = () => {
-      fetch('https://ipapi.co/json/')
+      fetchWithRetry('https://ipapi.co/json/')
         .then(res => res.json())
         .then(data => {
           const name = data.city && data.country_name ? `${data.city}, ${data.country_name}` : "Unknown Location";
@@ -1055,7 +1071,7 @@ const fetchPreciseLocation = async (): Promise<{ name: string; coords: string }>
         const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
         try {
           // Reverse geocoding using OpenStreetMap
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
+          const res = await fetchWithRetry(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
           const data = await res.json();
           const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "Unknown City";
           const country = data.address.country || "Unknown Country";
@@ -1117,89 +1133,65 @@ const UpdateModal = ({
   const hasUpdate = latestUpdate && latestUpdate.url;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-    >
-      <motion.div 
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        className={cn(
-          "w-full max-w-md rounded-3xl overflow-hidden shadow-2xl",
-          isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-white"
-        )}
-      >
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <RefreshCw className="w-6 h-6 text-emerald-500" />
-            App Update
-          </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div className={cn(
-            "p-6 rounded-2xl border text-center",
-            isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-emerald-50 border-emerald-100"
-          )}>
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Smartphone className="w-8 h-8 text-emerald-500" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">সরাসরি আপডেট করুন</h3>
-            <p className="text-sm opacity-70 mb-6">নিচের বাটনে ক্লিক করে সরাসরি অ্যাপের সর্বশেষ ভার্সনটি ডাউনলোড বা আপডেট করে নিন।</p>
-            
-            {hasUpdate ? (
-              <button 
-                onClick={() => window.open(latestUpdate.url, '_blank')}
-                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" />
-                Update Now
-              </button>
-            ) : (
-              <div className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                You're using the current version
-              </div>
-            )}
+    <OverlayPage title="App Update" onClose={onClose} isDarkMode={isDarkMode}>
+      <div className="space-y-6">
+        <div className={cn(
+          "p-6 rounded-3xl border text-center",
+          isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-emerald-50 border-emerald-100"
+        )}>
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Smartphone className="w-8 h-8 text-emerald-500" />
           </div>
-
-          {isDeveloper(currentUser) && (
-            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-              <h3 className="font-bold flex items-center gap-2">
-                <Settings className="w-5 h-5 text-emerald-500" />
-                Update Link (Developer Only)
-              </h3>
-              
-              <div className="space-y-3">
-                <input 
-                  type="text" 
-                  placeholder="Paste update link here..." 
-                  value={updateLink}
-                  onChange={(e) => setUpdateLink(e.target.value)}
-                  className={cn(
-                    "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
-                  )}
-                />
-
-                <button 
-                  onClick={handleSaveLink}
-                  disabled={isSaving}
-                  className="w-full py-3 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isSaving ? "Saving..." : "Save Link"}
-                </button>
-              </div>
+          <h3 className="text-xl font-bold mb-2">সরাসরি আপডেট করুন</h3>
+          <p className="text-sm opacity-70 mb-6">নিচের বাটনে ক্লিক করে সরাসরি অ্যাপের সর্বশেষ ভার্সনটি ডাউনলোড বা আপডেট করে নিন।</p>
+          
+          {hasUpdate ? (
+            <button 
+              onClick={() => window.open(latestUpdate.url, '_blank')}
+              className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Download className="w-5 h-5" />
+              Update Now
+            </button>
+          ) : (
+            <div className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              You're using the current version
             </div>
           )}
         </div>
-      </motion.div>
-    </motion.div>
+
+        {isDeveloper(currentUser) && (
+          <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <h3 className="font-bold flex items-center gap-2 px-1">
+              <Settings className="w-5 h-5 text-emerald-500" />
+              Update Link (Developer Only)
+            </h3>
+            
+            <div className="space-y-3 px-1">
+              <input 
+                type="text" 
+                placeholder="Paste update link here..." 
+                value={updateLink}
+                onChange={(e) => setUpdateLink(e.target.value)}
+                className={cn(
+                  "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                  isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                )}
+              />
+
+              <button 
+                onClick={handleSaveLink}
+                disabled={isSaving}
+                className="w-full py-3 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Link"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </OverlayPage>
   );
 };
 
@@ -1215,7 +1207,9 @@ const CreateBloodPostModal = ({
 }) => {
   const [formData, setFormData] = useState({
     bloodGroup: '',
-    patientName: '',
+    patientProblem: '',
+    bloodBags: '',
+    donationTime: '',
     address: '',
     donationDate: '',
     contactNumber: currentUser?.phone || ''
@@ -1225,7 +1219,7 @@ const CreateBloodPostModal = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-    if (!formData.bloodGroup || !formData.patientName || !formData.address || !formData.donationDate || !formData.contactNumber) {
+    if (!formData.bloodGroup || !formData.patientProblem || !formData.bloodBags || !formData.address || !formData.donationDate || !formData.contactNumber) {
       alert("সবগুলো তথ্য পূরণ করুন।");
       return;
     }
@@ -1303,13 +1297,28 @@ const CreateBloodPostModal = ({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold opacity-60 ml-1">রোগীর নাম</label>
+            <label className="text-xs font-bold opacity-60 ml-1">রোগীর সমস্যা</label>
             <input 
               required
               type="text" 
-              placeholder="রোগীর নাম লিখুন"
-              value={formData.patientName}
-              onChange={(e) => setFormData({...formData, patientName: e.target.value})}
+              placeholder="রোগীর সমস্যা লিখুন"
+              value={formData.patientProblem}
+              onChange={(e) => setFormData({...formData, patientProblem: e.target.value})}
+              className={cn(
+                "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+              )}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">রক্তের ব্যাগ (পরিমাণ)</label>
+            <input 
+              required
+              type="text" 
+              placeholder="যেমন: ২ ব্যাগ"
+              value={formData.bloodBags}
+              onChange={(e) => setFormData({...formData, bloodBags: e.target.value})}
               className={cn(
                 "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
                 isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
@@ -1347,19 +1356,33 @@ const CreateBloodPostModal = ({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold opacity-60 ml-1">যোগাযোগ নম্বর</label>
+              <label className="text-xs font-bold opacity-60 ml-1">রক্তদানের সময় (optional)</label>
               <input 
-                required
-                type="tel" 
-                placeholder="01XXXXXXXXX"
-                value={formData.contactNumber}
-                onChange={(e) => setFormData({...formData, contactNumber: e.target.value})}
+                type="text" 
+                placeholder="যেমন: সকাল ১০টা"
+                value={formData.donationTime}
+                onChange={(e) => setFormData({...formData, donationTime: e.target.value})}
                 className={cn(
                   "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
                   isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
                 )}
               />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold opacity-60 ml-1">যোগাযোগ নম্বর</label>
+            <input 
+              required
+              type="tel" 
+              placeholder="01XXXXXXXXX"
+              value={formData.contactNumber}
+              onChange={(e) => setFormData({...formData, contactNumber: e.target.value})}
+              className={cn(
+                "w-full h-12 px-4 rounded-xl border outline-none focus:border-red-500 transition-colors",
+                isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+              )}
+            />
           </div>
 
           <button 
@@ -1529,9 +1552,9 @@ const CustomNotificationPage = ({ onClose, isDarkMode, allMembers, onSend }: {
             
             {searchQuery && !selectedMember && (
               <div className="mt-2 space-y-2">
-                {filteredMembers.map(m => (
+                {filteredMembers.map((m, idx) => (
                   <button
-                    key={m.id}
+                    key={`nav-search-member-${m.id}-${idx}`}
                     onClick={() => {
                       setSelectedMember(m);
                       setSearchQuery(m.name);
@@ -2555,7 +2578,7 @@ function BookshelfPage({
         ) : (
           bookshelves.map((shelf, idx) => (
             <motion.div 
-              key={idx}
+              key={`shelf-item-${idx}-${shelf.address}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
@@ -2789,7 +2812,7 @@ function AppContent() {
       const fetchPromises = ONLINE_SHEETS.map(async (sheetName) => {
         try {
           const url = `https://docs.google.com/spreadsheets/d/${ONLINE_BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
-          const response = await fetch(url);
+          const response = await fetchWithRetry(url);
           const text = await response.text();
           const startIdx = text.indexOf('{');
           const endIdx = text.lastIndexOf('}') + 1;
@@ -3069,6 +3092,7 @@ function AppContent() {
   const [donationFilterEndDate, setDonationFilterEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [showCloudPinPage, setShowCloudPinPage] = useState(false);
+  const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [latestUpdate, setLatestUpdate] = useState<{ version: string, url: string, description: string } | null>(null);
   const [showPinEntry, setShowPinEntry] = useState(false);
@@ -3469,6 +3493,8 @@ function AppContent() {
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
         setShowCloudPinPage(!!event.state.showCloudPinPage);
+        setShowSettingsPage(!!event.state.showSettingsPage);
+        setShowUpdateModal(!!event.state.showUpdateModal);
         setShowCustomNotificationPage(!!event.state.showCustomNotificationPage);
         setSelectedBookRequest(event.state.selectedBookRequest || null);
         setTimeout(() => {
@@ -3502,6 +3528,8 @@ function AppContent() {
       showGreetingsSettings,
       showRegistration,
       showCloudPinPage,
+      showSettingsPage,
+      showUpdateModal,
       showCustomNotificationPage,
       selectedBookRequest,
       showOnlineViewer
@@ -3538,12 +3566,14 @@ function AppContent() {
         showGreetingsSettings,
         showRegistration,
         showCloudPinPage,
+        showSettingsPage,
+        showUpdateModal,
         showCustomNotificationPage,
         selectedBookRequest,
         showOnlineViewer
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showCustomNotificationPage, selectedBookRequest, showOnlineViewer]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showSettingsPage, showUpdateModal, showCustomNotificationPage, selectedBookRequest, showOnlineViewer]);
 
   // Refs for swipe
   const extractSheetId = (input: string) => {
@@ -4142,33 +4172,46 @@ function AppContent() {
 
   const loadInitialData = async () => {
     setIsLoading(true);
-    const [posts, donors, allBooks, projects, transactions, noticeData, notificationData, members] = await Promise.all([
-      fetchHomePosts(),
-      fetchAllDonors(),
-      fetchBooks(),
-      fetchDonationProjects(),
-      fetchDonationTransactions(),
-      fetchNotice(),
-      fetchNotifications(),
-      fetchAllMembers()
-    ]);
-    setHomePosts(posts);
-    setDonorData(donors);
-    setBooks(allBooks);
-    setDonationProjects(projects);
-    setDonationTransactions(transactions);
-    setNotifications(notificationData);
-    setAllMembers(members);
     
-    if (noticeData && noticeData.title && noticeData.message) {
-      setNotice(noticeData);
-      setShowNotice(true);
-      // Play notification sound
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-      audio.play().catch(e => console.log("Audio play failed:", e));
+    try {
+      // 1. Fetch UI critical small data first
+      const [noticeData, notificationData, posts] = await Promise.all([
+        fetchNotice(),
+        fetchNotifications(),
+        fetchHomePosts()
+      ]);
+      
+      if (noticeData && noticeData.title && noticeData.message) {
+        setNotice(noticeData);
+        setShowNotice(true);
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+        audio.play().catch(() => {});
+      }
+      setNotifications(notificationData);
+      setHomePosts(posts);
+
+      // 2. Fetch primary datasets separately
+      const donors = await fetchAllDonors();
+      setDonorData(donors);
+      
+      const allBooks = await fetchBooks();
+      setBooks(allBooks);
+      
+      const members = await fetchAllMembers();
+      setAllMembers(members);
+
+      // 3. Fetch donation data
+      const projects = await fetchDonationProjects();
+      setDonationProjects(projects);
+      
+      const transactions = await fetchDonationTransactions();
+      setDonationTransactions(transactions);
+      
+    } catch (e) {
+      console.error("Error in loadInitialData:", e);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
 
@@ -5333,9 +5376,9 @@ function AppContent() {
                   {globalNotices.length === 0 ? (
                     <div className="text-center py-20 opacity-50">কোনো নোটিশ পাওয়া যায়নি</div>
                   ) : (
-                    globalNotices.map((notice) => (
+                    globalNotices.map((notice, idx) => (
                       <motion.div 
-                        key={`home-notice-${notice.id}`}
+                        key={`home-notice-v2-${notice.id}-${idx}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         onClick={() => {
@@ -6058,8 +6101,8 @@ function AppContent() {
                       <p>কোনো রক্তের অনুরোধ পাওয়া যায়নি</p>
                     </div>
                   ) : (
-                    bloodPosts.map((post) => (
-                      <div key={post.id} className={cn(
+                    bloodPosts.map((post, idx) => (
+                      <div key={`blood-post-${post.id}-${idx}`} className={cn(
                         "p-5 rounded-3xl border shadow-sm space-y-4 relative overflow-hidden",
                         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                       )}>
@@ -6095,9 +6138,19 @@ function AppContent() {
                           isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
                         )}>
                           <div className="flex justify-between text-sm">
-                            <span className="opacity-60">রোগীর নাম:</span>
-                            <span className="font-bold">{post.patientName}</span>
+                            <span className="opacity-60">রোগীর সমস্যা:</span>
+                            <span className="font-bold">{post.patientProblem}</span>
                           </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="opacity-60">রক্তের ব্যাগ:</span>
+                            <span className="font-bold">{post.bloodBags}</span>
+                          </div>
+                          {post.donationTime && (
+                            <div className="flex justify-between text-sm">
+                              <span className="opacity-60">রক্তদানের সময়:</span>
+                              <span className="font-bold">{post.donationTime}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between text-sm">
                             <span className="opacity-60">স্থান:</span>
                             <span className="font-bold">{post.address}</span>
@@ -6396,54 +6449,10 @@ function AppContent() {
                     isDarkMode={isDarkMode}
                   />
                   <ProfileMenuLink 
-                    icon={
-                      <div className="relative">
-                        <RefreshCw className="w-5 h-5 text-emerald-500" />
-                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
-                        )}
-                      </div>
-                    } 
-                    label="Update" 
-                    onClick={() => setShowUpdateModal(true)} 
+                    icon={<Settings className="w-5 h-5 text-slate-500" />} 
+                    label="Settings" 
+                    onClick={() => setShowSettingsPage(true)} 
                     isDarkMode={isDarkMode}
-                  />
-                  <ProfileMenuLink 
-                    icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
-                    label={theme === 'system' ? "থিম: সিস্টেম (অটো)" : theme === 'dark' ? "থিম: ডার্ক" : "থিম: লাইট"} 
-                    onClick={toggleTheme} 
-                    isDarkMode={isDarkMode}
-                    rightElement={
-                      <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", theme === 'system' ? "bg-slate-400" : theme === 'dark' ? "bg-emerald-500" : "bg-slate-300")}>
-                        <motion.div 
-                          animate={{ 
-                            x: theme === 'light' ? 0 : theme === 'dark' ? 32 : 16,
-                          }}
-                          className="w-4 h-4 bg-white rounded-full shadow-sm"
-                        />
-                      </div>
-                    }
-                  />
-                  <ProfileMenuLink 
-                    icon={<Facebook className="w-5 h-5" />} 
-                    label="Facebook Page" 
-                    onClick={() => window.open('https://www.facebook.com/profile.php?id=100071182715718', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
-                  />
-                  <ProfileMenuLink 
-                    icon={<Facebook className="w-5 h-5" />} 
-                    label="Facebook Group" 
-                    onClick={() => window.open('https://www.facebook.com/share/g/17BCSBMTA8/', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
-                  />
-                  <ProfileMenuLink 
-                    icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
-                    label="WhatsApp Channel" 
-                    onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
                   />
                 </div>
               </div>
@@ -6556,25 +6565,6 @@ function AppContent() {
 
                 <div className="space-y-2 px-1">
                   <ProfileMenuLink 
-                    icon={<Lock className="w-5 h-5 text-emerald-500" />} 
-                    label="Cloud PIN" 
-                    onClick={() => setShowCloudPinPage(true)} 
-                    isDarkMode={isDarkMode}
-                  />
-                  <ProfileMenuLink 
-                    icon={
-                      <div className="relative">
-                        <RefreshCw className="w-5 h-5 text-emerald-500" />
-                        {latestUpdate && latestUpdate.version !== APP_VERSION && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
-                        )}
-                      </div>
-                    } 
-                    label="Update" 
-                    onClick={() => setShowUpdateModal(true)} 
-                    isDarkMode={isDarkMode}
-                  />
-                  <ProfileMenuLink 
                     icon={<Info className="w-5 h-5" />} 
                     label={advanceSettings.optionNames.information} 
                     onClick={() => setShowInfoPage(true)} 
@@ -6656,22 +6646,6 @@ function AppContent() {
                       }
                     />
                   )}
-                  <ProfileMenuLink 
-                    icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
-                    label={theme === 'system' ? "থিম: সিস্টেম (অটো)" : theme === 'dark' ? "থিম: ডার্ক" : "থিম: লাইট"} 
-                    onClick={toggleTheme} 
-                    isDarkMode={isDarkMode}
-                    rightElement={
-                      <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", theme === 'system' ? "bg-slate-400" : theme === 'dark' ? "bg-emerald-500" : "bg-slate-300")}>
-                        <motion.div 
-                          animate={{ 
-                            x: theme === 'light' ? 0 : theme === 'dark' ? 32 : 16,
-                          }}
-                          className="w-4 h-4 bg-white rounded-full shadow-sm"
-                        />
-                      </div>
-                    }
-                  />
                   {((isAdmin(currentUser) && advanceSettings.controls.admin.donation) || 
                     (!isAdmin(currentUser) && advanceSettings.controls.member.donation)) && (
                     <ProfileMenuLink 
@@ -6681,6 +6655,12 @@ function AppContent() {
                       isDarkMode={isDarkMode}
                     />
                   )}
+                  <ProfileMenuLink 
+                    icon={<Settings className="w-5 h-5 text-slate-500" />} 
+                    label="Settings" 
+                    onClick={() => setShowSettingsPage(true)} 
+                    isDarkMode={isDarkMode}
+                  />
 
                   {isDeveloper(currentUser) && (
                     <ProfileMenuLink 
@@ -6698,36 +6678,7 @@ function AppContent() {
                       isDarkMode={isDarkMode}
                     />
                   )}
-                  <ProfileMenuLink 
-                    icon={<Facebook className="w-5 h-5" />} 
-                    label={advanceSettings.optionNames.facebookPage} 
-                    onClick={() => window.open('https://www.facebook.com/profile.php?id=100071182715718', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
-                  />
-                  <ProfileMenuLink 
-                    icon={<Facebook className="w-5 h-5" />} 
-                    label={advanceSettings.optionNames.facebookGroup} 
-                    onClick={() => window.open('https://www.facebook.com/share/g/17BCSBMTA8/', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
-                  />
-                  <ProfileMenuLink 
-                    icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
-                    label={advanceSettings.optionNames.whatsAppChannel} 
-                    onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
-                    isDarkMode={isDarkMode}
-                    rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
-                  />
-                  <div className="pt-4">
-                    <ProfileMenuLink 
-                      icon={<LogOut className="w-5 h-5 text-red-500" />} 
-                      label={advanceSettings.optionNames.logout} 
-                      onClick={logout} 
-                      isDarkMode={isDarkMode}
-                      className="border-red-100 dark:border-red-900/30 text-red-500"
-                    />
-                  </div>
+                  <div className="pt-4" />
                 </div>
               </div>
             )}
@@ -7005,19 +6956,7 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Update Modal */}
-      <AnimatePresence>
-        {showUpdateModal && (
-          <UpdateModal 
-            onClose={() => setShowUpdateModal(false)}
-            isDarkMode={isDarkMode}
-            latestUpdate={latestUpdate}
-            APP_VERSION={APP_VERSION}
-            currentUser={currentUser}
-          />
-        )}
-      </AnimatePresence>
-
+      {/* Update Modal placeholder moved to Settings */}
       {/* Blood Post Modals */}
       <AnimatePresence>
         {showCreateBloodPostModal && (
@@ -7078,12 +7017,101 @@ function AppContent() {
           </OverlayPage>
         )}
 
-        {showCloudPinPage && currentUser && (
-          <CloudPinPage 
-            currentUser={currentUser} 
-            onClose={() => window.history.back()} 
-            isDarkMode={isDarkMode} 
-          />
+        {/* Settings Overlay */}
+        {showSettingsPage && (
+          <OverlayPage key="settings-overlay" title="Settings" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
+            <div className="space-y-2 pb-24">
+              {currentUser && (
+                <ProfileMenuLink 
+                  icon={<Lock className="w-5 h-5 text-emerald-500" />} 
+                  label="Cloud PIN" 
+                  onClick={() => setShowCloudPinPage(true)} 
+                  isDarkMode={isDarkMode}
+                />
+              )}
+              <ProfileMenuLink 
+                icon={
+                  <div className="relative">
+                    <RefreshCw className="w-5 h-5 text-emerald-500" />
+                    {latestUpdate && latestUpdate.version !== APP_VERSION && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
+                    )}
+                  </div>
+                } 
+                label="Update" 
+                onClick={() => setShowUpdateModal(true)} 
+                isDarkMode={isDarkMode}
+              />
+              <ProfileMenuLink 
+                icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
+                label={theme === 'system' ? "Mode: Auto" : theme === 'dark' ? "Mode: Dark" : "Mode: Light"} 
+                onClick={toggleTheme} 
+                isDarkMode={isDarkMode}
+                rightElement={
+                  <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", theme === 'system' ? "bg-slate-400" : theme === 'dark' ? "bg-emerald-500" : "bg-slate-300")}>
+                    <motion.div 
+                      animate={{ 
+                        x: theme === 'light' ? 0 : theme === 'dark' ? 32 : 16,
+                      }}
+                      className="w-4 h-4 bg-white rounded-full shadow-sm"
+                    />
+                  </div>
+                }
+              />
+              <ProfileMenuLink 
+                icon={<Facebook className="w-5 h-5" />} 
+                label={advanceSettings.optionNames.facebookPage} 
+                onClick={() => window.open('https://www.facebook.com/profile.php?id=100071182715718', '_blank')} 
+                isDarkMode={isDarkMode}
+                rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
+              />
+              <ProfileMenuLink 
+                icon={<Facebook className="w-5 h-5" />} 
+                label={advanceSettings.optionNames.facebookGroup} 
+                onClick={() => window.open('https://www.facebook.com/share/g/17BCSBMTA8/', '_blank')} 
+                isDarkMode={isDarkMode}
+                rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
+              />
+              <ProfileMenuLink 
+                icon={<MessageCircle className="w-5 h-5 text-emerald-500" />} 
+                label={advanceSettings.optionNames.whatsAppChannel} 
+                onClick={() => window.open('https://whatsapp.com/channel/0029VbCeAHpJ3juuRp2Dzi3N', '_blank')} 
+                isDarkMode={isDarkMode}
+                rightElement={<ExternalLink className="w-4 h-4 text-slate-300" />}
+              />
+              {currentUser && (
+                <div className="pt-4">
+                  <ProfileMenuLink 
+                    icon={<LogOut className="w-5 h-5 text-red-500" />} 
+                    label={advanceSettings.optionNames.logout} 
+                    onClick={logout} 
+                    isDarkMode={isDarkMode}
+                    className="border-red-100 dark:border-red-900/30 text-red-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Sub-pages inside Settings context */}
+            <AnimatePresence>
+              {showCloudPinPage && currentUser && (
+                <CloudPinPage 
+                  currentUser={currentUser} 
+                  onClose={() => window.history.back()} 
+                  isDarkMode={isDarkMode} 
+                />
+              )}
+              {showUpdateModal && (
+                <UpdateModal 
+                  onClose={() => window.history.back()}
+                  isDarkMode={isDarkMode}
+                  latestUpdate={latestUpdate}
+                  APP_VERSION={APP_VERSION}
+                  currentUser={currentUser}
+                />
+              )}
+            </AnimatePresence>
+          </OverlayPage>
         )}
 
         {showPaymentPage && (
@@ -9260,9 +9288,9 @@ function AppContent() {
                         <p className="text-sm">কোনো নোটিশের ইতিহাস পাওয়া যায়নি।</p>
                       </div>
                     ) : (
-                      globalNotices.map((notice) => (
+                      globalNotices.map((notice, idx) => (
                         <div 
-                          key={`admin-history-notice-${notice.id}`} 
+                          key={`admin-history-notice-v3-${notice.id}-${idx}`} 
                           className={cn(
                             "p-4 rounded-2xl border space-y-3 transition-all",
                             isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"

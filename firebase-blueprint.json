@@ -202,7 +202,9 @@
         "authorPhotoId": { "type": "string" },
         "authorAddress": { "type": "string" },
         "bloodGroup": { "type": "string" },
-        "patientName": { "type": "string" },
+        "patientProblem": { "type": "string" },
+        "bloodBags": { "type": "string" },
+        "donationTime": { "type": "string" },
         "address": { "type": "string" },
         "donationDate": { "type": "string" },
         "contactNumber": { "type": "string" },
@@ -214,7 +216,7 @@
         "acceptorPhone": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "authorId", "authorName", "bloodGroup", "patientName", "address", "donationDate", "contactNumber", "status", "createdAt"]
+      "required": ["id", "authorId", "authorName", "bloodGroup", "patientProblem", "bloodBags", "address", "donationDate", "contactNumber", "status", "createdAt"]
     }
   },
   "firestore": {
