@@ -334,7 +334,7 @@ const NEW_PAYMENT_DATA_SHEET_ID = '1TetkWolWcXvl0URf-CeNJdXd9GIAuPNRscTZEYkI834'
 const MEMBER_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
 const REGISTRATION_SHEETS = ['Sheet1', 'Registration', 'Form Responses 1'];
 const PAYMENT_SHEETS = ['Sheet11', 'Sheet12', 'Sheet13', 'Sheet14', 'Sheet15', 'Sheet16', 'Sheet17', 'Sheet18', 'Sheet19', 'Sheet20'];
-const NEW_PAYMENT_DATA_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3'];
+const NEW_PAYMENT_DATA_SHEETS = Array.from({ length: 30 }, (_, i) => `Sheet${i + 1}`);
 const BLOOD_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6"];
 const BOOKS_SHEETS = ["Sheet1", "Sheet2", "Sheet3", "Sheet4", "Sheet5", "Sheet6", "Sheet7", "Sheet8"];
 const PROJECT_SHEETS = ['Sheet1', 'Sheet2'];
@@ -546,8 +546,9 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
   }
 }
 
-async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]> {
+async function fetchPaymentHistory(id: string, phone: string): Promise<{ payments: Payment[], headers: string[] }> {
   try {
+    let allHeaders: string[] = [];
     const promises = PAYMENT_SHEETS.map(async (s) => {
       const q = encodeURIComponent(`SELECT * WHERE A = '${id}' AND B CONTAINS '${phone}'`);
       try {
@@ -575,8 +576,13 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
         const payments: Payment[] = [];
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         
+        const headers = json.table.cols.map((col: any) => col.label || '');
+        const currentHeaders = headers.filter((h: any, i: number) => i >= 3 && i <= 25 && h.trim() !== '');
+        if (currentHeaders.length > allHeaders.length) allHeaders = currentHeaders;
+        
         json.table.rows.forEach((r: any) => {
           const year = r.c[2]?.v || '';
+          
           // Monthly payments (D to O, indices 3 to 14)
           for (let i = 0; i < 12; i++) {
             const amount = r.c[i + 3]?.v;
@@ -592,7 +598,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
           if (r.c[15]?.v && r.c[15]?.v > 0) {
             payments.push({
               amount: Number(r.c[15]?.v),
-              reason: `Tshirt`,
+              reason: headers[15] || `Tshirt`,
               date: `${year}-01-01`
             });
           }
@@ -600,17 +606,19 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
           if (r.c[16]?.v && r.c[16]?.v > 0) {
             payments.push({
               amount: Number(r.c[16]?.v),
-              reason: `ID Card`,
+              reason: headers[16] || `ID Card`,
               date: `${year}-01-01`
             });
           }
-          // program (R, index 17)
-          if (r.c[17]?.v && r.c[17]?.v > 0) {
-            payments.push({
-              amount: Number(r.c[17]?.v),
-              reason: `Program`,
-              date: `${year}-01-01`
-            });
+          // Dynamic columns R to Z (indices 17 to 25)
+          for (let k = 17; k <= 25; k++) {
+            if (r.c[k]?.v && r.c[k]?.v > 0) {
+              payments.push({
+                amount: Number(r.c[k].v),
+                reason: headers[k] || `Dynamic ${k}`,
+                date: `${year}-01-01`
+              });
+            }
           }
         });
         return payments;
@@ -633,10 +641,11 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<Payment[]
     );
 
     // Sort by date descending
-    return uniquePayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sorted = uniquePayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return { payments: sorted, headers: allHeaders };
   } catch (e) {
     console.error("Error fetching payment history:", e);
-    return [];
+    return { payments: [], headers: [] };
   }
 }
 
@@ -2788,6 +2797,12 @@ function AppContent() {
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
   const [isTogglingBlood, setIsTogglingBlood] = useState(false);
   const [publicDonors, setPublicDonors] = useState<Donor[]>([]);
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+  const [filterReason, setFilterReason] = useState('all');
+  const [filterAmount, setFilterAmount] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [paymentHeaders, setPaymentHeaders] = useState<string[]>([]);
   const [paymentData, setPaymentData] = useState<Payment[]>([]);
   const [donorData, setDonorData] = useState<Donor[]>([]);
   const [homePosts, setHomePosts] = useState<HomePost[]>([]);
@@ -2988,6 +3003,33 @@ function AppContent() {
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   
   // Combine member payment history with donation transactions based on phone number
+  const formatDate = (dateValue: any) => {
+    if (!dateValue) return 'তথ্য নেই';
+    try {
+      let date: Date;
+      if (dateValue && typeof dateValue.toDate === 'function') {
+        date = dateValue.toDate();
+      } else if (typeof dateValue === 'string') {
+        const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
+        if (match) {
+          date = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+        } else {
+          date = new Date(dateValue);
+        }
+      } else {
+        date = new Date(dateValue);
+      }
+      if (isNaN(date.getTime())) return dateValue;
+      return date.toLocaleDateString('bn-BD', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    } catch (e) {
+      return dateValue;
+    }
+  };
+
   const allPayments = useMemo(() => {
     if (!currentUser) return paymentData;
     const donationPayments = getDonationPaymentsForUser(currentUser.phone || '', donationTransactions);
@@ -2998,6 +3040,38 @@ function AppContent() {
       return dateB - dateA;
     });
   }, [paymentData, donationTransactions, currentUser]);
+
+  const filteredPayments = useMemo(() => {
+    let filtered = allPayments;
+
+    if (filterReason !== 'all') {
+      filtered = filtered.filter(p => p.reason === filterReason);
+    }
+
+    if (filterAmount.trim()) {
+      filtered = filtered.filter(p => p.amount.toString() === filterAmount.trim());
+    }
+
+    if (filterStartDate) {
+      filtered = filtered.filter(p => p.date >= filterStartDate);
+    }
+
+    if (filterEndDate) {
+      filtered = filtered.filter(p => p.date <= filterEndDate);
+    }
+
+    if (paymentSearchQuery.trim()) {
+      const q = paymentSearchQuery.toLowerCase();
+      filtered = filtered.filter(p => 
+        p.reason.toLowerCase().includes(q) || 
+        p.amount.toString().includes(q) || 
+        p.date.includes(q) ||
+        formatDate(p.date).toLowerCase().includes(q)
+      );
+    }
+
+    return filtered;
+  }, [allPayments, paymentSearchQuery, filterReason, filterAmount, filterStartDate, filterEndDate]);
 
   const allMemberProfilePayments = useMemo(() => {
     if (!selectedMemberProfile) return memberProfilePayments;
@@ -3085,8 +3159,6 @@ function AppContent() {
   const [newNoticeAlignment, setNewNoticeAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [isSavingNotice, setIsSavingNotice] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [donationFilterStartDate, setDonationFilterStartDate] = useState('');
   const [donationFilterEndDate, setDonationFilterEndDate] = useState('');
@@ -3711,10 +3783,11 @@ function AppContent() {
           setPaymentData(JSON.parse(savedPayments));
         }
         // Refresh payments in background
-        fetchPaymentHistory(user.id, user.phone).then(payments => {
-          if (payments && payments.length > 0) {
-            setPaymentData(payments);
-            localStorage.setItem('seba_payments', JSON.stringify(payments));
+        fetchPaymentHistory(user.id, user.phone).then(res => {
+          if (res.payments && res.payments.length > 0) {
+            setPaymentData(res.payments);
+            if (res.headers.length > 0) setPaymentHeaders(res.headers);
+            localStorage.setItem('seba_payments', JSON.stringify(res.payments));
           }
         });
 
@@ -3760,9 +3833,10 @@ function AppContent() {
   // Sync initialization with auth ready
   useEffect(() => {
     if (showPaymentPage && currentUser) {
-      fetchPaymentHistory(currentUser.id, currentUser.phone).then(payments => {
-        setPaymentData(payments);
-        localStorage.setItem('seba_payments', JSON.stringify(payments));
+      fetchPaymentHistory(currentUser.id, currentUser.phone).then(res => {
+        setPaymentData(res.payments);
+        if (res.headers.length > 0) setPaymentHeaders(res.headers);
+        localStorage.setItem('seba_payments', JSON.stringify(res.payments));
       });
     }
   }, [showPaymentPage, currentUser]);
@@ -4228,8 +4302,9 @@ function AppContent() {
   const handleMemberClick = async (member: Member) => {
     setSelectedMemberProfile(member);
     setIsProfileLoading(true);
-    const payments = await fetchPaymentHistory(member.id, member.phone);
-    setMemberProfilePayments(payments);
+    const res = await fetchPaymentHistory(member.id, member.phone);
+    setMemberProfilePayments(res.payments);
+    if (res.headers.length > 0) setPaymentHeaders(res.headers);
     setIsProfileLoading(false);
   };
 
@@ -4305,9 +4380,10 @@ function AppContent() {
       console.error("Error recording session:", e);
     }
 
-    const payments = await fetchPaymentHistory(member.id, member.phone);
-    setPaymentData(payments);
-    localStorage.setItem('seba_payments', JSON.stringify(payments));
+    const res = await fetchPaymentHistory(member.id, member.phone);
+    setPaymentData(res.payments);
+    if (res.headers.length > 0) setPaymentHeaders(res.headers);
+    localStorage.setItem('seba_payments', JSON.stringify(res.payments));
     setShowPinEntry(false);
     setPendingLoginMember(null);
     setCloudPinSettings(null);
@@ -4986,28 +5062,7 @@ function AppContent() {
     return isNaN(date.getTime()) ? null : date;
   };
 
-  const formatDate = (dateValue: any) => {
-    if (!dateValue) return 'তথ্য নেই';
-    try {
-      let date: Date;
-      if (dateValue && typeof dateValue.toDate === 'function') {
-        date = dateValue.toDate();
-      } else if (typeof dateValue === 'string') {
-        const match = dateValue.match(/Date\((\d+),(\d+),(\d+)\)/);
-        date = match ? new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3])) : new Date(dateValue);
-      } else {
-        date = new Date(dateValue);
-      }
-      if (isNaN(date.getTime())) return dateValue;
-      return date.toLocaleDateString('bn-BD', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-    } catch (e) {
-      return dateValue;
-    }
-  };
+  // Removed old formatDate to prevent duplication
 
   const getDuration = (startDateValue: any) => {
     if (!startDateValue) return null;
@@ -5751,8 +5806,26 @@ function AppContent() {
           </div>
 
           {/* Members Tab */}
-          <div className="w-1/5 shrink-0 h-full overflow-y-auto px-4 py-4 no-scrollbar">
-            <div className="sticky top-0 z-50 bg-inherit py-2">
+          <div className="w-1/5 shrink-0 h-full overflow-y-auto no-scrollbar relative">
+            <div className={cn(
+              "sticky top-0 z-[60] px-4 pt-4 pb-2 space-y-4",
+              isDarkMode ? "bg-slate-900" : "bg-slate-50"
+            )}>
+              {isAdmin(currentUser) && (
+                <div className="bg-emerald-500 rounded-2xl p-4 text-white shadow-lg shadow-emerald-500/20 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest leading-none">মোট সদস্য</p>
+                      <h3 className="text-lg font-black leading-tight">
+                        {allMembers.length.toLocaleString('bn-BD').padStart(2, '০')} জন
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className={cn(
                 "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
                 isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
@@ -5768,7 +5841,8 @@ function AppContent() {
                 />
               </div>
             </div>
-            <div className="mt-4 space-y-3">
+
+            <div className="px-4 pb-4 space-y-3">
               {(() => {
                 if (isSpecialMember(currentUser)) {
                   const query = memberSearchQuery.toLowerCase();
@@ -5786,41 +5860,76 @@ function AppContent() {
                     return <div className="text-center p-10 opacity-50">কোনো সদস্য পাওয়া যায়নি!</div>;
                   }
 
-                  return filtered.map((m, idx) => (
-                    <button 
-                      key={`member-${idx}-${m.id}`} 
-                      onMouseDown={() => handleLongPressStart('member', m)}
-                      onMouseUp={handleLongPressEnd}
-                      onMouseLeave={handleLongPressEnd}
-                      onTouchStart={() => handleLongPressStart('member', m)}
-                      onTouchEnd={handleLongPressEnd}
-                      onClick={() => handleMemberClick(m)}
-                      className={cn(
-                        "w-full flex items-center gap-4 p-3 rounded-xl border text-left active:scale-95 transition-transform",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                      )}
-                    >
-                      {m.photoId && !m.isNewSheet ? (
-                        <img 
-                          src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
-                          className="w-14 h-14 rounded-lg object-cover"
-                          alt={m.name}
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
-                          <User className="w-8 h-8" />
+                  const groupedMembers = filtered.reduce((acc, m) => {
+                    const designation = m.designation || 'সাধারণ সদস্য';
+                    if (!acc[designation]) acc[designation] = [];
+                    acc[designation].push(m);
+                    return acc;
+                  }, {} as Record<string, Member[]>);
+
+                  const designationOrder = ['Admin', 'President', 'Secretary', 'Developer'];
+
+                  const sortedDesignations = Object.keys(groupedMembers).sort((a, b) => {
+                    const idxA = designationOrder.indexOf(a);
+                    const idxB = designationOrder.indexOf(b);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return a.localeCompare(b);
+                  });
+
+                  return sortedDesignations.map(designation => (
+                    <div key={designation} className="space-y-3">
+                      <div className={cn(
+                        "sticky z-[40] -mx-4 px-4 py-2 flex items-center justify-between transition-colors outline-none",
+                        isAdmin(currentUser) ? "top-[154px]" : "top-[78px]",
+                        isDarkMode ? "bg-slate-900 border-b border-white/5" : "bg-slate-50 border-b border-black/5"
+                      )}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                          <h2 className="text-[10px] font-black tracking-tight uppercase opacity-50">{designation}</h2>
                         </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-1">
-                          <h4 className="font-bold">{m.name}</h4>
-                          {isVerifiedMember(m) && (
-                            <BadgeCheck className="w-4 h-4 text-white fill-emerald-500" />
-                          )}
-                        </div>
-                        {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
+                        <span className="text-[9px] font-bold opacity-30 px-2 py-0.5 rounded-full border border-current">{groupedMembers[designation].length.toLocaleString('bn-BD').padStart(2, '০')} জন</span>
                       </div>
-                    </button>
+                      <div className="space-y-3">
+                        {groupedMembers[designation].map((m, idx) => (
+                          <button 
+                            key={`member-${idx}-${m.id}`} 
+                            onMouseDown={() => handleLongPressStart('member', m)}
+                            onMouseUp={handleLongPressEnd}
+                            onMouseLeave={handleLongPressEnd}
+                            onTouchStart={() => handleLongPressStart('member', m)}
+                            onTouchEnd={handleLongPressEnd}
+                            onClick={() => handleMemberClick(m)}
+                            className={cn(
+                              "w-full flex items-center gap-4 p-3 rounded-xl border text-left active:scale-95 transition-transform",
+                              isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                            )}
+                          >
+                            {m.photoId && !m.isNewSheet ? (
+                              <img 
+                                src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
+                                className="w-14 h-14 rounded-lg object-cover"
+                                alt={m.name}
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
+                                <User className="w-8 h-8" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-1">
+                                <h4 className="font-bold">{m.name}</h4>
+                                {isVerifiedMember(m) && (
+                                  <BadgeCheck className="w-4 h-4 text-white fill-emerald-500" />
+                                )}
+                              </div>
+                              {!m.isNewSheet && <p className="text-xs opacity-70">{m.id}</p>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ));
                 }
 
@@ -7116,13 +7225,51 @@ function AppContent() {
 
         {showPaymentPage && (
           <OverlayPage key="payment-overlay" title="পেমেন্ট হিস্টোরি" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
-            <div className="space-y-3 pb-24">
-              {allPayments.length === 0 ? (
+            <div className="space-y-4 pb-24">
+              {/* Summary Card and Search Bar (Sticky Header) */}
+              <div className={cn(
+                "sticky -mx-4 -mt-4 top-0 z-20 px-4 pt-4 pb-4 space-y-4",
+                isDarkMode ? "bg-slate-900 shadow-xl shadow-black/20" : "bg-white shadow-xl shadow-slate-200/50"
+              )}>
+                <div className="bg-emerald-500 rounded-3xl p-6 text-white shadow-xl shadow-emerald-500/30 flex justify-between items-center bg-gradient-to-br from-emerald-500 to-emerald-600">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">মোট লেনদেন</p>
+                    <h3 className="text-2xl font-black">{filteredPayments.length.toLocaleString('bn-BD').padStart(2, '০')} টি</h3>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">মোট পরিমাণ</p>
+                    <h3 className="text-2xl font-black">{filteredPayments.reduce((s,p) => s + p.amount, 0).toLocaleString('bn-BD')} ৳</h3>
+                  </div>
+                </div>
+                
+                {/* Advanced Filters */}
+                <div className="grid grid-cols-1 gap-3">
+                  {/* Transaction Dropdown */}
+                  <div className={cn(
+                    "flex flex-col gap-1 p-2 rounded-2xl border",
+                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"
+                  )}>
+                    <label className="text-[10px] font-bold px-2 opacity-50 uppercase tracking-tighter">লেনদেন</label>
+                    <select
+                      className="bg-transparent outline-none text-sm px-2 py-1 cursor-pointer"
+                      value={filterReason}
+                      onChange={(e) => setFilterReason(e.target.value)}
+                    >
+                      <option value="all">সকল লেনদেন</option>
+                      {paymentHeaders.map((header, i) => (
+                        <option key={i} value={header}>{header}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {filteredPayments.length === 0 ? (
                 <div className="text-center p-10 opacity-50">কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
               ) : (
-                allPayments.map((p, idx) => (
+                filteredPayments.map((p, idx) => (
                   <div 
-                    key={`payment-${idx}-${p.date}`} 
+                    key={`payment-${idx}-${p.date}-${p.reason}`} 
                     className={cn(
                       "w-full flex items-center justify-between p-4 rounded-xl border text-left",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -10102,7 +10249,7 @@ function OverlayPage({ title, onClose, children, isDarkMode }: { title: string, 
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className={cn(
         "fixed inset-0 z-[2500] flex flex-col",
-        isDarkMode ? "bg-slate-900" : "bg-slate-50"
+        isDarkMode ? "bg-slate-900" : "bg-white"
       )}
     >
       <div className="bg-emerald-500 text-white p-4 flex items-center gap-4 shadow-lg">
