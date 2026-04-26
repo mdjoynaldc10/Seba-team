@@ -56,6 +56,7 @@ import {
   ClipboardList,
   UserRoundPen,
   Send,
+  Share2,
   Trash2,
   Edit2,
   Megaphone,
@@ -5917,52 +5918,6 @@ function AppContent() {
                                 <User className="w-8 h-8" />
                               </div>
                             )}
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <h4 className="font-bold">{m.name}</h4>
-                                {isVerifiedMember(m) && (
-                                  <BadgeCheck className="w-4 h-4 text-white fill-emerald-500" />
-                                )}
-                              </div>
-                              {!m.isNewSheet && <p className="text-xs opacity-70">{m.id}</p>}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ));
-                }
-
-                // Normal member search logic
-                if (isLoading && memberSearchQuery) {
-                  return <div className="text-center p-4">খোঁজা হচ্ছে...</div>;
-                }
-                
-                if (foundMembers.length > 0) {
-                  return foundMembers.map((m, idx) => (
-                    <div 
-                      key={`member-${idx}-${m.id}`}
-                      onMouseDown={() => handleLongPressStart('member', m)}
-                      onMouseUp={handleLongPressEnd}
-                      onMouseLeave={handleLongPressEnd}
-                      onTouchStart={() => handleLongPressStart('member', m)}
-                      onTouchEnd={handleLongPressEnd}
-                      className={cn(
-                        "flex items-center gap-4 p-3 rounded-xl border",
-                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
-                      )}
-                    >
-                      {m.photoId && !m.isNewSheet ? (
-                        <img 
-                          src={`https://lh3.googleusercontent.com/d/${m.photoId}`} 
-                          className="w-14 h-14 rounded-lg object-cover"
-                          alt={m.name}
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
-                          <User className="w-8 h-8" />
-                        </div>
-                      )}
                       <div>
                         <div className="flex items-center gap-1">
                           <h4 className="font-bold">{m.name}</h4>
@@ -5971,6 +5926,9 @@ function AppContent() {
                           )}
                         </div>
                         {!m.isNewSheet && <p className="text-xs opacity-70">{m.designation}</p>}
+                      </div>
+                    </button>
+                        ))}
                       </div>
                     </div>
                   ));
@@ -6081,44 +6039,62 @@ function AppContent() {
               )}
 
               {activeBloodTab === 'donors' && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
-                    <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <h2 className="text-lg font-bold">রক্তদাতার তথ্য</h2>
+                      <p className="text-xs opacity-70">গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
+                    </div>
+                    <div className={cn(
+                      "px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1",
+                      isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-white border-slate-100"
+                    )}>
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                      {String(filteredDonors.filter(d => !bloodPosts.some(p => p.status === 'accepted' && p.acceptorPhone === d.phone)).length).padStart(2, '0')} জন সক্রিয়
+                    </div>
                   </div>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className={cn(
-                      "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
+                      "flex items-center gap-2 px-3 py-0 rounded-xl border shadow-sm",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
                     )}>
-                      <Search className="w-5 h-5 text-slate-400" />
+                      <Search className="w-4 h-4 text-slate-400" />
                       <input 
                         type="text" 
-                        placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
-                        className="flex-1 py-3 bg-transparent outline-none text-sm"
+                        placeholder="নাম বা ফোন..." 
+                        className="flex-1 py-1.5 bg-transparent outline-none text-xs"
                         value={bloodSearchQuery}
                         onChange={(e) => setBloodSearchQuery(e.target.value)}
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
-                        <select 
-                          value={selectedBloodGroup}
-                          onChange={(e) => setSelectedBloodGroup(e.target.value)}
+                    <div className="flex items-center justify-start overflow-x-auto no-scrollbar gap-1.5 pb-1">
+                      <button 
+                        onClick={() => setSelectedBloodGroup('সব')}
+                        className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border",
+                          selectedBloodGroup === 'সব' 
+                            ? "bg-red-500 border-red-500 text-white" 
+                            : (isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-white border-slate-200 text-slate-600")
+                        )}
+                      >
+                        সব গ্রুপ
+                      </button>
+                      {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
+                        <button 
+                          key={g}
+                          onClick={() => setSelectedBloodGroup(g)}
                           className={cn(
-                            "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
-                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                            "px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border",
+                            selectedBloodGroup === g 
+                              ? "bg-red-500 border-red-500 text-white" 
+                              : (isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-white border-slate-200 text-slate-600")
                           )}
                         >
-                          <option value="সব">সব গ্রুপ</option>
-                          {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
-                            <option key={g} value={g}>{g}</option>
-                          ))}
-                        </select>
-                      </div>
+                          {g}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -6150,35 +6126,61 @@ function AppContent() {
 
                       return (
                         <div key={`donor-${idx}-${donor.phone}`} className={cn(
-                          "p-4 rounded-xl border shadow-sm relative overflow-hidden",
+                          "p-3 rounded-xl border shadow-sm relative overflow-hidden",
                           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                         )}>
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-bold text-lg">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
-                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{donor.group}</span>
-                          </div>
-                          <p className="text-sm opacity-80 mb-1">
-                            <strong>ঠিকানা:</strong> {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'লুকানো'}
-                          </p>
-                          <p className={cn("text-sm opacity-80", isCurrentlyDonating && "text-emerald-500 font-bold")}>
-                            <strong>মোবাইল:</strong> {currentUser ? (isCurrentlyDonating ? `********${donor.phone.slice(-2)}` : donor.phone) : 'লুকানো'}
-                          </p>
-                          {currentUser ? (
-                            isCurrentlyDonating ? (
-                              <div className="mt-3 flex flex-col gap-2">
-                                <div className="flex items-center justify-center gap-2 py-2 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-lg text-sm font-semibold">
-                                  <CheckCircle2 className="w-4 h-4" /> ইতিমধ্যে রক্তদান করছেন...
+                          <div className="flex justify-between items-start mb-1">
+                            <div className="flex-1 pr-12">
+                              <h3 className="font-bold text-sm">{currentUser ? donor.name : 'রক্তদাতার নাম (লুকানো)'}</h3>
+                              <p className="text-[10px] opacity-70 mt-0.5">
+                                {currentUser ? `${donor.district}${donor.thana ? `, ${donor.thana}` : ''}` : 'ঠিকানা লুকানো'}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 absolute top-3 right-3 shrink-0">
+                                <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-lg text-[10px] font-black">{donor.group}</span>
+                                <div className="flex gap-1.5 mt-1">
+                                  {currentUser && (
+                                    <>
+                                      <button 
+                                        onClick={() => {
+                                          const text = `রক্তদাতার তথ্য:\nনাম: ${donor.name}\nরক্তের গ্রুপ: ${donor.group}\nঠিকানা: ${donor.district}${donor.thana ? `, ${donor.thana}` : ''}\nমোবাইল: ${donor.phone}`;
+                                          if (navigator.share) {
+                                            navigator.share({ title: 'রক্তদাতার তথ্য', text }).catch(() => {});
+                                          } else {
+                                            navigator.clipboard.writeText(text);
+                                            alert('রক্তদাতার তথ্য কপি করা হয়েছে');
+                                          }
+                                        }}
+                                        className="p-1.5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-lg active:scale-90 transition-all"
+                                      >
+                                        <Share2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      {!isCurrentlyDonating && (
+                                        <a href={`tel:${donor.phone}`} className="p-1.5 bg-emerald-500 text-white rounded-lg active:scale-90 transition-all">
+                                          <Phone className="w-3.5 h-3.5" />
+                                        </a>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-2">
+                            <p className={cn("text-[10px] opacity-80", isCurrentlyDonating && "text-emerald-500 font-bold")}>
+                              <strong>মোবাইল:</strong> {currentUser ? (isCurrentlyDonating ? `********${donor.phone.slice(-2)}` : donor.phone) : 'লুকানো'}
+                            </p>
+                            {isCurrentlyDonating && (
+                              <div className="flex items-center gap-1 text-emerald-500 text-[10px] font-bold">
+                                <CheckCircle2 className="w-3 h-3" /> রক্তদানরত
                               </div>
-                            ) : (
-                              <a href={`tel:${donor.phone}`} className="mt-3 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold active:scale-95 transition-all">
-                                কল করুন
-                              </a>
-                            )
-                          ) : (
+                            )}
+                          </div>
+
+                          {!currentUser && (
                             <button 
                               onClick={() => setActiveTab('profile')}
-                              className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-semibold active:scale-95 transition-all"
+                              className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-lg text-[10px] font-bold active:scale-95 transition-all"
                             >
                               বিস্তারিত দেখতে লগইন করুন
                             </button>
@@ -6214,30 +6216,30 @@ function AppContent() {
                   ) : (
                     bloodPosts.map((post, idx) => (
                       <div key={`blood-post-${post.id}-${idx}`} className={cn(
-                        "p-5 rounded-3xl border shadow-sm space-y-4 relative overflow-hidden",
+                        "p-3 rounded-2xl border shadow-sm space-y-3 relative overflow-hidden",
                         isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
                       )}>
                         {/* Post Header */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           {post.authorPhotoId ? (
                             <img 
                               src={`https://lh3.googleusercontent.com/d/${post.authorPhotoId}`} 
-                              className="w-10 h-10 rounded-xl object-cover"
+                              className="w-8 h-8 rounded-lg object-cover"
                               alt={post.authorName}
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
-                              <User className="w-6 h-6" />
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
+                              <User className="w-5 h-5" />
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-sm truncate">{post.authorName}</h4>
-                            <p className="text-[10px] opacity-50 truncate flex items-center gap-1">
-                              <MapPin className="w-3 h-3" /> {post.authorAddress}
+                            <h4 className="font-bold text-xs truncate">{post.authorName}</h4>
+                            <p className="text-[9px] opacity-50 truncate flex items-center gap-1">
+                              <MapPin className="w-2.5 h-2.5" /> {post.authorAddress}
                             </p>
                           </div>
                           <div className="text-right">
-                            <span className="px-3 py-1 bg-red-500 text-white rounded-full text-[10px] font-black shadow-sm">
+                            <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-black shadow-sm">
                               {post.bloodGroup}
                             </span>
                           </div>
@@ -6245,48 +6247,48 @@ function AppContent() {
 
                         {/* Post Content */}
                         <div className={cn(
-                          "p-4 rounded-2xl space-y-2",
+                          "p-3 rounded-xl space-y-1.5",
                           isDarkMode ? "bg-slate-900/50" : "bg-slate-50"
                         )}>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-[11px]">
                             <span className="opacity-60">রোগীর সমস্যা:</span>
                             <span className="font-bold">{post.patientProblem}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-[11px]">
                             <span className="opacity-60">রক্তের ব্যাগ:</span>
                             <span className="font-bold">{post.bloodBags}</span>
                           </div>
                           {post.donationTime && (
-                            <div className="flex justify-between text-sm">
+                            <div className="flex justify-between text-[11px]">
                               <span className="opacity-60">রক্তদানের সময়:</span>
                               <span className="font-bold">{post.donationTime}</span>
                             </div>
                           )}
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-[11px]">
                             <span className="opacity-60">স্থান:</span>
-                            <span className="font-bold">{post.address}</span>
+                            <span className="font-bold truncate max-w-[150px]">{post.address}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-[11px]">
                             <span className="opacity-60">তারিখ:</span>
                             <span className="font-bold text-red-500">{formatDate(post.donationDate)}</span>
                           </div>
                           {post.status === 'accepted' && (currentUser?.id === post.authorId || currentUser?.id === post.acceptorId) && (
-                            <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-700">
+                            <div className="flex justify-between text-[11px] pt-1.5 border-t border-slate-200 dark:border-slate-700">
                               <span className="opacity-60">যোগাযোগ:</span>
                               <a href={`tel:${post.contactNumber}`} className="font-bold text-emerald-500 flex items-center gap-1">
-                                <Phone className="w-3 h-3" /> {post.contactNumber}
+                                <Phone className="w-2.5 h-2.5" /> {post.contactNumber}
                               </a>
                             </div>
                           )}
                         </div>
 
                         {/* Footer / Actions */}
-                        <div className="flex items-center justify-between pt-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-1.5">
                             {post.status === 'accepted' ? (
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 text-emerald-500 font-bold text-xs">
-                                  <CheckCircle2 className="w-4 h-4" /> {post.acceptorName}
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1 text-emerald-500 font-bold text-[10px]">
+                                  <CheckCircle2 className="w-3 h-3" /> {post.acceptorName}
                                 </div>
                                 {currentUser?.id === post.authorId && (
                                   <button 
@@ -6294,51 +6296,53 @@ function AppContent() {
                                       setSelectedBloodPost(post);
                                       setShowAcceptorInfoModal(true);
                                     }}
-                                    className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                                    className="p-1 px-1.5 bg-emerald-500/10 text-emerald-500 rounded-md hover:bg-emerald-500/20 transition-colors"
                                   >
-                                    <Eye className="w-4 h-4" />
+                                    <Eye className="w-3 h-3" />
                                   </button>
                                 )}
                                 {currentUser?.id === post.acceptorId && (
                                   <button 
                                     onClick={() => cancelBloodPostAcceptance(post)}
-                                    className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors text-[10px] font-bold"
+                                    className="px-2 py-1 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors text-[9px] font-bold"
                                   >
-                                    বাতিল করুন
+                                    বাতিল
                                   </button>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-xs opacity-50 italic">অপেক্ষমান...</span>
+                              <span className="text-[10px] opacity-50 italic">অপেক্ষা...</span>
                             )}
                           </div>
 
-                          {post.status === 'pending' && (
-                            <button 
-                              onClick={() => acceptBloodPost(post)}
-                              className={cn(
-                                "px-6 py-2 rounded-xl text-xs font-bold transition-all active:scale-95",
-                                bloodDonationEnabled 
-                                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" 
-                                  : "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
-                              )}
-                            >
-                              গ্রহণ করুন
-                            </button>
-                          )}
-                          
-                          {currentUser?.id === post.authorId && (
-                            <button 
-                              onClick={async () => {
-                                if (confirm("আপনি কি এই পোস্টটি মুছে ফেলতে চান?")) {
-                                  await deleteDoc(doc(db, 'blood_posts', post.id));
-                                }
-                              }}
-                              className="p-2 text-red-500/50 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {post.status === 'pending' && (
+                              <button 
+                                onClick={() => acceptBloodPost(post)}
+                                className={cn(
+                                  "px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all active:scale-95",
+                                  bloodDonationEnabled 
+                                    ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20" 
+                                    : "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
+                                )}
+                              >
+                                গ্রহণ করুন
+                              </button>
+                            )}
+                            
+                            {currentUser?.id === post.authorId && (
+                              <button 
+                                onClick={async () => {
+                                  if (confirm("আপনি কি এই পোস্টটি মুছে ফেলতে চান?")) {
+                                    await deleteDoc(doc(db, 'blood_posts', post.id));
+                                  }
+                                }}
+                                className="p-1.5 text-red-500/50 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))
