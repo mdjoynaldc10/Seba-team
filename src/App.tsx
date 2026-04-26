@@ -1246,17 +1246,6 @@ const CreateBloodPostModal = ({
         status: 'pending',
         createdAt: serverTimestamp()
       });
-
-      // Send notifications to all members except the author
-      const notificationTitle = "রক্তের জরুরী অনুরোধ";
-      const notificationMessage = `${currentUser.name} ${formData.bloodGroup} রক্তের জন্য একটি পোস্ট করেছেন।`;
-      
-      allMembers.forEach(member => {
-        if (member.id !== currentUser.id) {
-          sendRealTimeNotification(member.id, notificationTitle, notificationMessage, 'blood');
-        }
-      });
-
       alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
       onClose();
     } catch (error) {
@@ -3363,8 +3352,8 @@ function AppContent() {
   }, [showLoginError]);
 
   const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
-    const appId = "7af74c8e-1b08-495f-b109-5c5a622acdfa";
-    const apiKey = "os_v2_app_pl3uzdq3bbev7mijlrngekwn7kdp335dxvku52nlxxy7sibyjlhcsapjptg54rddi2vvevoetbr6mr3jtiob5gjdab7j2cmvol7cfey";
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
 
     if (!appId || !apiKey) {
       console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
@@ -3727,14 +3716,6 @@ function AppContent() {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // Login to OneSignal when current user changes
-  useEffect(() => {
-    if (currentUser && (window as any).OneSignal) {
-      (window as any).OneSignal.login(currentUser.id);
-    }
-  }, [currentUser]);
-
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const pullDistance = useRef(0);
@@ -4077,12 +4058,6 @@ function AppContent() {
         acceptorAddress: currentUser.area || '',
         acceptorPhone: currentUser.phone || ''
       });
-
-      // Send notification to the post author
-      const notificationTitle = "রক্তদানের অনুরোধ গ্রহণ";
-      const notificationMessage = `${currentUser.name} আপনার ${post.bloodGroup} রক্তের অনুরোধটি গ্রহণ করেছেন।`;
-      await sendRealTimeNotification(post.authorId, notificationTitle, notificationMessage, 'blood');
-
       alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
     } catch (error) {
       console.error("Error accepting blood post:", error);
@@ -6019,8 +5994,8 @@ function AppContent() {
             <div className="min-h-full">
             {/* Sticky Header */}
             <div className={cn(
-              "sticky top-0 z-[60] p-4 pb-4 space-y-4 shadow-sm", // Added pb-4 and shadow
-              isDarkMode ? "bg-slate-900/98 backdrop-blur-md" : "bg-slate-100/98 backdrop-blur-md" // Slightly more opaque
+              "sticky top-0 z-[60] p-4 pb-2 space-y-4",
+              isDarkMode ? "bg-slate-900/95 backdrop-blur-md" : "bg-slate-50/95 backdrop-blur-md"
             )}>
               {/* Tabbed Header */}
               <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
