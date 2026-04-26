@@ -3363,8 +3363,8 @@ function AppContent() {
   }, [showLoginError]);
 
   const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
+    const appId = "7af74c8e-1b08-495f-b109-5c5a622acdfa";
+    const apiKey = "os_v2_app_pl3uzdq3bbev7mijlrngekwn7kdp335dxvku52nlxxy7sibyjlhcsapjptg54rddi2vvevoetbr6mr3jtiob5gjdab7j2cmvol7cfey";
 
     if (!appId || !apiKey) {
       console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
@@ -3730,11 +3730,21 @@ function AppContent() {
   
   // Initialize OneSignal
   useEffect(() => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    const appId = "7af74c8e-1b08-495f-b109-5c5a622acdfa";
     if (appId && (window as any).OneSignal) {
-      (window as any).OneSignal.init({
+      const OneSignal = (window as any).OneSignal;
+      OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
+        notifyButton: {
+          enable: true, /* Set to false if you want to hide the bell icon */
+        },
+      }).then(() => {
+        console.log("OneSignal Initialized");
+        // Check for permission and prompt if needed
+        if (OneSignal.Notifications.permission !== 'granted') {
+          OneSignal.Notifications.requestPermission();
+        }
       });
     }
   }, []);
