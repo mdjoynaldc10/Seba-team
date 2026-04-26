@@ -3728,27 +3728,6 @@ function AppContent() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Initialize OneSignal
-  useEffect(() => {
-    const appId = "7af74c8e-1b08-495f-b109-5c5a622acdfa";
-    if (appId && (window as any).OneSignal) {
-      const OneSignal = (window as any).OneSignal;
-      OneSignal.init({
-        appId: appId,
-        allowLocalhostAsSecureOrigin: true,
-        notifyButton: {
-          enable: true, /* Set to false if you want to hide the bell icon */
-        },
-      }).then(() => {
-        console.log("OneSignal Initialized");
-        // Check for permission and prompt if needed
-        if (OneSignal.Notifications.permission !== 'granted') {
-          OneSignal.Notifications.requestPermission();
-        }
-      });
-    }
-  }, []);
-
   // Login to OneSignal when current user changes
   useEffect(() => {
     if (currentUser && (window as any).OneSignal) {
