@@ -1246,6 +1246,17 @@ const CreateBloodPostModal = ({
         status: 'pending',
         createdAt: serverTimestamp()
       });
+
+      // Send notifications to all members except the author
+      const notificationTitle = "রক্তের জরুরী অনুরোধ";
+      const notificationMessage = `${currentUser.name} ${formData.bloodGroup} রক্তের জন্য একটি পোস্ট করেছেন।`;
+      
+      allMembers.forEach(member => {
+        if (member.id !== currentUser.id) {
+          sendRealTimeNotification(member.id, notificationTitle, notificationMessage, 'blood');
+        }
+      });
+
       alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
       onClose();
     } catch (error) {
@@ -3716,6 +3727,25 @@ function AppContent() {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Initialize OneSignal
+  useEffect(() => {
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    if (appId && (window as any).OneSignal) {
+      (window as any).OneSignal.init({
+        appId: appId,
+        allowLocalhostAsSecureOrigin: true,
+      });
+    }
+  }, []);
+
+  // Login to OneSignal when current user changes
+  useEffect(() => {
+    if (currentUser && (window as any).OneSignal) {
+      (window as any).OneSignal.login(currentUser.id);
+    }
+  }, [currentUser]);
+
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const pullDistance = useRef(0);
@@ -4058,6 +4088,12 @@ function AppContent() {
         acceptorAddress: currentUser.area || '',
         acceptorPhone: currentUser.phone || ''
       });
+
+      // Send notification to the post author
+      const notificationTitle = "রক্তদানের অনুরোধ গ্রহণ";
+      const notificationMessage = `${currentUser.name} আপনার ${post.bloodGroup} রক্তের অনুরোধটি গ্রহণ করেছেন।`;
+      await sendRealTimeNotification(post.authorId, notificationTitle, notificationMessage, 'blood');
+
       alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
     } catch (error) {
       console.error("Error accepting blood post:", error);
@@ -5994,8 +6030,8 @@ function AppContent() {
             <div className="min-h-full">
             {/* Sticky Header */}
             <div className={cn(
-              "sticky top-0 z-[60] p-4 pb-2 space-y-4",
-              isDarkMode ? "bg-slate-900/95 backdrop-blur-md" : "bg-slate-50/95 backdrop-blur-md"
+              "sticky top-0 z-[60] p-4 pb-4 space-y-4 shadow-sm", // Added pb-4 and shadow
+              isDarkMode ? "bg-slate-900/98 backdrop-blur-md" : "bg-slate-100/98 backdrop-blur-md" // Slightly more opaque
             )}>
               {/* Tabbed Header */}
               <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
@@ -6081,9 +6117,46 @@ function AppContent() {
               )}
 
               {activeBloodTab === 'donors' && (
-                <div>
-                  <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
-                  <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-bold">রক্তদাতার তথ্য খুঁজুন</h2>
+                    <p className="text-sm opacity-70">সঠিক রক্তের গ্রুপ অথবা ঠিকানা দিয়ে ফিল্টার করুন।</p>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className={cn(
+                      "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                    )}>
+                      <Search className="w-5 h-5 text-slate-400" />
+                      <input 
+                        type="text" 
+                        placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
+                        className="flex-1 py-3 bg-transparent outline-none text-sm"
+                        value={bloodSearchQuery}
+                        onChange={(e) => setBloodSearchQuery(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
+                        <select 
+                          value={selectedBloodGroup}
+                          onChange={(e) => setSelectedBloodGroup(e.target.value)}
+                          className={cn(
+                            "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
+                            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                          )}
+                        >
+                          <option value="সব">সব গ্রুপ</option>
+                          {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
+                            <option key={g} value={g}>{g}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -6091,41 +6164,6 @@ function AppContent() {
             <div className="p-4 pt-2">
               {activeBloodTab === 'donors' ? (
                 <>
-                  <div className="space-y-3 mb-6">
-                  <div className={cn(
-                    "flex items-center gap-3 px-4 py-1 rounded-xl border shadow-sm",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                  )}>
-                    <Search className="w-5 h-5 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..." 
-                      className="flex-1 py-3 bg-transparent outline-none text-sm"
-                      value={bloodSearchQuery}
-                      onChange={(e) => setBloodSearchQuery(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold uppercase opacity-50 ml-2">রক্তের গ্রুপ</label>
-                      <select 
-                        value={selectedBloodGroup}
-                        onChange={(e) => setSelectedBloodGroup(e.target.value)}
-                        className={cn(
-                          "w-full p-3 rounded-xl border outline-none text-sm appearance-none",
-                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                        )}
-                      >
-                        <option value="সব">সব গ্রুপ</option>
-                        {Array.from(new Set([...donorData, ...publicDonors].map(d => d.group))).filter(Boolean).sort().map(g => (
-                          <option key={g} value={g}>{g}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
                 {isSearchingDonors ? (
                   <div className="flex flex-col items-center justify-center py-12 space-y-4 opacity-70">
                     <Loader2 className="w-10 h-10 animate-spin text-red-500" />
