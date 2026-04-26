@@ -73,6 +73,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import OneSignal from 'react-onesignal';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth, storage } from './firebase';
@@ -1209,11 +1210,13 @@ const UpdateModal = ({
 const CreateBloodPostModal = ({ 
   onClose, 
   isDarkMode, 
-  currentUser 
+  currentUser,
+  onNotify
 }: { 
   onClose: () => void, 
   isDarkMode: boolean, 
-  currentUser: Member | null 
+  currentUser: Member | null,
+  onNotify: (userId: string | null, title: string, message: string, sendToAll?: boolean) => Promise<void>
 }) => {
   const [formData, setFormData] = useState({
     bloodGroup: '',
@@ -1247,6 +1250,11 @@ const CreateBloodPostModal = ({
         status: 'pending',
         createdAt: serverTimestamp()
       });
+      
+      // Trigger notification to all users
+      onNotify(null, "রক্তের প্রয়োজন!", `${formData.bloodGroup} রক্তের জন্য একটি নতুন অনুরোধ এসেছে। স্থান: ${formData.address}`, true)
+        .catch(err => console.error("Notification failed:", err));
+
       alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
       onClose();
     } catch (error) {
@@ -2779,6 +2787,19 @@ const SplashScreen = React.memo(({ greetingsData, isDarkMode }: { greetingsData:
 });
 
 function AppContent() {
+  const [isOneSignalInitialized, setIsOneSignalInitialized] = useState(false);
+
+  useEffect(() => {
+    OneSignal.init({
+      appId: "7af74c8e-1b08-495f-b109-5c5a622acdfa",
+      allowLocalhostAsSecureOrigin: true,
+    }).then(() => {
+      setIsOneSignalInitialized(true);
+    }).catch(err => {
+      console.error("OneSignal init error:", err);
+    });
+  }, []);
+
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
@@ -2795,6 +2816,16 @@ function AppContent() {
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
+
+  useEffect(() => {
+    if (!isOneSignalInitialized) return;
+
+    if (currentUser) {
+      OneSignal.login(currentUser.id).catch(err => console.error("OneSignal login error:", err));
+    } else {
+      OneSignal.logout().catch(err => console.error("OneSignal logout error:", err));
+    }
+  }, [currentUser, isOneSignalInitialized]);
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
   const [isTogglingBlood, setIsTogglingBlood] = useState(false);
   const [publicDonors, setPublicDonors] = useState<Donor[]>([]);
@@ -3376,32 +3407,22 @@ function AppContent() {
     }
   }, [showLoginError]);
 
-  const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
-
-    if (!appId || !apiKey) {
-      console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
-      return;
-    }
-
+  const sendOneSignalNotification = async (userId: string | null, title: string, message: string, sendToAll: boolean = false) => {
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      await fetch("/api/send-notification", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": `Basic ${apiKey}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          app_id: appId,
-          include_external_user_ids: [userId],
-          headings: { en: title },
-          contents: { en: message },
-          android_channel_id: "push-notification-channel-id" // Optional: customize channel
+          userId,
+          title,
+          message,
+          sendToAll
         })
       });
     } catch (error) {
-      console.error("Error sending OneSignal notification:", error);
+      console.error("Error sending OneSignal notification via server:", error);
     }
   };
 
@@ -7160,6 +7181,7 @@ function AppContent() {
             onClose={() => setShowCreateBloodPostModal(false)}
             isDarkMode={isDarkMode}
             currentUser={currentUser}
+            onNotify={sendOneSignalNotification}
           />
         )}
       </AnimatePresence>

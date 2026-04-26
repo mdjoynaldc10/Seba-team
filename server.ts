@@ -255,6 +255,108 @@ app.post("/api/delete-account", async (req, res) => {
   }
 });
 
+app.post("/api/send-notification", async (req, res) => {
+  try {
+    const { userId, title, message, sendToAll } = req.body;
+    const appId = process.env.ONESIGNAL_APP_ID || "7af74c8e-1b08-495f-b109-5c5a622acdfa";
+    const apiKey = process.env.ONESIGNAL_REST_API_KEY || "os_v2_app_pl3uzdq3bbev7mijlrngekwn7iodjrtzpwnuai4sc2ligfzlqbzdrtmpx6x5k52eaq5a3zdfxxrdzfcungovs34savnznqrmmyv7k2y";
+
+    if (!appId || !apiKey) {
+      return res.status(500).json({ error: "OneSignal configuration missing" });
+    }
+
+    const body: any = {
+      app_id: appId,
+      headings: { en: title },
+      contents: { en: message },
+      android_channel_id: "push-notification-channel-id",
+    };
+
+    if (sendToAll) {
+      body.included_segments = ["Total Subscriptions"];
+    } else if (userId) {
+      body.include_external_user_ids = [userId];
+    } else {
+      return res.status(400).json({ error: "Either userId or sendToAll is required" });
+    }
+
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error("OneSignal error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Automated Notification Polling (Mimics the user's Apps Script)
+let lastSentPostId: string | null = null;
+const PROJECT_ID = "gen-lang-client-0992541631";
+
+async function autoPushNotification() {
+  const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/blood_posts?orderBy=createdAt%20desc&pageSize=1`;
+
+  try {
+    const response = await fetch(firestoreUrl);
+    const result: any = await response.json();
+
+    if (!result.documents || result.documents.length === 0) return;
+
+    const document = result.documents[0];
+    const docId = document.name; 
+    const fields = document.fields;
+    
+    // On first run, just set the ID without sending notification
+    if (lastSentPostId === null) {
+      lastSentPostId = docId;
+      console.log("Auto-notification system initialized with latest ID:", docId);
+      return;
+    }
+
+    if (docId === lastSentPostId) return;
+
+    const bloodGroup = fields.bloodGroup ? fields.bloodGroup.stringValue : "Unknown";
+    const address = fields.address ? fields.address.stringValue : "Unknown";
+    const postTitle = `রক্তের প্রয়োজন: ${bloodGroup}`;
+    const postBody = `${bloodGroup} রক্তের জন্য একটি নতুন অনুরোধ এসেছে। স্থান: ${address}`;
+
+    const appId = process.env.ONESIGNAL_APP_ID || "7af74c8e-1b08-495f-b109-5c5a622acdfa";
+    const apiKey = process.env.ONESIGNAL_REST_API_KEY || "os_v2_app_pl3uzdq3bbev7mijlrngekwn7iodjrtzpwnuai4sc2ligfzlqbzdrtmpx6x5k52eaq5a3zdfxxrdzfcungovs34savnznqrmmyv7k2y";
+
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${apiKey}`,
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        included_segments: ["Total Subscriptions"],
+        headings: { en: postTitle },
+        contents: { en: postBody },
+        android_channel_id: "push-notification-channel-id",
+      }),
+    });
+    
+    lastSentPostId = docId;
+    console.log("Automatic Notification Sent via Polling:", postTitle);
+
+  } catch (e) {
+    console.error("Auto Notification Polling Error:", e);
+  }
+}
+
+// Check every 3 minutes
+setInterval(autoPushNotification, 180000);
+
 // Vite middleware
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
