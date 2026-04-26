@@ -2916,13 +2916,18 @@ function AppContent() {
 
   useEffect(() => {
     if (showSplashAd) {
-      try {
-        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-      } catch (e) {
-        console.error("AdSense error:", e);
-      }
+      const timer = setTimeout(() => {
+        try {
+          ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
+        } catch (e) {
+          console.error("AdSense error:", e);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
     }
-    
+  }, [showSplashAd]);
+
+  useEffect(() => {
     if (showSplashAd && adCountdown > 0) {
       const timer = setInterval(() => {
         setAdCountdown(prev => prev - 1);
@@ -5241,7 +5246,7 @@ function AppContent() {
                 <ins className="adsbygoogle"
                   style={{ display: 'block', width: '100%', height: '100%' }}
                   data-ad-client="ca-pub-5027407698124243"
-                  data-ad-slot="YOUR_AD_SLOT_HERE"
+                  data-ad-slot="8619520371"
                   data-ad-format="auto"
                   data-full-width-responsive="true"></ins>
               </div>
