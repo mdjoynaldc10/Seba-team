@@ -2911,6 +2911,25 @@ function AppContent() {
   const [bloodPosts, setBloodPosts] = useState<BloodPost[]>([]);
   const [showCreateBloodPostModal, setShowCreateBloodPostModal] = useState(false);
   const [selectedBloodPost, setSelectedBloodPost] = useState<BloodPost | null>(null);
+  const [showSplashAd, setShowSplashAd] = useState(true);
+  const [adCountdown, setAdCountdown] = useState(5);
+
+  useEffect(() => {
+    if (showSplashAd) {
+      try {
+        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
+      } catch (e) {
+        console.error("AdSense error:", e);
+      }
+    }
+    
+    if (showSplashAd && adCountdown > 0) {
+      const timer = setInterval(() => {
+        setAdCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [showSplashAd, adCountdown]);
   const [showAcceptorInfoModal, setShowAcceptorInfoModal] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -5205,6 +5224,63 @@ function AppContent() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       >
+      
+      {/* Splash Ad Modal */}
+      {showSplashAd && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl"
+          >
+            {/* Ad Content */}
+            <div className="relative aspect-[9/16] bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+              {/* AdSense Unit Placeholder */}
+              <div className="absolute inset-0 z-0">
+                <ins className="adsbygoogle"
+                  style={{ display: 'block', width: '100%', height: '100%' }}
+                  data-ad-client="ca-pub-5027407698124243"
+                  data-ad-slot="YOUR_AD_SLOT_HERE"
+                  data-ad-format="auto"
+                  data-full-width-responsive="true"></ins>
+              </div>
+
+              {/* Fallback/Overlay Content if Ad takes time to load */}
+              <div className="relative z-10 w-full h-full">
+                <img 
+                  src="https://images.unsplash.com/photo-1615461066841-6116ecaaba74?q=80&w=1000&auto=format&fit=crop" 
+                  className="w-full h-full object-cover opacity-20"
+                  alt="Ad"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
+                  <span className="text-[10px] font-bold text-white/50 mb-2 uppercase tracking-widest">Sponsored Advertisement</span>
+                  <h3 className="text-xl font-bold text-white mb-2">রক্তদান করুন, জীবন বাঁচান</h3>
+                  <p className="text-sm text-white/70">আপনার এক ব্যাগ রক্ত পারে একজনের অমূল্য জীবন রক্ষা করতে। আজই রক্তদাতা হিসেবে নিবন্ধন করুন।</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Close Button UI */}
+            <div className="p-4 flex items-center justify-between bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-medium opacity-50">
+                {adCountdown > 0 ? `বিজ্ঞাপনটি শেষ হবে ${adCountdown} সেকেন্ডে` : 'বিজ্ঞাপন এখন বন্ধ করা যাবে'}
+              </span>
+              <button
+                onClick={() => adCountdown === 0 && setShowSplashAd(false)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                  adCountdown > 0 
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed" 
+                    : "bg-red-500 text-white active:scale-95"
+                )}
+              >
+                {adCountdown > 0 ? `Skip (${adCountdown})` : 'বন্ধ করুন'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       {/* Pull to Refresh Indicator */}
       <div 
         className="fixed top-0 left-0 w-full flex justify-center z-[100] pointer-events-none transition-transform duration-200"
