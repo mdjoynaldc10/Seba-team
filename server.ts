@@ -297,40 +297,41 @@ app.post("/api/send-notification", async (req, res) => {
   }
 });
 
-// Automated Notification Polling (Mimics the user's updated Apps Script)
+// Automated Notification Polling (Synchronized with Firestore blood_posts)
 let lastSentPostId: string | null = null;
-const DB_URL = "https://gen-lang-client-0992541631-default-rtdb.firebaseio.com/posts.json";
+const PROJECT_ID = "gen-lang-client-0992541631";
 
 async function autoPushNotification() {
+  // We use Firestore REST API to check for newest documents in blood_posts
+  const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/blood_posts?pageSize=1`;
+
   try {
-    const response = await fetch(DB_URL);
-    const data: any = await response.json();
+    const response = await fetch(firestoreUrl);
+    const result: any = await response.json();
 
-    if (!data || data === null) {
-      console.log("Database is empty or no posts found.");
-      return;
-    }
+    if (!result.documents || result.documents.length === 0) return;
 
-    const keys = Object.keys(data);
-    const lastKey = keys[keys.length - 1]; // Get the latest key
-    const lastPost = data[lastKey];
+    const document = result.documents[0];
+    const docId = document.name; // Full path
+    const fields = document.fields;
     
-    // On first run, just set the ID without sending notification
     if (lastSentPostId === null) {
-      lastSentPostId = lastKey;
-      console.log("Auto-notification system initialized with latest RTDB ID:", lastKey);
+      lastSentPostId = docId;
+      console.log("Auto-notification system initialized with latest ID:", docId);
       return;
     }
 
-    if (lastKey === lastSentPostId) return;
+    if (docId === lastSentPostId) return;
 
-    const postTitle = typeof lastPost === 'object' ? (lastPost.title || "নতুন আপডেট!") : lastPost;
-    const postBody = typeof lastPost === 'object' ? (lastPost.message || "নতুন একটি পোস্ট করা হয়েছে।") : "নতুন আপডেট চেক করুন।";
+    const bloodGroup = fields.bloodGroup ? fields.bloodGroup.stringValue : "Unknown";
+    const address = fields.address ? fields.address.stringValue : "Unknown";
+    const postTitle = `রক্তের প্রয়োজন: ${bloodGroup}`;
+    const postBody = `${bloodGroup} রক্তের জন্য একটি নতুন অনুরোধ এসেছে। স্থান: ${address}`;
 
     const appId = process.env.ONESIGNAL_APP_ID || "7af74c8e-1b08-495f-b109-5c5a622acdfa";
     const apiKey = process.env.ONESIGNAL_REST_API_KEY || "os_v2_app_pl3uzdq3bbev7mijlrngekwn7iodjrtzpwnuai4sc2ligfzlqbzdrtmpx6x5k52eaq5a3zdfxxrdzfcungovs34savnznqrmmyv7k2y";
 
-    await fetch("https://onesignal.com/api/v1/notifications", {
+    const notifyResponse = await fetch("https://onesignal.com/api/v1/notifications", {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
@@ -338,23 +339,29 @@ async function autoPushNotification() {
       },
       body: JSON.stringify({
         app_id: appId,
-        included_segments: ["Total Subscriptions"],
+        included_segments: ["Total Subscriptions", "Subscribed Users"],
         headings: { en: postTitle },
         contents: { en: postBody },
         android_channel_id: "push-notification-channel-id",
+        priority: 10
       }),
     });
     
-    lastSentPostId = lastKey;
-    console.log("Automatic Notification Sent via RTDB Polling:", postTitle);
+    if (notifyResponse.ok) {
+      lastSentPostId = docId;
+      console.log("Automatic Notification Sent via Firestore Polling:", postTitle);
+    } else {
+      const errData = await notifyResponse.json();
+      console.error("OneSignal API Error during polling:", errData);
+    }
 
   } catch (e) {
     console.error("Auto Notification Polling Error:", e);
   }
 }
 
-// Check every 3 minutes
-setInterval(autoPushNotification, 180000);
+// Check every 2 minutes
+setInterval(autoPushNotification, 120000);
 
 // Vite middleware
 async function startServer() {
