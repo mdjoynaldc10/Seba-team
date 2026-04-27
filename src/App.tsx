@@ -2788,17 +2788,31 @@ const SplashScreen = React.memo(({ greetingsData, isDarkMode }: { greetingsData:
 
 function AppContent() {
   const [isOneSignalInitialized, setIsOneSignalInitialized] = useState(false);
+  const isOfficialDomain = typeof window !== 'undefined' && (window.location.hostname === 'seba-team.vercel.app' || window.location.hostname === 'localhost');
 
   useEffect(() => {
+    // Only init Web SDK if on official domain or localhost
+    if (!isOfficialDomain) {
+      console.log("OneSignal Web SDK skipped: Outside official domain.");
+      return;
+    }
+
     OneSignal.init({
       appId: "7af74c8e-1b08-495f-b109-5c5a622acdfa",
       allowLocalhostAsSecureOrigin: true,
+      serviceWorkerParam: { scope: "/" },
+      serviceWorkerPath: "OneSignalSDKWorker.js",
     }).then(() => {
       setIsOneSignalInitialized(true);
     }).catch(err => {
-      console.error("OneSignal init error:", err);
+      if (err && (String(err).includes("already initialized") || (err.message && err.message.includes("already initialized")))) {
+        setIsOneSignalInitialized(true);
+        return;
+      }
+      console.warn("OneSignal Web SDK init prevented:", err);
+      // We don't mark as initialized if it failed due to domain issues
     });
-  }, []);
+  }, [isOfficialDomain]);
 
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
@@ -2818,13 +2832,30 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
 
   useEffect(() => {
-    if (!isOneSignalInitialized) return;
+    const setExternalId = (id: string | null) => {
+      // 1. Handle Web SDK
+      if (isOneSignalInitialized) {
+        if (id) {
+          OneSignal.login(id).catch(() => {});
+        } else {
+          OneSignal.logout().catch(() => {});
+        }
+      }
 
-    if (currentUser) {
-      OneSignal.login(currentUser.id).catch(err => console.error("OneSignal login error:", err));
-    } else {
-      OneSignal.logout().catch(err => console.error("OneSignal logout error:", err));
-    }
+      // 2. Handle Median.co (APK) Bridge
+      // This works even if Web SDK fails, because it communicates directly with the Native Android code
+      try {
+        if (id) {
+          window.location.href = `gonative://onesignal/externalUserId/set?externalUserId=${id}`;
+        } else {
+          window.location.href = `gonative://onesignal/externalUserId/remove`;
+        }
+      } catch (e) {
+        // Not in an APK environment
+      }
+    };
+
+    setExternalId(currentUser ? currentUser.id : null);
   }, [currentUser, isOneSignalInitialized]);
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
   const [isTogglingBlood, setIsTogglingBlood] = useState(false);
@@ -4104,6 +4135,16 @@ function AppContent() {
         acceptorAddress: currentUser.area || '',
         acceptorPhone: currentUser.phone || ''
       });
+
+      // Notify the author that someone accepted their request
+      if (post.authorId) {
+        sendOneSignalNotification(
+          post.authorId,
+          "রক্তের অনুরোধ গৃহীত!",
+          `আপনার ${post.bloodGroup} রক্তের অনুরোধটি ${currentUser.name} গ্রহণ করেছেন।`
+        ).catch(err => console.error("Notification for acceptance failed:", err));
+      }
+
       alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
     } catch (error) {
       console.error("Error accepting blood post:", error);
@@ -5263,28 +5304,16 @@ function AppContent() {
             {/* Ad Content */}
             <div className="relative aspect-[9/16] bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
               {/* AdSense Unit Placeholder */}
-              <div className="absolute inset-0 z-0">
+              <div className="absolute inset-0 z-0 flex items-center justify-center">
                 <ins className="adsbygoogle"
-                  style={{ display: 'block', width: '100%', height: '100%' }}
+                  style={{ display: 'block', width: '320px', height: '480px' }}
                   data-ad-client="ca-pub-5027407698124243"
                   data-ad-slot="8619520371"
                   data-ad-format="auto"
                   data-full-width-responsive="true"></ins>
               </div>
 
-              {/* Fallback/Overlay Content if Ad takes time to load */}
-              <div className="relative z-10 w-full h-full">
-                <img 
-                  src="https://images.unsplash.com/photo-1615461066841-6116ecaaba74?q=80&w=1000&auto=format&fit=crop" 
-                  className="w-full h-full object-cover opacity-20"
-                  alt="Ad"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
-                  <span className="text-[10px] font-bold text-white/50 mb-2 uppercase tracking-widest">Sponsored Advertisement</span>
-                  <h3 className="text-xl font-bold text-white mb-2">রক্তদান করুন, জীবন বাঁচান</h3>
-                  <p className="text-sm text-white/70">আপনার এক ব্যাগ রক্ত পারে একজনের অমূল্য জীবন রক্ষা করতে। আজই রক্তদাতা হিসেবে নিবন্ধন করুন।</p>
-                </div>
-              </div>
+              {/* No more fallback images/text as requested */}
             </div>
 
             {/* Close Button UI */}
