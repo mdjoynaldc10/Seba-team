@@ -20,6 +20,7 @@ import {
   BookOpen,
   Filter,
   X,
+  AlertTriangle,
   Smartphone,
   Monitor,
   Facebook,
@@ -73,7 +74,6 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import OneSignal from 'react-onesignal';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth, storage } from './firebase';
@@ -81,6 +81,7 @@ import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, 
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { BD_DATA } from './constants/bdData';
+import { BD_GEO_DATA } from './constants/bdGeoData';
 
 // --- Types ---
 interface Member {
@@ -1210,13 +1211,11 @@ const UpdateModal = ({
 const CreateBloodPostModal = ({ 
   onClose, 
   isDarkMode, 
-  currentUser,
-  onNotify
+  currentUser 
 }: { 
   onClose: () => void, 
   isDarkMode: boolean, 
-  currentUser: Member | null,
-  onNotify: (userId: string | null, title: string, message: string, sendToAll?: boolean) => Promise<void>
+  currentUser: Member | null 
 }) => {
   const [formData, setFormData] = useState({
     bloodGroup: '',
@@ -1250,11 +1249,6 @@ const CreateBloodPostModal = ({
         status: 'pending',
         createdAt: serverTimestamp()
       });
-      
-      // Trigger notification to all users
-      onNotify(null, "রক্তের প্রয়োজন!", `${formData.bloodGroup} রক্তের জন্য একটি নতুন অনুরোধ এসেছে। স্থান: ${formData.address}`, true)
-        .catch(err => console.error("Notification failed:", err));
-
       alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
       onClose();
     } catch (error) {
@@ -2787,33 +2781,6 @@ const SplashScreen = React.memo(({ greetingsData, isDarkMode }: { greetingsData:
 });
 
 function AppContent() {
-  const [isOneSignalInitialized, setIsOneSignalInitialized] = useState(false);
-  const isOfficialDomain = typeof window !== 'undefined' && (window.location.hostname === 'seba-team.vercel.app' || window.location.hostname === 'localhost');
-
-  useEffect(() => {
-    // Only init Web SDK if on official domain or localhost
-    if (!isOfficialDomain) {
-      console.log("OneSignal Web SDK skipped: Outside official domain.");
-      return;
-    }
-
-    OneSignal.init({
-      appId: "7af74c8e-1b08-495f-b109-5c5a622acdfa",
-      allowLocalhostAsSecureOrigin: true,
-      serviceWorkerParam: { scope: "/" },
-      serviceWorkerPath: "OneSignalSDKWorker.js",
-    }).then(() => {
-      setIsOneSignalInitialized(true);
-    }).catch(err => {
-      if (err && (String(err).includes("already initialized") || (err.message && err.message.includes("already initialized")))) {
-        setIsOneSignalInitialized(true);
-        return;
-      }
-      console.warn("OneSignal Web SDK init prevented:", err);
-      // We don't mark as initialized if it failed due to domain issues
-    });
-  }, [isOfficialDomain]);
-
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
@@ -2830,33 +2797,6 @@ function AppContent() {
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
-
-  useEffect(() => {
-    const setExternalId = (id: string | null) => {
-      // 1. Handle Web SDK
-      if (isOneSignalInitialized) {
-        if (id) {
-          OneSignal.login(id).catch(() => {});
-        } else {
-          OneSignal.logout().catch(() => {});
-        }
-      }
-
-      // 2. Handle Median.co (APK) Bridge
-      // This works even if Web SDK fails, because it communicates directly with the Native Android code
-      try {
-        if (id) {
-          window.location.href = `gonative://onesignal/externalUserId/set?externalUserId=${id}`;
-        } else {
-          window.location.href = `gonative://onesignal/externalUserId/remove`;
-        }
-      } catch (e) {
-        // Not in an APK environment
-      }
-    };
-
-    setExternalId(currentUser ? currentUser.id : null);
-  }, [currentUser, isOneSignalInitialized]);
   const [bloodDonationEnabled, setBloodDonationEnabled] = useState<boolean>(false);
   const [isTogglingBlood, setIsTogglingBlood] = useState(false);
   const [publicDonors, setPublicDonors] = useState<Donor[]>([]);
@@ -2973,30 +2913,6 @@ function AppContent() {
   const [bloodPosts, setBloodPosts] = useState<BloodPost[]>([]);
   const [showCreateBloodPostModal, setShowCreateBloodPostModal] = useState(false);
   const [selectedBloodPost, setSelectedBloodPost] = useState<BloodPost | null>(null);
-  const [showSplashAd, setShowSplashAd] = useState(true);
-  const [adCountdown, setAdCountdown] = useState(5);
-
-  useEffect(() => {
-    if (showSplashAd) {
-      const timer = setTimeout(() => {
-        try {
-          ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-        } catch (e) {
-          console.error("AdSense error:", e);
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [showSplashAd]);
-
-  useEffect(() => {
-    if (showSplashAd && adCountdown > 0) {
-      const timer = setInterval(() => {
-        setAdCountdown(prev => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [showSplashAd, adCountdown]);
   const [showAcceptorInfoModal, setShowAcceptorInfoModal] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -3438,22 +3354,32 @@ function AppContent() {
     }
   }, [showLoginError]);
 
-  const sendOneSignalNotification = async (userId: string | null, title: string, message: string, sendToAll: boolean = false) => {
+  const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
+
+    if (!appId || !apiKey) {
+      console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
+      return;
+    }
+
     try {
-      await fetch("/api/send-notification", {
+      await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": `Basic ${apiKey}`
         },
         body: JSON.stringify({
-          userId,
-          title,
-          message,
-          sendToAll
+          app_id: appId,
+          include_external_user_ids: [userId],
+          headings: { en: title },
+          contents: { en: message },
+          android_channel_id: "push-notification-channel-id" // Optional: customize channel
         })
       });
     } catch (error) {
-      console.error("Error sending OneSignal notification via server:", error);
+      console.error("Error sending OneSignal notification:", error);
     }
   };
 
@@ -4135,16 +4061,6 @@ function AppContent() {
         acceptorAddress: currentUser.area || '',
         acceptorPhone: currentUser.phone || ''
       });
-
-      // Notify the author that someone accepted their request
-      if (post.authorId) {
-        sendOneSignalNotification(
-          post.authorId,
-          "রক্তের অনুরোধ গৃহীত!",
-          `আপনার ${post.bloodGroup} রক্তের অনুরোধটি ${currentUser.name} গ্রহণ করেছেন।`
-        ).catch(err => console.error("Notification for acceptance failed:", err));
-      }
-
       alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
     } catch (error) {
       console.error("Error accepting blood post:", error);
@@ -4429,11 +4345,19 @@ function AppContent() {
       Object.entries(regFormData).forEach(([key, value]) => formData.append(key, String(value)));
 
       const response = await fetch(scriptURL, { method: 'POST', body: formData });
-      // Google Apps Script usually returns a redirect or success
-      setRegStatus({ text: 'সফলভাবে নিবন্ধিত হয়েছে!', type: 'success' });
+      
+      setRegStatus({ text: 'সফলভাবে নিবন্ধিত হয়েছে! এখন লগইন করুন।', type: 'success' });
       setRegFormData({ bloodGroup: '', name: '', district: '', city: '', username: '', contactNo: '' });
-      // Refresh members list
-      fetchAllMembers().then(setAllMembers);
+      
+      // Refresh members list immediately
+      const updatedMembers = await fetchAllMembers();
+      setAllMembers(updatedMembers);
+      
+      // Auto close registration after success to show login
+      setTimeout(() => {
+        setShowRegistration(false);
+        setRegStatus({ text: '', type: null });
+      }, 3000);
     } catch (error) {
       setRegStatus({ text: 'দুঃখিত! আবার চেষ্টা করুন।', type: 'error' });
     }
@@ -4479,8 +4403,8 @@ function AppContent() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
-    const id = formData.get('id') as string;
-    const phone = formData.get('phone') as string;
+    const id = formData.get('username') as string || formData.get('id') as string;
+    const phone = formData.get('password') as string || formData.get('phone') as string;
 
     if (!id || !phone) return;
 
@@ -5291,51 +5215,6 @@ function AppContent() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       >
-      
-      {/* Splash Ad Modal */}
-      {showSplashAd && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl"
-          >
-            {/* Ad Content */}
-            <div className="relative aspect-[9/16] bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
-              {/* AdSense Unit Placeholder */}
-              <div className="absolute inset-0 z-0 flex items-center justify-center">
-                <ins className="adsbygoogle"
-                  style={{ display: 'block', width: '320px', height: '480px' }}
-                  data-ad-client="ca-pub-5027407698124243"
-                  data-ad-slot="8619520371"
-                  data-ad-format="auto"
-                  data-full-width-responsive="true"></ins>
-              </div>
-
-              {/* No more fallback images/text as requested */}
-            </div>
-
-            {/* Close Button UI */}
-            <div className="p-4 flex items-center justify-between bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-medium opacity-50">
-                {adCountdown > 0 ? `বিজ্ঞাপনটি শেষ হবে ${adCountdown} সেকেন্ডে` : 'বিজ্ঞাপন এখন বন্ধ করা যাবে'}
-              </span>
-              <button
-                onClick={() => adCountdown === 0 && setShowSplashAd(false)}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                  adCountdown > 0 
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed" 
-                    : "bg-red-500 text-white active:scale-95"
-                )}
-              >
-                {adCountdown > 0 ? `Skip (${adCountdown})` : 'বন্ধ করুন'}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
       {/* Pull to Refresh Indicator */}
       <div 
         className="fixed top-0 left-0 w-full flex justify-center z-[100] pointer-events-none transition-transform duration-200"
@@ -6495,27 +6374,37 @@ function AppContent() {
                 {!showRegistration ? (
                   <>
                     <h3 className="text-xl font-bold">লগইন করুন</h3>
-                    <form onSubmit={handleLogin} className="w-full space-y-4">
-                      <input 
-                        name="id"
-                        type="text" 
-                        placeholder="ইউজারনেম / আইডি" 
-                        className={cn(
-                          "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                        )}
-                        required
-                      />
-                      <input 
-                        name="phone"
-                        type="text" 
-                        placeholder="ফোন নম্বর" 
-                        className={cn(
-                          "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                        )}
-                        required
-                      />
+                    <form id="login-form" onSubmit={handleLogin} className="w-full space-y-4">
+                      <div className="space-y-1">
+                        <label htmlFor="login-username" className="sr-only">ইউজারনেম</label>
+                        <input 
+                          id="login-username"
+                          name="username"
+                          type="text" 
+                          autoComplete="username"
+                          placeholder="ইউজারনেম / আইডি" 
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                            isDarkMode ? "bg-slate-800 border-slate-700 font-medium" : "bg-white border-slate-200 font-medium"
+                          )}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="login-password" className="sr-only">ফোন নম্বর</label>
+                        <input 
+                          id="login-password"
+                          name="password"
+                          type="password" 
+                          autoComplete="current-password"
+                          placeholder="ফোন নম্বর" 
+                          className={cn(
+                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
+                            isDarkMode ? "bg-slate-800 border-slate-700 font-medium" : "bg-white border-slate-200 font-medium"
+                          )}
+                          required
+                        />
+                      </div>
                       <button type="submit" className="w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
                         লগইন
                       </button>
@@ -6542,149 +6431,175 @@ function AppContent() {
                     </button>
                   </>
                 ) : (
-                  <div className={cn(
-                    "w-full p-6 rounded-3xl border text-left space-y-4",
-                    isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-xl"
-                  )}>
-                    <div className="flex items-center gap-4 mb-4">
-                      <button 
-                        onClick={() => setShowRegistration(false)}
-                        className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                      >
-                        <ArrowLeft className="w-5 h-5" />
-                      </button>
-                      <h2 className="text-xl font-bold">নিবন্ধন ফর্ম</h2>
-                    </div>
-                    <form onSubmit={handleRegistration} className="space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold opacity-60 ml-1">রক্তের গ্রুপ</label>
-                        <select 
-                          required
-                          value={regFormData.bloodGroup}
-                          onChange={(e) => setRegFormData({...regFormData, bloodGroup: e.target.value})}
+                  <AnimatePresence mode="wait">
+                    <motion.div 
+                      key="registration-form"
+                      initial={{ y: "100%", opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: "100%", opacity: 0 }}
+                      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                      className={cn(
+                        "w-full p-6 rounded-3xl border text-left space-y-4",
+                        isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-xl"
+                      )}
+                    >
+                      <div className="flex items-center gap-4 mb-4">
+                        <button 
+                          onClick={() => setShowRegistration(false)}
+                          className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                        >
+                          <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <h2 className="text-xl font-bold">নিবন্ধন ফর্ম</h2>
+                      </div>
+                      <form id="registration-form" onSubmit={handleRegistration} className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">রক্তের গ্রুপ</label>
+                          <select 
+                            required
+                            value={regFormData.bloodGroup}
+                            onChange={(e) => setRegFormData({...regFormData, bloodGroup: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors appearance-none font-medium",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          >
+                            <option value="">নির্বাচন করুন</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">নাম</label>
+                          <input 
+                            required
+                            type="text" 
+                            name="name"
+                            placeholder="আপনার পূর্ণ নাম"
+                            value={regFormData.name}
+                            onChange={(e) => setRegFormData({...regFormData, name: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors font-medium",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold opacity-60 ml-1">জেলা</label>
+                            <select 
+                              required
+                              value={regFormData.district}
+                              onChange={(e) => {
+                                const district = e.target.value;
+                                setRegFormData({...regFormData, district, city: ''});
+                              }}
+                              className={cn(
+                                "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors appearance-none",
+                                isDarkMode ? "bg-slate-900 border-slate-700 font-medium" : "bg-slate-50 border-slate-200 font-medium"
+                              )}
+                            >
+                              <option value="">নির্বাচন করুন</option>
+                              {Object.keys(BD_GEO_DATA).sort().map(dist => (
+                                <option key={dist} value={dist}>{dist}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold opacity-60 ml-1">শহর</label>
+                            <select 
+                              required
+                              disabled={!regFormData.district}
+                              value={regFormData.city}
+                              onChange={(e) => setRegFormData({...regFormData, city: e.target.value})}
+                              className={cn(
+                                "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors appearance-none",
+                                isDarkMode ? "bg-slate-900 border-slate-700 font-medium" : "bg-slate-50 border-slate-200 font-medium",
+                                !regFormData.district && "opacity-50 cursor-not-allowed"
+                              )}
+                            >
+                              <option value="">নির্বাচন করুন</option>
+                              {regFormData.district && BD_GEO_DATA[regFormData.district]?.sort().map(upazila => (
+                                <option key={upazila} value={upazila}>{upazila}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">ইউজারনেম / username</label>
+                          <input 
+                            required
+                            type="text" 
+                            name="username"
+                            autoComplete="username"
+                            placeholder="ইউজার নাম (উদাঃ abc123)"
+                            value={regFormData.username}
+                            onChange={(e) => setRegFormData({...regFormData, username: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors font-medium",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 ml-1">কন্টাক্ট নাম্বার / Contact No</label>
+                          <input 
+                            required
+                            type="password" 
+                            name="password"
+                            autoComplete="new-password"
+                            placeholder="18XXXXXXXX"
+                            value={regFormData.contactNo}
+                            onChange={(e) => setRegFormData({...regFormData, contactNo: e.target.value})}
+                            className={cn(
+                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors font-medium",
+                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            )}
+                          />
+                        </div>
+
+                        <button 
+                          type="submit" 
+                          disabled={regStatus.type === 'loading'}
                           className={cn(
-                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors appearance-none",
-                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
+                            "w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2",
+                            regStatus.type === 'loading' && "opacity-70 cursor-not-allowed"
                           )}
                         >
-                          <option value="">নির্বাচন করুন</option>
-                          <option value="A+">A+</option>
-                          <option value="A-">A-</option>
-                          <option value="B+">B+</option>
-                          <option value="B-">B-</option>
-                          <option value="O+">O+</option>
-                          <option value="O-">O-</option>
-                          <option value="AB+">AB+</option>
-                          <option value="AB-">AB-</option>
-                        </select>
-                      </div>
+                          {regStatus.type === 'loading' && <Loader2 className="w-5 h-5 animate-spin" />}
+                          নিবন্ধন করুন
+                        </button>
 
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold opacity-60 ml-1">নাম</label>
-                        <input 
-                          required
-                          type="text" 
-                          placeholder="আপনার পূর্ণ নাম"
-                          value={regFormData.name}
-                          onChange={(e) => setRegFormData({...regFormData, name: e.target.value})}
-                          className={cn(
-                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
-                          )}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold opacity-60 ml-1">জেলা</label>
-                          <input 
-                            required
-                            type="text" 
-                            placeholder="জেলার নাম"
-                            value={regFormData.district}
-                            onChange={(e) => setRegFormData({...regFormData, district: e.target.value})}
-                            className={cn(
-                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
-                            )}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold opacity-60 ml-1">শহর</label>
-                          <input 
-                            required
-                            type="text" 
-                            placeholder="উপজেলার নাম"
-                            value={regFormData.city}
-                            onChange={(e) => setRegFormData({...regFormData, city: e.target.value})}
-                            className={cn(
-                              "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                              isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
-                            )}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold opacity-60 ml-1">ইউজারনেম / username</label>
-                        <input 
-                          required
-                          type="text" 
-                          placeholder="ইউজার নাম (উদাঃ abc123)"
-                          value={regFormData.username}
-                          onChange={(e) => setRegFormData({...regFormData, username: e.target.value})}
-                          className={cn(
-                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
-                          )}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold opacity-60 ml-1">কন্টাক্ট নাম্বার / Contact No</label>
-                        <input 
-                          required
-                          type="tel" 
-                          placeholder="18XXXXXXXX"
-                          value={regFormData.contactNo}
-                          onChange={(e) => setRegFormData({...regFormData, contactNo: e.target.value})}
-                          className={cn(
-                            "w-full h-12 px-4 rounded-xl border outline-none focus:border-emerald-500 transition-colors",
-                            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200"
-                          )}
-                        />
-                      </div>
-
-                      <button 
-                        type="submit" 
-                        disabled={regStatus.type === 'loading'}
-                        className={cn(
-                          "w-full h-12 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2",
-                          regStatus.type === 'loading' && "opacity-70 cursor-not-allowed"
+                        {regStatus.text && (
+                          <div className={cn(
+                            "text-center p-3 rounded-xl flex items-center justify-center gap-2",
+                            regStatus.type === 'success' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-red-50 text-red-600 border border-red-100"
+                          )}>
+                            {regStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                            <span className="text-xs font-bold">{regStatus.text}</span>
+                          </div>
                         )}
-                      >
-                        {regStatus.type === 'loading' && <Loader2 className="w-5 h-5 animate-spin" />}
-                        নিবন্ধন করুন
-                      </button>
 
-                      {regStatus.text && (
-                        <p className={cn(
-                          "text-center text-sm font-bold",
-                          regStatus.type === 'success' ? "text-emerald-500" : "text-red-500"
-                        )}>
-                          {regStatus.text}
-                        </p>
-                      )}
-
-                      <button 
-                        type="button"
-                        onClick={() => setShowRegistration(false)}
-                        className="w-full text-center text-slate-500 font-bold text-sm pt-2"
-                      >
-                        ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন
-                      </button>
-                    </form>
-                  </div>
+                        <button 
+                          type="button"
+                          onClick={() => setShowRegistration(false)}
+                          className="w-full text-center text-slate-500 font-bold text-sm pt-2"
+                        >
+                          ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন
+                        </button>
+                      </form>
+                    </motion.div>
+                  </AnimatePresence>
                 )}
 
                 <div className="w-full pt-6 space-y-2">
@@ -7210,7 +7125,6 @@ function AppContent() {
             onClose={() => setShowCreateBloodPostModal(false)}
             isDarkMode={isDarkMode}
             currentUser={currentUser}
-            onNotify={sendOneSignalNotification}
           />
         )}
       </AnimatePresence>
