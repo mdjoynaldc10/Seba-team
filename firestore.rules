@@ -98,6 +98,12 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated();
     }
 
+    // Login Requests Collection
+    match /login_requests/{requestId} {
+      allow create: if true; // Allow login screen to create requests
+      allow read, write: if isAuthenticated();
+    }
+
     // Blood Posts Collection
     match /blood_posts/{postId} {
       allow read: if isAuthenticated();

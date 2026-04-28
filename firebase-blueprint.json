@@ -217,9 +217,28 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "authorId", "authorName", "bloodGroup", "patientProblem", "bloodBags", "address", "donationDate", "contactNumber", "status", "createdAt"]
+    },
+    "login_requests": {
+      "title": "Login Request",
+      "description": "Request to logout from old device and login on new device",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "userName", "userPhone", "status", "createdAt"]
     }
   },
   "firestore": {
+    "/login_requests/{requestId}": {
+      "schema": "login_requests",
+      "description": "Pending requests for device switch"
+    },
     "/settings/{settingId}": {
       "schema": "settings",
       "description": "Global settings document"

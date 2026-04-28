@@ -58,7 +58,9 @@ import {
   UserRoundPen,
   Send,
   Share2,
+  Users2,
   Trash2,
+  Clock,
   Edit2,
   Megaphone,
   Volume2,
@@ -83,7 +85,16 @@ import { signInAnonymously } from 'firebase/auth';
 import { BD_DATA } from './constants/bdData';
 import { BD_GEO_DATA } from './constants/bdGeoData';
 
-// --- Types ---
+interface LoginRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userPhone: string;
+  deviceName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: any;
+}
+
 interface Member {
   name: string;
   designation: string;
@@ -1676,7 +1687,7 @@ function CloudPinPage({
   onClose: () => void, 
   isDarkMode: boolean 
 }) {
-  const [activeTab, setActiveTab] = useState<'pin' | 'sessions'>('pin');
+  const [activeTab, setActiveTab] = useState<'pin' | 'sessions' | 'login_requests'>('pin');
   const [pin, setPin] = useState('');
   const [savedPin, setSavedPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -1696,6 +1707,8 @@ function CloudPinPage({
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [loginRequests, setLoginRequests] = useState<LoginRequest[]>([]);
+  const [isLoginRequestsLoading, setIsLoginRequestsLoading] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'sessions') {
@@ -1714,6 +1727,20 @@ function CloudPinPage({
       }, (err) => {
         console.error("Error fetching sessions:", err);
         setIsSessionsLoading(false);
+      });
+      return () => unsub();
+    }
+    
+    if (activeTab === 'login_requests') {
+      setIsLoginRequestsLoading(true);
+      const q = query(collection(db, 'login_requests'), orderBy('createdAt', 'desc'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const reqs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LoginRequest));
+        setLoginRequests(reqs);
+        setIsLoginRequestsLoading(false);
+      }, (err) => {
+        console.error("Error fetching login requests:", err);
+        setIsLoginRequestsLoading(false);
       });
       return () => unsub();
     }
@@ -1886,6 +1913,37 @@ function CloudPinPage({
     }
   };
 
+  const handleApproveLoginRequest = async (request: LoginRequest) => {
+    try {
+      // 1. Approve the request
+      await updateDoc(doc(db, 'login_requests', request.id), {
+        status: 'approved'
+      });
+
+      // 2. Revoke all existing sessions for this user
+      const q = query(collection(db, 'sessions'), where('userId', '==', request.userId), where('status', '==', 'active'));
+      const snapshot = await getDocs(q);
+      const revokePromises = snapshot.docs.map(sessionDoc => 
+        updateDoc(doc(db, 'sessions', sessionDoc.id), { status: 'revoked' })
+      );
+      await Promise.all(revokePromises);
+      
+      // 3. Remove the request after approval
+      await deleteDoc(doc(db, 'login_requests', request.id));
+      
+    } catch (err) {
+      console.error("Error approving login request:", err);
+    }
+  };
+
+  const handleDeclineLoginRequest = async (requestId: string) => {
+    try {
+      await deleteDoc(doc(db, 'login_requests', requestId));
+    } catch (err) {
+      console.error("Error declining login request:", err);
+    }
+  };
+
   const handleBack = () => {
     if (mode !== 'manage') {
       setMode('manage');
@@ -1938,9 +1996,24 @@ function CloudPinPage({
             <Smartphone className="w-4 h-4" />
             Active Sessions
           </button>
+          {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
+            <button 
+              onClick={() => setActiveTab('login_requests')}
+              className={cn(
+                "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2",
+                activeTab === 'login_requests' 
+                  ? (isDarkMode ? "bg-slate-700 text-emerald-500 shadow-lg" : "bg-white text-emerald-500 shadow-sm")
+                  : "text-slate-500"
+              )}
+            >
+              <Users2 className="w-4 h-4" />
+              Login Request
+            </button>
+          )}
         </div>
 
         {activeTab === 'pin' ? (
+// ...
           <div className="space-y-6">
             {mode === 'manage' && (
               <div className="space-y-4">
@@ -2116,7 +2189,7 @@ function CloudPinPage({
               </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === 'sessions' ? (
           <div className="space-y-4">
             <div className="px-1">
               <h3 className="text-lg font-bold">Active Sessions</h3>
@@ -2214,6 +2287,82 @@ function CloudPinPage({
             <div className="pt-4">
               <p className="text-[10px] text-center opacity-40 italic">
                 সেশন লিস্ট থেকে লগআউট করলে ওই ডিভাইস থেকে অটোমেটিক লগআউট হয়ে যাবে।
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="px-1">
+              <h3 className="text-lg font-bold">Login Requests</h3>
+              <p className="text-xs opacity-60">পুরাতন ডিভাইস হারিয়ে গেলে বা ডিভাইস পরিবর্তনের অনুরোধ।</p>
+            </div>
+
+            {isLoginRequestsLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+              </div>
+            ) : loginRequests.length === 0 ? (
+              <div className="text-center py-12 opacity-50">
+                কোনো পেন্ডিং অনুরোধ পাওয়া যায়নি
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {loginRequests.map((req) => (
+                  <motion.div 
+                    key={`login-req-${req.id}`}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={cn(
+                      "p-4 rounded-2xl border-2 space-y-4",
+                      isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"
+                    )}
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-sm truncate">{req.userName}</h4>
+                        <p className="text-xs opacity-60 font-mono">{req.userId}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Smartphone className="w-3 h-3 text-emerald-500" />
+                          <span className="text-[10px] font-bold opacity-70">{req.deviceName}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                         <span className="text-[9px] opacity-40">
+                           {req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleTimeString() : 'Recently'}
+                         </span>
+                         <span className="bg-orange-500/10 text-orange-500 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase">Pending</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-500/10 gap-3">
+                      <div className="flex items-center gap-3">
+                        <a href={`tel:${req.userPhone}`} className="p-2 bg-blue-500/10 text-blue-500 rounded-xl active:scale-90 transition-all">
+                          <Phone className="w-4 h-4" />
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleDeclineLoginRequest(req.id)}
+                          className="flex-1 py-2 px-4 bg-red-500/10 text-red-500 rounded-xl text-xs font-bold active:scale-95 transition-all"
+                        >
+                          Decline
+                        </button>
+                        <button 
+                          onClick={() => handleApproveLoginRequest(req)}
+                          className="flex-1 py-2 px-4 bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                        >
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            
+            <div className="pt-4">
+              <p className="text-[10px] text-center opacity-40 italic">
+                অ্যাপ্রুভ করলে ইউজারের বর্তমান সব ডিভাইস থেকে লগআউট হয়ে যাবে এবং সে নতুন ডিভাইসে লগইন করতে পারবে।
               </p>
             </div>
           </div>
@@ -3093,6 +3242,9 @@ function AppContent() {
   const [showBorrowForm, setShowBorrowForm] = useState(false);
   const [isRequestSent, setIsRequestSent] = useState(false);
   const [showLoginError, setShowLoginError] = useState(false);
+  const [showMultiDeviceError, setShowMultiDeviceError] = useState(false);
+  const [loginRequestStatus, setLoginRequestStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [activeSessionInfo, setActiveSessionInfo] = useState<any>(null);
   const [loginErrorMsg, setLoginErrorMsg] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [showNotice, setShowNotice] = useState(false);
@@ -4411,6 +4563,24 @@ function AppContent() {
     setIsGlobalLoading(true);
     const member = await loginMember(id, phone);
     if (member) {
+      // Check for active sessions
+      try {
+        const q = query(collection(db, 'sessions'), where('userId', '==', member.id), where('status', '==', 'active'));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          // Already logged in elsewhere
+          const activeSess = querySnapshot.docs[0].data();
+          setActiveSessionInfo(activeSess);
+          setShowMultiDeviceError(true);
+          setIsGlobalLoading(false);
+          setPendingLoginMember(member);
+          return;
+        }
+      } catch (err) {
+        console.error("Error checking sessions:", err);
+      }
+
       // Check for Cloud PIN
       try {
         const pinDoc = await getDoc(doc(db, 'cloud_pins', member.id));
@@ -4434,6 +4604,28 @@ function AppContent() {
       setShowLoginError(true);
     }
     setIsGlobalLoading(false);
+  };
+
+  const handleRequestLoginApproval = async () => {
+    if (!pendingLoginMember) return;
+    setLoginRequestStatus('sending');
+    try {
+      const { deviceName } = getDeviceInfo();
+      const requestId = Math.random().toString(36).substring(2, 15);
+      await setDoc(doc(db, 'login_requests', requestId), {
+        id: requestId,
+        userId: pendingLoginMember.id,
+        userName: pendingLoginMember.name,
+        userPhone: pendingLoginMember.phone,
+        deviceName: deviceName || 'Unknown Device',
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      setLoginRequestStatus('sent');
+    } catch (err) {
+      console.error("Error creating login request:", err);
+      setLoginRequestStatus('error');
+    }
   };
 
   const handleMemberSearch = async (e: React.KeyboardEvent) => {
@@ -6374,7 +6566,51 @@ function AppContent() {
                 {!showRegistration ? (
                   <>
                     <h3 className="text-xl font-bold">লগইন করুন</h3>
-                    <form id="login-form" onSubmit={handleLogin} className="w-full space-y-4">
+                    
+                    {showMultiDeviceError ? (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full p-5 rounded-2xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 space-y-4 text-left"
+                      >
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-red-600 dark:text-red-400">ইতিমধ্যে লগইন অবস্থায় আছেন!</h4>
+                            <p className="text-xs text-red-500/80 leading-relaxed font-medium text-left">
+                              আপনার অ্যাকাউন্টটি ইতিমধ্যে অন্য একটি ডিভাইসে ({activeSessionInfo?.deviceName || 'Unknown'}) লগইন করা আছে। আপনি চাইলে এডমিনকে রিকোয়েস্ট পাঠাতে পারেন পুরাতন ডিভাইস থেকে লগআউট করার জন্য।
+                            </p>
+                          </div>
+                        </div>
+
+                        {loginRequestStatus === 'sent' ? (
+                          <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/20">
+                            <CheckCircle2 className="w-5 h-5 shrink-0" />
+                            <span className="text-xs font-bold text-left">রিকোয়েস্ট পাঠানো হয়েছে। এডমিন অ্যাপ্রুভ করলে আপনি পুনরায় লগইন করতে পারবেন।</span>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={handleRequestLoginApproval}
+                            disabled={loginRequestStatus === 'sending'}
+                            className="w-full h-11 bg-red-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                          >
+                            {loginRequestStatus === 'sending' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Smartphone className="w-4 h-4" />}
+                            Request admin to approve login
+                          </button>
+                        )}
+
+                        <button 
+                          onClick={() => {
+                            setShowMultiDeviceError(false);
+                            setLoginRequestStatus('idle');
+                          }}
+                          className="w-full text-center text-xs font-bold text-slate-500 opacity-60 pt-1"
+                        >
+                          লগইন স্ক্রিনে ফিরে যান
+                        </button>
+                      </motion.div>
+                    ) : (
+                      <form id="login-form" onSubmit={handleLogin} className="w-full space-y-4">
                       <div className="space-y-1">
                         <label htmlFor="login-username" className="sr-only">ইউজারনেম</label>
                         <input 
@@ -6423,6 +6659,7 @@ function AppContent() {
                         )}
                       </button>
                     </form>
+                    )}
                     <button 
                       onClick={() => setShowRegistration(true)}
                       className="text-emerald-500 font-bold text-sm"
