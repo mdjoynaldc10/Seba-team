@@ -69,8 +69,12 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  AlignJustify
+  AlignJustify,
+  Map as MapIcon
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -84,6 +88,14 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { BD_DATA } from './constants/bdData';
 import { BD_GEO_DATA } from './constants/bdGeoData';
+
+interface UserLocation {
+  userId: string;
+  userName: string;
+  latitude: number;
+  longitude: number;
+  updatedAt: any;
+}
 
 interface LoginRequest {
   id: string;
@@ -2372,6 +2384,78 @@ function CloudPinPage({
   );
 }
 
+function UserTrackingPage({ 
+  userLocations, 
+  onClose, 
+  isDarkMode 
+}: { 
+  userLocations: UserLocation[], 
+  onClose: () => void, 
+  isDarkMode: boolean 
+}) {
+  const [mapCenter] = useState<[number, number]>([23.8103, 90.4125]); // Default to Dhaka
+  
+  const customIcon = (userId: string) => L.divIcon({
+    html: `<div class="bg-emerald-500 text-white font-bold text-[10px] w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-lg pointer-events-none transition-all scale-100 hover:scale-110 active:scale-95">${userId}</div>`,
+    className: '',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+
+  const tileLayerUrl = isDarkMode 
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  return (
+    <OverlayPage title="User Tracking" onClose={onClose} isDarkMode={isDarkMode}>
+      <div className="h-[calc(100dvh-120px)] w-full rounded-3xl overflow-hidden relative shadow-inner">
+        <MapContainer 
+          center={mapCenter} 
+          zoom={8} 
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url={tileLayerUrl}
+          />
+          {userLocations.map((loc) => (
+            <Marker 
+              key={loc.userId} 
+              position={[loc.latitude, loc.longitude]} 
+              icon={customIcon(loc.userId)}
+            >
+              <Popup className={cn(isDarkMode ? "dark-popup" : "")}>
+                <div className="p-1">
+                  <p className="font-bold text-sm mb-1">{loc.userName}</p>
+                  <p className="text-xs opacity-70">আইডি: {loc.userId}</p>
+                  <p className="text-[10px] opacity-50 mt-1">
+                    আপডেট: {loc.updatedAt?.toDate ? new Date(loc.updatedAt.toDate()).toLocaleTimeString() : 'এইমাত্র'}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+        
+        {/* Map Legend */}
+        <div className={cn(
+          "absolute bottom-4 left-4 right-4 p-3 rounded-2xl shadow-xl z-[1000] border backdrop-blur-md",
+          isDarkMode ? "bg-slate-900/80 border-slate-700 text-white" : "bg-white/80 border-slate-100 text-slate-800"
+        )}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              <span className="text-xs font-bold leading-none">লাইভ ট্র্যাকিং</span>
+            </div>
+            <span className="text-[10px] opacity-60 font-medium">{userLocations.length} জন সদস্য অনলাইনে আছে</span>
+          </div>
+        </div>
+      </div>
+    </OverlayPage>
+  );
+}
+
 function PinEntryModal({ 
   onSuccess, 
   onCancel, 
@@ -2969,6 +3053,8 @@ function AppContent() {
   const [onlineBookSearchQuery, setOnlineBookSearchQuery] = useState('');
   const [selectedOnlineCategory, setSelectedOnlineCategory] = useState('সব');
   const [showOnlineViewer, setShowOnlineViewer] = useState(false);
+  const [showTrackingMap, setShowTrackingMap] = useState(false);
+  const [userLocations, setUserLocations] = useState<UserLocation[]>([]);
   
   const ONLINE_BOOKS_SHEET_ID = '1LN9997aF6rbK3OYALBkLWoZkG8ss-4lA34Zvi9Z_ZPk';
   const ONLINE_SHEETS = ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', 'Sheet6', 'Sheet7', 'Sheet8', 'Sheet9', 'Sheet10'];
@@ -3097,6 +3183,61 @@ function AppContent() {
       window.removeEventListener('popstate', handleOrientationChange);
     };
   }, []);
+
+  // --- Real-time User Tracking ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let intervalId: any;
+
+    const updateLocation = () => {
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+              if (currentUser.id) {
+                await setDoc(doc(db, 'user_locations', currentUser.id), {
+                  userId: currentUser.id,
+                  userName: currentUser.name,
+                  latitude,
+                  longitude,
+                  updatedAt: serverTimestamp()
+                }, { merge: true });
+              }
+            } catch (e) {
+              console.error("Error updating location:", e);
+            }
+          },
+          (error) => {
+            console.debug("Geolocation error:", error);
+          },
+          { enableHighAccuracy: true }
+        );
+      }
+    };
+
+    updateLocation();
+    intervalId = setInterval(updateLocation, 60000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!isAdmin(currentUser) || !showTrackingMap) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'user_locations'), (snapshot) => {
+      const locations: UserLocation[] = [];
+      snapshot.forEach(doc => {
+        locations.push(doc.data() as UserLocation);
+      });
+      setUserLocations(locations);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, showTrackingMap]);
 
   const [showBookRequestPage, setShowBookRequestPage] = useState(false);
   const [selectedBookRequest, setSelectedBookRequest] = useState<BookRequest | null>(null);
@@ -7427,6 +7568,14 @@ function AppContent() {
                   isDarkMode={isDarkMode}
                 />
               )}
+              {isAdmin(currentUser) && (
+                <ProfileMenuLink 
+                  icon={<MapIcon className="w-5 h-5 text-emerald-500" />} 
+                  label="Track Users" 
+                  onClick={() => setShowTrackingMap(true)} 
+                  isDarkMode={isDarkMode}
+                />
+              )}
               <ProfileMenuLink 
                 icon={
                   <div className="relative">
@@ -7490,27 +7639,40 @@ function AppContent() {
               )}
             </div>
 
-            {/* Sub-pages inside Settings context */}
-            <AnimatePresence>
-              {showCloudPinPage && currentUser && (
-                <CloudPinPage 
-                  currentUser={currentUser} 
-                  onClose={() => window.history.back()} 
-                  isDarkMode={isDarkMode} 
-                />
-              )}
-              {showUpdateModal && (
-                <UpdateModal 
-                  onClose={() => window.history.back()}
-                  isDarkMode={isDarkMode}
-                  latestUpdate={latestUpdate}
-                  APP_VERSION={APP_VERSION}
-                  currentUser={currentUser}
-                />
-              )}
-            </AnimatePresence>
           </OverlayPage>
         )}
+
+        <AnimatePresence>
+          {showCloudPinPage && currentUser && (
+            <CloudPinPage 
+              currentUser={currentUser} 
+              onClose={() => window.history.back()} 
+              isDarkMode={isDarkMode} 
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showTrackingMap && currentUser && (
+            <UserTrackingPage 
+              userLocations={userLocations} 
+              onClose={() => window.history.back()} 
+              isDarkMode={isDarkMode} 
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showUpdateModal && (
+            <UpdateModal 
+              onClose={() => window.history.back()}
+              isDarkMode={isDarkMode}
+              latestUpdate={latestUpdate}
+              APP_VERSION={APP_VERSION}
+              currentUser={currentUser}
+            />
+          )}
+        </AnimatePresence>
 
         {showPaymentPage && (
           <OverlayPage key="payment-overlay" title="পেমেন্ট হিস্টোরি" onClose={() => window.history.back()} isDarkMode={isDarkMode}>

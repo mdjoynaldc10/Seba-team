@@ -232,9 +232,26 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "userName", "userPhone", "status", "createdAt"]
+    },
+    "user_locations": {
+      "title": "User Location",
+      "description": "Real-time location of a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "latitude", "longitude", "updatedAt"]
     }
   },
   "firestore": {
+    "/user_locations/{userId}": {
+      "schema": "user_locations",
+      "description": "Real-time locations of users updated every minute"
+    },
     "/login_requests/{requestId}": {
       "schema": "login_requests",
       "description": "Pending requests for device switch"
