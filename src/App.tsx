@@ -3861,6 +3861,7 @@ function AppContent() {
         setShowGreetingsSettings(!!event.state.showGreetingsSettings);
         setShowRegistration(!!event.state.showRegistration);
         setShowCloudPinPage(!!event.state.showCloudPinPage);
+        setShowTrackingMap(!!event.state.showTrackingMap);
         setShowSettingsPage(!!event.state.showSettingsPage);
         setShowUpdateModal(!!event.state.showUpdateModal);
         setShowCustomNotificationPage(!!event.state.showCustomNotificationPage);
@@ -3896,6 +3897,7 @@ function AppContent() {
       showGreetingsSettings,
       showRegistration,
       showCloudPinPage,
+      showTrackingMap,
       showSettingsPage,
       showUpdateModal,
       showCustomNotificationPage,
@@ -3934,6 +3936,7 @@ function AppContent() {
         showGreetingsSettings,
         showRegistration,
         showCloudPinPage,
+        showTrackingMap,
         showSettingsPage,
         showUpdateModal,
         showCustomNotificationPage,
@@ -3941,7 +3944,7 @@ function AppContent() {
         showOnlineViewer
       }, '');
     }
-  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showSettingsPage, showUpdateModal, showCustomNotificationPage, selectedBookRequest, showOnlineViewer]);
+  }, [activeTab, showInfoPage, showPaymentPage, showBorrowedBooksPage, showBookshelfPage, showDonationProjectsPage, selectedDonationProject, isMenuOpen, showTicTacToe, showDatabasePage, selectedBook, selectedPayment, selectedMemberProfile, showNotificationsPage, selectedNotification, showDonatePopup, showLoginError, showBorrowForm, showNotice, showAdvanceSettings, showGreetingsSettings, showRegistration, showCloudPinPage, showTrackingMap, showSettingsPage, showUpdateModal, showCustomNotificationPage, selectedBookRequest, showOnlineViewer]);
 
   // Refs for swipe
   const extractSheetId = (input: string) => {
