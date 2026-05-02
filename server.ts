@@ -255,6 +255,35 @@ app.post("/api/delete-account", async (req, res) => {
   }
 });
 
+app.post("/api/onesignal", async (req, res) => {
+  const appId = process.env.VITE_ONESIGNAL_APP_ID;
+  const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY;
+
+  if (!appId || !apiKey) {
+    return res.status(400).json({ error: "OneSignal configuration missing on server" });
+  }
+
+  try {
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${apiKey}`
+      },
+      body: JSON.stringify({
+        ...req.body,
+        app_id: appId
+      })
+    });
+    
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error("OneSignal backend error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Vite middleware
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

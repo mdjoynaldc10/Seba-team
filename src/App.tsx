@@ -325,17 +325,15 @@ const isDeveloper = (member: Member | null) => {
 
 const sendOneSignalNotification = async (targetId: string | 'all', title: string, message: string) => {
   const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
   const appLogo = "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj";
 
-  if (!appId || !apiKey) {
-    console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
+  if (!appId) {
+    console.warn("OneSignal App ID missing. Skipping push notification.");
     return;
   }
 
   try {
     const body: any = {
-      app_id: appId,
       headings: { en: title },
       contents: { en: message },
       chrome_web_icon: appLogo,
@@ -351,16 +349,18 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
       body.include_external_user_ids = [targetId];
     }
 
-    await fetch("https://onesignal.com/api/v1/notifications", {
+    const response = await fetch("/api/onesignal", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Authorization": `Basic ${apiKey}`
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(body)
     });
+    
+    const data = await response.json();
+    console.log("OneSignal notification response:", data);
   } catch (error) {
-    console.error("Error sending OneSignal notification:", error);
+    console.error("Error sending OneSignal notification via backend:", error);
   }
 };
 
@@ -3626,28 +3626,34 @@ function AppContent() {
   useEffect(() => {
     const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
     if (appId && !oneSignalInitialized.current) {
+      console.log("Initializing OneSignal for domain:", window.location.origin);
       OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
       }).then(() => {
         oneSignalInitialized.current = true;
+        
+        // Check session and login
         if (currentUser) {
           OneSignal.login(currentUser.id);
         }
+
+        console.log("OneSignal initialized successfully");
       }).catch(err => {
         const errMsg = err?.message || String(err);
         if (errMsg.includes('already initialized')) {
           oneSignalInitialized.current = true;
           if (currentUser) OneSignal.login(currentUser.id);
         } else if (errMsg.includes('Can only be used on')) {
-          console.warn("OneSignal domain mismatch detected. Push notifications may not work in this environment.");
-          oneSignalInitialized.current = true; // Mark as "tried" to avoid repeated attempts
+          console.warn("OneSignal domain mismatch detected:", errMsg);
+          console.warn("Please ensure your OneSignal Dashboard 'Site URL' matches the current domain.");
+          oneSignalInitialized.current = true; 
         } else {
           console.error("OneSignal Init Error:", err);
         }
       });
     } else if (appId && oneSignalInitialized.current && currentUser) {
-      OneSignal.login(currentUser.id);
+      OneSignal.login(currentUser.id).catch(e => console.error("OneSignal Login Error:", e));
     }
   }, [currentUser]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
@@ -9932,6 +9938,47 @@ function AppContent() {
                       {!selectedMemberProfile.isNewSheet && <InfoItem label="জন্ম তারিখ" value={formatDate(selectedMemberProfile.dob)} isDarkMode={isDarkMode} />}
                       <InfoItem label="যোগদানের তারিখ" value={selectedMemberProfile.joiningDate} isDarkMode={isDarkMode} />
                     </div>
+
+                    {/* Notification Settings for Current User */}
+                    {currentUser?.id === selectedMemberProfile.id && (
+                      <div className="mt-4 space-y-3">
+                        <h3 className="text-sm font-bold opacity-50 uppercase tracking-wider ml-1">নোটিফিকেশন সেটিংস</h3>
+                        <div className={cn(
+                          "p-4 rounded-xl border flex items-center justify-between gap-4",
+                          isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
+                        )}>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-bold">পুশ নোটিফিকেশন</h4>
+                            <p className="text-[10px] text-slate-400">এলাউন না থাকলে রক্তদান বা গুরুত্বপূর্ণ নোটিশ পাবেন না।</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              try {
+                                if (!oneSignalInitialized.current) {
+                                  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+                                  if (appId) {
+                                    await OneSignal.init({ appId, allowLocalhostAsSecureOrigin: true });
+                                    oneSignalInitialized.current = true;
+                                  }
+                                }
+                                await OneSignal.Notifications.requestPermission();
+                                if (currentUser) {
+                                  await OneSignal.login(currentUser.id);
+                                }
+                                alert("নোটিফিকেশন পারমিশন চাওয়া হয়েছে। দয়া করে এলাউ (Allow) করুন।");
+                              } catch (e) {
+                                console.error("Subscription error:", e);
+                                alert("নোটিফিকেশন চালু করতে সমস্যা হয়েছে। দয়া করে ব্রাউজার সেটিংস চেক করুন।");
+                              }
+                            }}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                          >
+                            <Bell className="w-4 h-4" />
+                            চালু করুন
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
