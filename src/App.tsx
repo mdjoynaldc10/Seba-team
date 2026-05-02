@@ -324,9 +324,8 @@ const isDeveloper = (member: Member | null) => {
 };
 
 const sendOneSignalNotification = async (targetId: string | 'all', title: string, message: string) => {
-  // Try to get from env, otherwise use hardcoded fallbacks
-  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID || "d3869272-3f12-4299-873d-82d22cc72023"; 
-  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || "NDYxMjkzYWYtMTRjNS00YjNiLTg2NzEtZDBmZmQ3MmQ0ZGIz";
+  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
   const appLogo = "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj";
 
   if (!appId || !apiKey) {
@@ -334,18 +333,9 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
     return;
   }
 
-  // Domain check to avoid errors in environments like Cloud Run with wrong domain config
-  const allowedDomains = ['seba-team.vercel.app', 'localhost', '127.0.0.1'];
-  const currentHost = window.location.hostname;
-  const isAllowedDomain = allowedDomains.some(domain => currentHost === domain || currentHost.endsWith('.' + domain) || currentHost.endsWith('run.app'));
-
-  if (!isAllowedDomain) {
-    console.debug(`OneSignal is likely not configured for this domain (${currentHost}). Skipping.`);
-    // We don't return here to let it try, but we log a debug message.
-  }
-
   try {
-    const notificationBody: any = {
+    const body: any = {
+      app_id: appId,
       headings: { en: title },
       contents: { en: message },
       chrome_web_icon: appLogo,
@@ -356,22 +346,18 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
     };
 
     if (targetId === 'all') {
-      notificationBody.included_segments = ["Total Subscriptions"];
+      body.included_segments = ["Total Subscriptions"];
     } else {
-      notificationBody.include_external_user_ids = [targetId];
+      body.include_external_user_ids = [targetId];
     }
 
-    // Call our own server proxy instead of OneSignal directly to avoid CORS issues on Vercel
-    await fetch("/api/onesignal", {
+    await fetch("https://onesignal.com/api/v1/notifications", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${apiKey}`
       },
-      body: JSON.stringify({
-        appId: appId,
-        apiKey: apiKey,
-        body: notificationBody
-      })
+      body: JSON.stringify(body)
     });
   } catch (error) {
     console.error("Error sending OneSignal notification:", error);
@@ -379,7 +365,7 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
 };
 
 const sendRealTimeNotification = async (userId: string, title: string, message: string, type: RealTimeNotification['type']) => {
-    const id = `${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = `${userId}_${Date.now()}`;
     const notification: RealTimeNotification = {
       id,
       userId,
@@ -630,30 +616,33 @@ async function fetchNotifications(): Promise<Notification[]> {
 
 async function fetchBooks(): Promise<Book[]> {
   try {
-    const fetchPromises = BOOKS_SHEETS.map(name =>
-      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
-        .then(res => res.text())
-        .then(text => {
-          const json = safeParseGvizJson(text);
-          if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any) => {
-            const c = row.c;
-            if (!c || !c[1]?.v) return null;
-            return {
-              id: String(c[0]?.v || '').trim(),
-              name: String(c[1]?.v || '').trim(),
-              author: String(c[2]?.v || '').trim(),
-              category: String(c[3]?.v || '').trim(),
-              status: String(c[4]?.v || '').trim(),
-              recipient: String(c[6]?.v || '').trim(),
-              date: String(c[7]?.v || '').trim(),
-              recipientId: String(c[8]?.v || '').trim(),
-              address: String(c[9]?.v || '').trim(),
-              returnableDate: String(c[10]?.v || '').trim()
-            };
-          }).filter(Boolean);
-        })
-    );
+    const fetchPromises = BOOKS_SHEETS.map(async (name) => {
+      try {
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`);
+        const text = await res.text();
+        const json = safeParseGvizJson(text);
+        if (!json.table || !json.table.rows) return [];
+        return json.table.rows.map((row: any) => {
+          const c = row.c;
+          if (!c || !c[1]?.v) return null;
+          return {
+            id: String(c[0]?.v || '').trim(),
+            name: String(c[1]?.v || '').trim(),
+            author: String(c[2]?.v || '').trim(),
+            category: String(c[3]?.v || '').trim(),
+            status: String(c[4]?.v || '').trim(),
+            recipient: String(c[6]?.v || '').trim(),
+            date: String(c[7]?.v || '').trim(),
+            recipientId: String(c[8]?.v || '').trim(),
+            address: String(c[9]?.v || '').trim(),
+            returnableDate: String(c[10]?.v || '').trim()
+          };
+        }).filter(Boolean);
+      } catch (err) {
+        console.warn(`Error fetching book sheet ${name}:`, err);
+        return [];
+      }
+    });
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat();
     return Array.from(new Map(
@@ -670,48 +659,51 @@ async function fetchBooks(): Promise<Book[]> {
 async function fetchBookshelves(): Promise<Bookshelf[]> {
   const SHEETS = ['Sheet9', 'Sheet10'];
   try {
-    const fetchPromises = SHEETS.map(name =>
-      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
-        .then(res => res.text())
-        .then(text => {
-          const json = safeParseGvizJson(text);
-          if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any) => {
-            const c = row.c;
-            if (!c || !c[1]?.v) return null;
-            const mapLocation = String(c[3]?.v || '').trim();
-            let lat: number | undefined;
-            let lng: number | undefined;
+    const fetchPromises = SHEETS.map(async (name) => {
+      try {
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`);
+        const text = await res.text();
+        const json = safeParseGvizJson(text);
+        if (!json.table || !json.table.rows) return [];
+        return json.table.rows.map((row: any) => {
+          const c = row.c;
+          if (!c || !c[1]?.v) return null;
+          const mapLocation = String(c[3]?.v || '').trim();
+          let lat: number | undefined;
+          let lng: number | undefined;
 
-            // Try to parse coordinates from "lat, lng" or a URL
-            if (mapLocation.includes(',')) {
-              const parts = mapLocation.split(',').map(p => p.trim());
-              const possibleLat = parseFloat(parts[0]);
-              const possibleLng = parseFloat(parts[1]);
-              if (!isNaN(possibleLat) && !isNaN(possibleLng)) {
-                lat = possibleLat;
-                lng = possibleLng;
-              }
-            } else if (mapLocation.includes('@')) {
-               // Try to extract from Google Maps URL: .../@23.8103,90.4125,...
-               const match = mapLocation.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-               if (match) {
-                 lat = parseFloat(match[1]);
-                 lng = parseFloat(match[2]);
-               }
+          // Try to parse coordinates from "lat, lng" or a URL
+          if (mapLocation.includes(',')) {
+            const parts = mapLocation.split(',').map(p => p.trim());
+            const possibleLat = parseFloat(parts[0]);
+            const possibleLng = parseFloat(parts[1]);
+            if (!isNaN(possibleLat) && !isNaN(possibleLng)) {
+              lat = possibleLat;
+              lng = possibleLng;
             }
+          } else if (mapLocation.includes('@')) {
+             // Try to extract from Google Maps URL: .../@23.8103,90.4125,...
+             const match = mapLocation.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+             if (match) {
+               lat = parseFloat(match[1]);
+               lng = parseFloat(match[2]);
+             }
+          }
 
-            return {
-              district: String(c[0]?.v || '').trim(),
-              address: String(c[1]?.v || '').trim(),
-              pinCode: String(c[2]?.v || '').trim(),
-              mapLocation,
-              lat,
-              lng
-            };
-          }).filter(Boolean);
-        })
-    );
+          return {
+            district: String(c[0]?.v || '').trim(),
+            address: String(c[1]?.v || '').trim(),
+            pinCode: String(c[2]?.v || '').trim(),
+            mapLocation,
+            lat,
+            lng
+          };
+        }).filter(Boolean);
+      } catch (err) {
+        console.warn(`Error fetching bookshelf sheet ${name}:`, err);
+        return [];
+      }
+    });
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat() as Bookshelf[];
     return Array.from(new Map(flatResults.map(s => [s.address, s])).values());
@@ -855,8 +847,8 @@ async function fetchAllDonors(): Promise<Donor[]> {
 
           return { group, name, district: cleanDistrict, thana: cleanThana, phone };
         }).filter(Boolean);
-      } catch (e) {
-        console.warn(`Error fetching donor sheet "${name}":`, e);
+      } catch (err) {
+        console.warn(`Error fetching donor sheet ${name}:`, err);
         return [];
       }
     });
@@ -2343,9 +2335,9 @@ function CloudPinPage({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {resetRequests.map((req) => (
+                    {resetRequests.map((req, idx) => (
                       <motion.div 
-                        key={`pin-reset-${req.id}`}
+                        key={`pin-reset-${req.id}-${idx}`}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         className={cn(
@@ -2507,9 +2499,9 @@ function CloudPinPage({
               </div>
             ) : (
               <div className="space-y-3">
-                {loginRequests.map((req) => (
+                {loginRequests.map((req, idx) => (
                   <motion.div 
-                    key={`login-req-${req.id}`}
+                    key={`login-req-${req.id}-${idx}`}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className={cn(
@@ -3628,40 +3620,34 @@ function AppContent() {
   const [selectedDonationProject, setSelectedDonationProject] = useState<DonationProject | null>(null);
   const [showDonatePopup, setShowDonatePopup] = useState(false);
 
-  const onesignalInitRef = useRef(false);
-
   // OneSignal Initialization
+  const oneSignalInitialized = useRef(false);
+
   useEffect(() => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID || "d3869272-3f12-4299-873d-82d22cc72023";
-    if (appId && !onesignalInitRef.current) {
-      onesignalInitRef.current = true;
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    if (appId && !oneSignalInitialized.current) {
       OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
-        serviceWorkerPath: 'OneSignalSDKWorker.js',
-        serviceWorkerParam: { scope: '/' },
+      }).then(() => {
+        oneSignalInitialized.current = true;
+        if (currentUser) {
+          OneSignal.login(currentUser.id);
+        }
       }).catch(err => {
-        if (err?.message?.includes("Can only be used on")) {
-           console.debug("OneSignal Domain Mismatch:", err.message);
-        } else if (err?.message?.includes("already initialized")) {
-           // Ignore
+        const errMsg = err?.message || String(err);
+        if (errMsg.includes('already initialized')) {
+          oneSignalInitialized.current = true;
+          if (currentUser) OneSignal.login(currentUser.id);
+        } else if (errMsg.includes('Can only be used on')) {
+          console.warn("OneSignal domain mismatch detected. Push notifications may not work in this environment.");
+          oneSignalInitialized.current = true; // Mark as "tried" to avoid repeated attempts
         } else {
-           console.error("OneSignal Init Error:", err);
+          console.error("OneSignal Init Error:", err);
         }
       });
-    }
-  }, []);
-
-  // OneSignal Login/Logout
-  useEffect(() => {
-    if (currentUser) {
-      try {
-        OneSignal.login(currentUser.id).catch(() => {});
-      } catch (e) {}
-    } else {
-      try {
-        OneSignal.logout().catch(() => {});
-      } catch (e) {}
+    } else if (appId && oneSignalInitialized.current && currentUser) {
+      OneSignal.login(currentUser.id);
     }
   }, [currentUser]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
@@ -8194,7 +8180,7 @@ function AppContent() {
                     >
                       <option value="all">সকল লেনদেন</option>
                       {paymentHeaders.map((header, i) => (
-                        <option key={`pay-header-${i}`} value={header}>{header}</option>
+                        <option key={i} value={header}>{header}</option>
                       ))}
                     </select>
                   </div>
@@ -10044,9 +10030,9 @@ function AppContent() {
                       {adminDatabaseLinks.length === 0 ? (
                         <div className="text-center py-6 opacity-50 text-xs">কোনো সংরক্ষিত লিংক নেই</div>
                       ) : (
-                        adminDatabaseLinks.map((link) => (
+                        adminDatabaseLinks.map((link, idx) => (
                           <div 
-                            key={`prof-db-link-${link.id}`} 
+                            key={`prof-db-link-${link.id}-${idx}`} 
                             className={cn(
                               "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
                               isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -11034,7 +11020,7 @@ function ExpandableContent({ content, isDarkMode }: { content: string, isDarkMod
         isExpanded ? "max-h-[2000px]" : "max-h-[3.2rem]"
       )}>
         {paragraphs.map((para, i) => (
-          <p key={`expand-para-${i}`} className="text-sm leading-relaxed opacity-90 mb-3">
+          <p key={i} className="text-sm leading-relaxed opacity-90 mb-3">
             {para}
           </p>
         ))}
@@ -11665,7 +11651,7 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
       <div className="grid grid-cols-3 gap-2 mb-6">
         {board.map((square, i) => (
           <button
-            key={`ttt-square-${i}`}
+            key={i}
             onClick={() => handleClick(i)}
             className={cn(
               "w-20 h-20 text-3xl font-bold rounded-2xl flex items-center justify-center transition-all active:scale-90 border-2",
