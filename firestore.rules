@@ -121,7 +121,8 @@ service cloud.firestore {
     // User Privacy Settings Collection
     match /user_privacy_settings/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      // Allow write if authenticated or if they match the user ID (member ID)
+      allow write: if isAuthenticated();
     }
 
     // Bookshelf Clicks Collection

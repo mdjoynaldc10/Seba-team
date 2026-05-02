@@ -324,8 +324,9 @@ const isDeveloper = (member: Member | null) => {
 };
 
 const sendOneSignalNotification = async (targetId: string | 'all', title: string, message: string) => {
-  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
+  // Try to get from env, otherwise use hardcoded fallbacks
+  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID || "d3869272-3f12-4299-873d-82d22cc72023"; 
+  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || "NDYxMjkzYWYtMTRjNS00YjNiLTg2NzEtZDBmZmQ3MmQ0ZGIz";
   const appLogo = "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj";
 
   if (!appId || !apiKey) {
@@ -3628,18 +3629,17 @@ function AppContent() {
 
   // OneSignal Initialization
   useEffect(() => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID || "d3869272-3f12-4299-873d-82d22cc72023";
     if (appId && !onesignalInitRef.current) {
       onesignalInitRef.current = true;
       OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
         serviceWorkerPath: 'OneSignalSDKWorker.js',
-        // This ensures OneSignal knows the exact path relative to the root
+        serviceWorkerParam: { scope: '/' },
       }).catch(err => {
-        // Suppress "Can only be used on" error logs if it's expected mismatch
         if (err?.message?.includes("Can only be used on")) {
-           console.debug("OneSignal Domain Mismatch (Expected if not on Vercel):", err.message);
+           console.debug("OneSignal Domain Mismatch:", err.message);
         } else if (err?.message?.includes("already initialized")) {
            // Ignore
         } else {
