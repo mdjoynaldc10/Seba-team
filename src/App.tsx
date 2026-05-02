@@ -3634,6 +3634,8 @@ function AppContent() {
       OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
+        serviceWorkerPath: 'OneSignalSDKWorker.js',
+        // This ensures OneSignal knows the exact path relative to the root
       }).catch(err => {
         // Suppress "Can only be used on" error logs if it's expected mismatch
         if (err?.message?.includes("Can only be used on")) {
@@ -8189,7 +8191,7 @@ function AppContent() {
                     >
                       <option value="all">সকল লেনদেন</option>
                       {paymentHeaders.map((header, i) => (
-                        <option key={i} value={header}>{header}</option>
+                        <option key={`pay-header-${i}`} value={header}>{header}</option>
                       ))}
                     </select>
                   </div>
@@ -11029,7 +11031,7 @@ function ExpandableContent({ content, isDarkMode }: { content: string, isDarkMod
         isExpanded ? "max-h-[2000px]" : "max-h-[3.2rem]"
       )}>
         {paragraphs.map((para, i) => (
-          <p key={i} className="text-sm leading-relaxed opacity-90 mb-3">
+          <p key={`expand-para-${i}`} className="text-sm leading-relaxed opacity-90 mb-3">
             {para}
           </p>
         ))}
@@ -11660,7 +11662,7 @@ function TicTacToeGame({ isDarkMode, allMembers, isAuthReady }: { isDarkMode: bo
       <div className="grid grid-cols-3 gap-2 mb-6">
         {board.map((square, i) => (
           <button
-            key={i}
+            key={`ttt-square-${i}`}
             onClick={() => handleClick(i)}
             className={cn(
               "w-20 h-20 text-3xl font-bold rounded-2xl flex items-center justify-center transition-all active:scale-90 border-2",
