@@ -88,6 +88,13 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { BD_DATA } from './constants/bdData';
 import { BD_GEO_DATA } from './constants/bdGeoData';
+import OneSignal from 'react-onesignal';
+
+interface UserPrivacySettings {
+  userId: string;
+  multiDeviceLoginEnabled: boolean;
+  updatedAt?: any;
+}
 
 interface UserLocation {
   userId: string;
@@ -316,6 +323,78 @@ const isDeveloper = (member: Member | null) => {
   return member.designation === 'Developer';
 };
 
+const sendOneSignalNotification = async (targetId: string | 'all', title: string, message: string) => {
+  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+  const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
+  const appLogo = "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj";
+
+  if (!appId || !apiKey) {
+    console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
+    return;
+  }
+
+  // Domain check to avoid errors in environments like Cloud Run with wrong domain config
+  const allowedDomains = ['seba-team.vercel.app', 'localhost', '127.0.0.1'];
+  const currentHost = window.location.hostname;
+  const isAllowedDomain = allowedDomains.some(domain => currentHost === domain || currentHost.endsWith('.' + domain) || currentHost.endsWith('run.app'));
+
+  if (!isAllowedDomain) {
+    console.debug(`OneSignal is likely not configured for this domain (${currentHost}). Skipping.`);
+    // We don't return here to let it try, but we log a debug message.
+  }
+
+  try {
+    const body: any = {
+      app_id: appId,
+      headings: { en: title },
+      contents: { en: message },
+      chrome_web_icon: appLogo,
+      chrome_web_image: appLogo,
+      android_accent_color: "FF10b981",
+      small_icon: appLogo,
+      large_icon: appLogo,
+    };
+
+    if (targetId === 'all') {
+      body.included_segments = ["Total Subscriptions"];
+    } else {
+      body.include_external_user_ids = [targetId];
+    }
+
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (error) {
+    console.error("Error sending OneSignal notification:", error);
+  }
+};
+
+const sendRealTimeNotification = async (userId: string, title: string, message: string, type: RealTimeNotification['type']) => {
+    const id = `${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const notification: RealTimeNotification = {
+      id,
+      userId,
+      title,
+      message,
+      type,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'notifications', id), notification);
+      // Also send via OneSignal
+      await sendOneSignalNotification(userId, title, message);
+    } catch (error) {
+      console.error("Error sending real-time notification:", error);
+    }
+  };
+
 interface Notification {
   id: string;
   title: string;
@@ -346,6 +425,8 @@ interface Bookshelf {
   address: string;
   pinCode: string;
   mapLocation: string;
+  lat?: number;
+  lng?: number;
 }
 
 // --- Sheets Logic ---
@@ -380,6 +461,42 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
   }
 }
 
+/**
+ * Safely parses the Google Visualization API (GViz) JSON response.
+ * Handles the Google Visualization Wrapper prefix and Query.setResponse wrapper.
+ * Throws a descriptive error if the response is HTML (login page/error).
+ */
+function safeParseGvizJson(text: string): any {
+  if (!text) throw new Error("Empty response from Google Sheets.");
+  
+  if (!text.startsWith('/*O_o*/')) {
+    if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+      throw new Error("Received HTML instead of JSON. The Google Sheet might be private, the ID might be wrong, or the sheet name doesn't exist.");
+    }
+    // Attempt to see if the JSON content is tucked in there anyway (unlikely but safe)
+    if (!text.includes('google.visualization.Query.setResponse(')) {
+      throw new Error("Invalid GViz response format.");
+    }
+  }
+
+  try {
+    // Standard GViz JSON prefix is usually: /*O_o*/\ngoogle.visualization.Query.setResponse(
+    // It's safer to find the first '(' and the last ')'
+    const startIdx = text.indexOf('(');
+    const endIdx = text.lastIndexOf(')');
+    
+    if (startIdx === -1 || endIdx === -1) {
+      throw new Error("Could not find JSON payload boundaries in GViz response.");
+    }
+    
+    const jsonStr = text.substring(startIdx + 1, endIdx);
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("GViz Parsing Error:", e, "Raw Text start:", text.substring(0, 100));
+    throw new Error(`Failed to parse Google Sheets data: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: string, phone: string, mapping: 'standard' | 'registration'): Promise<Member | null> {
   const idCol = mapping === 'standard' ? 'D' : 'E';
   const phoneCol = mapping === 'standard' ? 'G' : 'F';
@@ -389,7 +506,7 @@ async function fetchMemberFromSheet(sheetId: string, sheetName: string, id: stri
   try {
     const res = await fetchWithRetry(url);
     const text = await res.text();
-    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const json = safeParseGvizJson(text);
     if (json.table.rows.length) {
       const r = json.table.rows[0].c;
       if (mapping === 'standard') {
@@ -452,7 +569,7 @@ async function fetchHomePosts(): Promise<HomePost[]> {
   try {
     const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`);
     const text = await res.text();
-    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const json = safeParseGvizJson(text);
     if (!json.table || !json.table.rows) return [];
     return json.table.rows.map((row: any) => {
       const r = row.c;
@@ -473,7 +590,7 @@ async function fetchNotice(): Promise<Notice | null> {
   try {
     const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notice`);
     const text = await res.text();
-    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const json = safeParseGvizJson(text);
     if (!json.table || !json.table.rows || json.table.rows.length === 0) return null;
     const r = json.table.rows[0].c;
     if (!r || !r[0]?.v || !r[1]?.v) return null;
@@ -491,7 +608,7 @@ async function fetchNotifications(): Promise<Notification[]> {
   try {
     const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${HOME_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=Notification`);
     const text = await res.text();
-    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const json = safeParseGvizJson(text);
     if (!json.table || !json.table.rows) return [];
     return json.table.rows.map((row: any) => {
       const r = row.c;
@@ -513,8 +630,7 @@ async function fetchBooks(): Promise<Book[]> {
       fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
-          const temp = text.substring(47).slice(0, -2);
-          const json = JSON.parse(temp);
+          const json = safeParseGvizJson(text);
           if (!json.table || !json.table.rows) return [];
           return json.table.rows.map((row: any) => {
             const c = row.c;
@@ -535,7 +651,12 @@ async function fetchBooks(): Promise<Book[]> {
         })
     );
     const allResults = await Promise.all(fetchPromises);
-    return allResults.flat();
+    const flatResults = allResults.flat();
+    return Array.from(new Map(
+      flatResults
+        .filter(b => b && b.id && b.id.trim() !== '')
+        .map(b => [b.id.trim(), b])
+    ).values());
   } catch (err) {
     console.error("Error fetching books:", err);
     return [];
@@ -549,23 +670,47 @@ async function fetchBookshelves(): Promise<Bookshelf[]> {
       fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BOOKS_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
         .then(res => res.text())
         .then(text => {
-          const temp = text.substring(47).slice(0, -2);
-          const json = JSON.parse(temp);
+          const json = safeParseGvizJson(text);
           if (!json.table || !json.table.rows) return [];
           return json.table.rows.map((row: any) => {
             const c = row.c;
             if (!c || !c[1]?.v) return null;
+            const mapLocation = String(c[3]?.v || '').trim();
+            let lat: number | undefined;
+            let lng: number | undefined;
+
+            // Try to parse coordinates from "lat, lng" or a URL
+            if (mapLocation.includes(',')) {
+              const parts = mapLocation.split(',').map(p => p.trim());
+              const possibleLat = parseFloat(parts[0]);
+              const possibleLng = parseFloat(parts[1]);
+              if (!isNaN(possibleLat) && !isNaN(possibleLng)) {
+                lat = possibleLat;
+                lng = possibleLng;
+              }
+            } else if (mapLocation.includes('@')) {
+               // Try to extract from Google Maps URL: .../@23.8103,90.4125,...
+               const match = mapLocation.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+               if (match) {
+                 lat = parseFloat(match[1]);
+                 lng = parseFloat(match[2]);
+               }
+            }
+
             return {
               district: String(c[0]?.v || '').trim(),
               address: String(c[1]?.v || '').trim(),
               pinCode: String(c[2]?.v || '').trim(),
-              mapLocation: String(c[3]?.v || '').trim()
+              mapLocation,
+              lat,
+              lng
             };
           }).filter(Boolean);
         })
     );
     const allResults = await Promise.all(fetchPromises);
-    return allResults.flat() as Bookshelf[];
+    const flatResults = allResults.flat() as Bookshelf[];
+    return Array.from(new Map(flatResults.map(s => [s.address, s])).values());
   } catch (err) {
     console.error("Error fetching bookshelves:", err);
     return [];
@@ -580,7 +725,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<{ payment
       try {
         const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${MEMBER_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${s}&tq=${q}`);
         const text = await res.text();
-        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const json = safeParseGvizJson(text);
         return json.table.rows.map((r: any) => ({
           amount: r.c[2]?.v || 0,
           reason: r.c[3]?.v || '',
@@ -596,7 +741,7 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<{ payment
       try {
         const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${NEW_PAYMENT_DATA_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s)}&tq=${q}`);
         const text = await res.text();
-        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const json = safeParseGvizJson(text);
         if (!json.table || !json.table.rows) return [];
         
         const payments: Payment[] = [];
@@ -677,40 +822,47 @@ async function fetchPaymentHistory(id: string, phone: string): Promise<{ payment
 
 async function fetchAllDonors(): Promise<Donor[]> {
   try {
-    const fetchPromises = BLOOD_SHEETS.map(name =>
-      fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`)
-        .then(res => res.text())
-        .then(text => {
-          const temp = text.substring(47).slice(0, -2);
-          const json = JSON.parse(temp);
-          if (!json.table || !json.table.rows) return [];
-          return json.table.rows.map((row: any) => {
-            const c = row.c;
-            if (!c) return null;
-            const group = String(c[0]?.v || '').trim();
-            const name = String(c[1]?.v || '').trim();
-            const district = String(c[2]?.v || '').trim();
-            const thana = String(c[3]?.v || '').trim();
-            const phone = String(c[4]?.v || '').trim();
+    const fetchPromises = BLOOD_SHEETS.map(async (name) => {
+      try {
+        const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${BLOOD_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(name)}`);
+        const text = await res.text();
+        const json = safeParseGvizJson(text);
+        if (!json.table || !json.table.rows) return [];
+        return json.table.rows.map((row: any) => {
+          const c = row.c;
+          if (!c) return null;
+          const group = String(c[0]?.v || '').trim();
+          const name = String(c[1]?.v || '').trim();
+          const district = String(c[2]?.v || '').trim();
+          const thana = String(c[3]?.v || '').trim();
+          const phone = String(c[4]?.v || '').trim();
 
-            // Skip header rows or empty rows
-            if (!group || !name || !phone || 
-                group.toLowerCase().includes('group') || 
-                name.toLowerCase().includes('name') ||
-                district.toLowerCase() === 'district' ||
-                thana.toLowerCase() === 'thana'
-            ) return null;
+          // Skip header rows or empty rows
+          if (!group || !name || !phone || 
+              group.toLowerCase().includes('group') || 
+              name.toLowerCase().includes('name') ||
+              district.toLowerCase() === 'district' ||
+              thana.toLowerCase() === 'thana'
+          ) return null;
 
-            // Normalize: Trim and Capitalize first letter for consistency (Data Validation)
-            const cleanDistrict = district.charAt(0).toUpperCase() + district.slice(1);
-            const cleanThana = thana.charAt(0).toUpperCase() + thana.slice(1);
+          // Normalize: Trim and Capitalize first letter for consistency (Data Validation)
+          const cleanDistrict = district.charAt(0).toUpperCase() + district.slice(1);
+          const cleanThana = thana.charAt(0).toUpperCase() + thana.slice(1);
 
-            return { group, name, district: cleanDistrict, thana: cleanThana, phone };
-          }).filter(Boolean);
-        })
-    );
+          return { group, name, district: cleanDistrict, thana: cleanThana, phone };
+        }).filter(Boolean);
+      } catch (e) {
+        console.warn(`Error fetching donor sheet "${name}":`, e);
+        return [];
+      }
+    });
     const allResults = await Promise.all(fetchPromises);
-    const uniqueDonors = Array.from(new Map(allResults.flat().map(item => [item.phone, item])).values());
+    const flatResults = allResults.flat();
+    const uniqueDonors = Array.from(new Map(
+      flatResults
+        .filter(item => item && item.phone && item.phone.trim() !== '')
+        .map(item => [item.phone.trim(), item])
+    ).values());
     return uniqueDonors;
   } catch (err) {
     console.error("Error fetching donors:", err);
@@ -737,7 +889,7 @@ async function searchMembers(phone: string): Promise<Member[]> {
       try {
         const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}&tq=${q}`);
         const text = await res.text();
-        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const json = safeParseGvizJson(text);
         if (!json.table || !json.table.rows) return [];
         return json.table.rows.map((row: any) => {
           const d = row.c;
@@ -790,7 +942,11 @@ async function searchMembers(phone: string): Promise<Member[]> {
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat();
     // Remove duplicates by ID
-    return Array.from(new Map(flatResults.map(m => [m.id, m])).values());
+    return Array.from(new Map(
+      flatResults
+        .filter(m => m && m.id && m.id.trim() !== '')
+        .map(m => [m.id.trim(), m])
+    ).values());
   } catch (e) {
     console.error("Error searching members:", e);
     return [];
@@ -814,7 +970,7 @@ async function fetchAllMembers(): Promise<Member[]> {
       try {
         const res = await fetchWithRetry(`https://docs.google.com/spreadsheets/d/${s.id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(s.name)}`);
         const text = await res.text();
-        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const json = safeParseGvizJson(text);
         if (!json.table || !json.table.rows) return [];
         return json.table.rows.map((row: any) => {
           const r = row.c;
@@ -866,7 +1022,11 @@ async function fetchAllMembers(): Promise<Member[]> {
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat();
     // Remove duplicates by ID
-    return Array.from(new Map(flatResults.map(m => [m.id, m])).values());
+    return Array.from(new Map(
+      flatResults
+        .filter(m => m && m.id && m.id.trim() !== '')
+        .map(m => [m.id.trim(), m])
+    ).values());
   } catch (e) {
     console.error("Error fetching all members:", e);
     return [];
@@ -879,7 +1039,7 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
       fetchWithRetry(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
-          const json = JSON.parse(text.substring(47).slice(0, -2));
+          const json = safeParseGvizJson(text);
           if (!json.table || !json.table.rows) return [];
           return json.table.rows.map((row: any) => {
             const r = row.c;
@@ -899,7 +1059,8 @@ async function fetchDonationProjects(): Promise<DonationProject[]> {
     );
     const allResults = await Promise.all(fetchPromises);
     const flatResults = allResults.flat() as DonationProject[];
-    return flatResults.sort((a, b) => {
+    // Unique by name
+    return Array.from(new Map(flatResults.map(p => [p.name, p])).values()).sort((a, b) => {
       const aActive = a.status.toLowerCase() === 'active';
       const bActive = b.status.toLowerCase() === 'active';
       if (aActive && !bActive) return -1;
@@ -918,7 +1079,7 @@ async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
       fetchWithRetry(`https://docs.google.com/spreadsheets/d/${DONATION_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`)
         .then(res => res.text())
         .then(text => {
-          const json = JSON.parse(text.substring(47).slice(0, -2));
+          const json = safeParseGvizJson(text);
           if (!json.table || !json.table.rows) return [];
           return json.table.rows.map((row: any) => {
             const r = row.c;
@@ -935,7 +1096,9 @@ async function fetchDonationTransactions(): Promise<DonationTransaction[]> {
         })
     );
     const allResults = await Promise.all(fetchPromises);
-    return allResults.flat() as DonationTransaction[];
+    const flatResults = allResults.flat() as DonationTransaction[];
+    // Unique by combo of date, name, and amount
+    return Array.from(new Map(flatResults.map(t => [`${t.date}-${t.projectName}-${t.amount}-${t.donorName}`, t])).values());
   } catch (e) {
     console.error("Error fetching donation transactions:", e);
     return [];
@@ -1262,7 +1425,7 @@ const CreateBloodPostModal = ({
     setIsSubmitting(true);
     try {
       const postRef = doc(collection(db, 'blood_posts'));
-      await setDoc(postRef, {
+      const postData = {
         id: postRef.id,
         authorId: currentUser.id,
         authorName: currentUser.name,
@@ -1271,7 +1434,16 @@ const CreateBloodPostModal = ({
         ...formData,
         status: 'pending',
         createdAt: serverTimestamp()
-      });
+      };
+      await setDoc(postRef, postData);
+      
+      // Trigger Broadcast Notification for new blood post
+      await sendOneSignalNotification(
+        'all',
+        `রক্তের অনুরোধ: ${formData.bloodGroup}`,
+        `${currentUser.area} এলাকায় ${formData.bloodGroup} রক্ত প্রয়োজন।`
+      );
+
       alert("রক্তের অনুরোধটি সফলভাবে পোস্ট করা হয়েছে।");
       onClose();
     } catch (error) {
@@ -1932,13 +2104,25 @@ function CloudPinPage({
         status: 'approved'
       });
 
-      // 2. Revoke all existing sessions for this user
-      const q = query(collection(db, 'sessions'), where('userId', '==', request.userId), where('status', '==', 'active'));
-      const snapshot = await getDocs(q);
-      const revokePromises = snapshot.docs.map(sessionDoc => 
-        updateDoc(doc(db, 'sessions', sessionDoc.id), { status: 'revoked' })
-      );
-      await Promise.all(revokePromises);
+      // 2. Revoke all existing sessions for this user ONLY IF multi-device login protection is enabled
+      let multiDeviceEnabled = false;
+      try {
+        const privacyDoc = await getDoc(doc(db, 'user_privacy_settings', request.userId));
+        if (privacyDoc.exists()) {
+          multiDeviceEnabled = privacyDoc.data().multiDeviceLoginEnabled;
+        }
+      } catch (err) {
+        console.error("Error fetching privacy settings during approval:", err);
+      }
+
+      if (multiDeviceEnabled) {
+        const q = query(collection(db, 'sessions'), where('userId', '==', request.userId), where('status', '==', 'active'));
+        const snapshot = await getDocs(q);
+        const revokePromises = snapshot.docs.map(sessionDoc => 
+          updateDoc(doc(db, 'sessions', sessionDoc.id), { status: 'revoked' })
+        );
+        await Promise.all(revokePromises);
+      }
       
       // 3. Remove the request after approval
       await deleteDoc(doc(db, 'login_requests', request.id));
@@ -2806,58 +2990,215 @@ export default function App() {
 function BookshelfPage({ 
   onClose, 
   isDarkMode, 
-  bookshelves 
+  bookshelves,
+  currentUser
 }: { 
   onClose: () => void, 
   isDarkMode: boolean, 
-  bookshelves: Bookshelf[] 
+  bookshelves: Bookshelf[],
+  currentUser: Member | null
 }) {
+  const [selectedShelf, setSelectedShelf] = useState<Bookshelf | null>(null);
+  const [shelfClicks, setShelfClicks] = useState<any[]>([]);
+  const mapCenter: [number, number] = [23.8103, 90.4125]; 
+  
+  const shelfIcon = L.divIcon({
+    html: `<div class="bg-emerald-500 text-white w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-xl hover:scale-110 active:scale-95 transition-all cursor-pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+    </div>`,
+    className: '',
+    iconSize: [40, 40],
+    iconAnchor: [20, 40],
+  });
+
+  const handleMarkerClick = async (shelf: Bookshelf) => {
+    setSelectedShelf(shelf);
+    if (currentUser) {
+      try {
+        const clickId = `click_${shelf.address.replace(/[^a-zA-Z0-9]/g, '_')}_${currentUser.id}_${Date.now()}`;
+        await setDoc(doc(db, 'bookshelf_clicks', clickId), {
+          shelfAddress: shelf.address,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userAddress: currentUser.area,
+          timestamp: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Error recording click:", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedShelf) {
+      setShelfClicks([]);
+      return;
+    }
+    
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const q = query(
+      collection(db, 'bookshelf_clicks'),
+      where('shelfAddress', '==', selectedShelf.address),
+      where('timestamp', '>=', fortyEightHoursAgo)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const clicksData = snapshot.docs.map(doc => doc.data());
+      // Sort by latest
+      const sorted = clicksData.sort((a, b) => {
+        const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+        const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+        return tB - tA;
+      });
+      // De-duplicate by user ID to show who visited, but keep latest
+      const unique = Array.from(new Map(sorted.map(c => [c.userId, c])).values());
+      setShelfClicks(unique);
+    });
+    
+    return () => unsubscribe();
+  }, [selectedShelf]);
+
+  const tileLayerUrl = isDarkMode 
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  const mapBookshelves = bookshelves.filter(s => s.lat !== undefined && s.lng !== undefined);
+
   return (
     <OverlayPage title="Find Bookshelf" onClose={onClose} isDarkMode={isDarkMode}>
-      <div className="space-y-4">
-        {bookshelves.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 opacity-50">
-            <MapPin className="w-12 h-12 mb-2" />
-            <p>কোনো বুকশেলফ পাওয়া যায়নি</p>
-          </div>
-        ) : (
-          bookshelves.map((shelf, idx) => (
-            <motion.div 
-              key={`shelf-item-${idx}-${shelf.address}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className={cn(
-                "p-5 rounded-2xl border-2 transition-all",
-                "bg-[#FFFFFF00] border-emerald-500/50 hover:border-emerald-500"
-              )}
-            >
-              <div className="flex justify-between items-start gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-                      <MapPin className="w-5 h-5 text-emerald-500" />
+      <div className="h-[calc(100dvh-120px)] w-full rounded-3xl overflow-hidden relative shadow-inner">
+        <MapContainer 
+          center={mapCenter} 
+          zoom={8} 
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url={tileLayerUrl}
+          />
+          {mapBookshelves.map((shelf, idx) => (
+            <Marker 
+              key={`shelf-marker-${idx}-${shelf.address}`} 
+              position={[shelf.lat!, shelf.lng!]} 
+              icon={shelfIcon}
+              eventHandlers={{
+                click: () => handleMarkerClick(shelf)
+              }}
+            />
+          ))}
+        </MapContainer>
+
+        <AnimatePresence>
+          {selectedShelf && (
+            <>
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedShelf(null)}
+                className="absolute inset-0 bg-black/40 z-[1100] backdrop-blur-[2px]"
+              />
+              <motion.div 
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className={cn(
+                  "absolute bottom-0 left-0 right-0 z-[1200] rounded-t-[40px] p-6 pb-12 shadow-2xl border-t",
+                  isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-100"
+                )}
+              >
+                <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6" />
+                
+                <div className="flex justify-between items-start mb-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-emerald-500">
+                      <MapPin className="w-5 h-5" />
+                      <h3 className="text-xl font-black uppercase tracking-tight">{selectedShelf.district}</h3>
                     </div>
-                    <h3 className="font-bold text-emerald-500 text-lg">{shelf.district}</h3>
+                    <p className="text-sm opacity-60 leading-relaxed max-w-[250px]">{selectedShelf.address}</p>
+                    <p className="text-[10px] font-bold opacity-40">PIN Code: {selectedShelf.pinCode}</p>
                   </div>
-                  <p className="text-emerald-600/80 text-sm mb-1 leading-relaxed">
-                    <span className="font-bold">Address:</span> {shelf.address}
-                  </p>
-                  <p className="text-emerald-600/80 text-sm">
-                    <span className="font-bold">PIN Code:</span> {shelf.pinCode}
-                  </p>
+                  <a 
+                    href={selectedShelf.mapLocation} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
+                  >
+                    <ExternalLink className="w-6 h-6" />
+                  </a>
                 </div>
-                <a 
-                  href={shelf.mapLocation} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-2"
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold opacity-50 uppercase tracking-widest flex items-center gap-2">
+                       <Users className="w-3 h-3" /> আজ যারা ক্লিক করেছে
+                    </h4>
+                    <span className="text-[10px] font-bold py-1 px-2 bg-emerald-500/10 text-emerald-500 rounded-full">
+                      {shelfClicks.length} visitors
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2 max-h-[250px] overflow-y-auto pr-1">
+                    {shelfClicks.length === 0 ? (
+                      <div className="py-6 text-center opacity-30 text-[10px] italic">এখনও কেউ ক্লিক করেনি</div>
+                    ) : (
+                      shelfClicks.map((click, i) => (
+                        <div 
+                          key={`click-${i}-${click.userId}`}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-2xl border",
+                            isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100"
+                          )}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold truncate">{click.userName}</p>
+                            <p className="text-[9px] opacity-50 truncate">{click.userId} • {click.userAddress}</p>
+                          </div>
+                          <span className="text-[8px] opacity-40 font-bold whitespace-nowrap">
+                            {click.timestamp?.toMillis ? new Date(click.timestamp.toMillis()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now'}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setSelectedShelf(null)}
+                  className="w-full mt-8 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
                 >
-                  Go
-                </a>
+                  Close
+                </button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+        
+        {/* Map Information Panel (Visible when no shelf selected) */}
+        {!selectedShelf && (
+          <div className={cn(
+            "absolute bottom-4 left-4 right-4 p-4 rounded-3xl shadow-2xl z-[1000] border backdrop-blur-md flex items-center justify-between",
+            isDarkMode ? "bg-slate-900/80 border-slate-700 text-white" : "bg-white/80 border-slate-100 text-slate-800"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                <MapIcon className="w-5 h-5" />
               </div>
-            </motion.div>
-          ))
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-tight">বুকশেলফ ম্যাপ</h4>
+                <p className="text-[10px] opacity-60">সবুজ পিনগুলোতে ক্লিক করে তথ্য দেখুন</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black text-emerald-500 leading-none">{mapBookshelves.length}</p>
+              <p className="text-[8px] opacity-40 uppercase font-black">Locations</p>
+            </div>
+          </div>
         )}
       </div>
     </OverlayPage>
@@ -3016,6 +3357,9 @@ const SplashScreen = React.memo(({ greetingsData, isDarkMode }: { greetingsData:
 function AppContent() {
   const [activeTab, setActiveTab] = useState<'home' | 'books' | 'members' | 'blood' | 'profile'>('home');
 
+  const [userPrivacy, setUserPrivacy] = useState<UserPrivacySettings | null>(null);
+  const [showPrivacyConfirm, setShowPrivacyConfirm] = useState(false);
+  const [isPrivacyUpdating, setIsPrivacyUpdating] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     const saved = localStorage.getItem('seba_theme');
     return (saved as 'light' | 'dark' | 'system') || 'system';
@@ -3229,11 +3573,12 @@ function AppContent() {
     if (!isAdmin(currentUser) || !showTrackingMap) return;
 
     const unsubscribe = onSnapshot(collection(db, 'user_locations'), (snapshot) => {
-      const locations: UserLocation[] = [];
+      const locationsMap = new Map<string, UserLocation>();
       snapshot.forEach(doc => {
-        locations.push(doc.data() as UserLocation);
+        const data = doc.data() as UserLocation;
+        locationsMap.set(data.userId, data);
       });
-      setUserLocations(locations);
+      setUserLocations(Array.from(locationsMap.values()));
     });
 
     return () => unsubscribe();
@@ -3278,6 +3623,42 @@ function AppContent() {
   const [showDonationProjectsPage, setShowDonationProjectsPage] = useState(false);
   const [selectedDonationProject, setSelectedDonationProject] = useState<DonationProject | null>(null);
   const [showDonatePopup, setShowDonatePopup] = useState(false);
+
+  const onesignalInitRef = useRef(false);
+
+  // OneSignal Initialization
+  useEffect(() => {
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    if (appId && !onesignalInitRef.current) {
+      onesignalInitRef.current = true;
+      OneSignal.init({
+        appId: appId,
+        allowLocalhostAsSecureOrigin: true,
+      }).catch(err => {
+        // Suppress "Can only be used on" error logs if it's expected mismatch
+        if (err?.message?.includes("Can only be used on")) {
+           console.debug("OneSignal Domain Mismatch (Expected if not on Vercel):", err.message);
+        } else if (err?.message?.includes("already initialized")) {
+           // Ignore
+        } else {
+           console.error("OneSignal Init Error:", err);
+        }
+      });
+    }
+  }, []);
+
+  // OneSignal Login/Logout
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        OneSignal.login(currentUser.id).catch(() => {});
+      } catch (e) {}
+    } else {
+      try {
+        OneSignal.logout().catch(() => {});
+      } catch (e) {}
+    }
+  }, [currentUser]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showDatabasePage, setShowDatabasePage] = useState(false);
@@ -3647,56 +4028,6 @@ function AppContent() {
     }
   }, [showLoginError]);
 
-  const sendOneSignalNotification = async (userId: string, title: string, message: string) => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-    const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY;
-
-    if (!appId || !apiKey) {
-      console.warn("OneSignal App ID or API Key missing. Skipping push notification.");
-      return;
-    }
-
-    try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": `Basic ${apiKey}`
-        },
-        body: JSON.stringify({
-          app_id: appId,
-          include_external_user_ids: [userId],
-          headings: { en: title },
-          contents: { en: message },
-          android_channel_id: "push-notification-channel-id" // Optional: customize channel
-        })
-      });
-    } catch (error) {
-      console.error("Error sending OneSignal notification:", error);
-    }
-  };
-
-  const sendRealTimeNotification = async (userId: string, title: string, message: string, type: RealTimeNotification['type']) => {
-    const id = `${userId}_${Date.now()}`;
-    const notification: RealTimeNotification = {
-      id,
-      userId,
-      title,
-      message,
-      type,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    };
-
-    try {
-      await setDoc(doc(db, 'notifications', id), notification);
-      // Also send via OneSignal
-      await sendOneSignalNotification(userId, title, message);
-    } catch (error) {
-      console.error("Error sending real-time notification:", error);
-    }
-  };
-
   const markNotificationAsRead = async (notificationId: string) => {
     try {
       await updateDoc(doc(db, 'notifications', notificationId), { isRead: true });
@@ -3720,43 +4051,53 @@ function AppContent() {
       return;
     }
     
-    const requestId = `${currentUser.id}_${selectedBook.id}_${Date.now()}`;
+    const requestId = `${currentUser.id}_${selectedBook.id || 'no_id'}_${Date.now()}`;
     const requestData: BookRequest = {
       id: requestId,
-      bookId: selectedBook.id,
-      bookName: selectedBook.name,
-      bookAuthor: selectedBook.author,
-      requesterId: currentUser.id,
-      requesterName: currentUser.name,
-      requesterAddress: borrowFormData.address,
+      bookId: selectedBook.id || '',
+      bookName: selectedBook.name || '',
+      bookAuthor: selectedBook.author || '',
+      requesterId: currentUser.id || '',
+      requesterName: currentUser.name || '',
+      requesterAddress: borrowFormData.address || '',
       requestDate: new Date().toISOString(),
       status: 'pending',
-      isOnline: selectedBook.isOnline,
-      link: selectedBook.link
+      isOnline: selectedBook.isOnline || false,
+      link: selectedBook.link || ''
     };
 
     try {
       await setDoc(doc(db, 'bookRequests', requestId), requestData);
       
-      // Notify Admins
-      const admins = allMembers.filter(m => m.access === 'Admin' || m.designation === 'Developer');
-      for (const admin of admins) {
-        await sendRealTimeNotification(
-          admin.id,
-          'নতুন বইয়ের অনুরোধ',
-          `${currentUser.name} '${selectedBook.name}' বইটি সংগ্রহের জন্য অনুরোধ করেছেন।`,
-          'book_request'
-        );
-      }
+      // Notify Admins in background
+      (async () => {
+        try {
+          const admins = allMembers.filter(m => m.access === 'Admin' || m.designation === 'Developer');
+          for (const admin of admins) {
+            await sendRealTimeNotification(
+              admin.id,
+              'নতুন বইয়ের অনুরোধ',
+              `${currentUser.name} '${selectedBook.name}' বইটি সংগ্রহের জন্য অনুরোধ করেছেন।`,
+              'book_request'
+            );
+          }
+        } catch (e) {
+          console.error("Error sending admin notifications:", e);
+        }
+      })();
 
       setIsRequestSent(true);
       
       setTimeout(() => {
+        setIsMenuOpen(false);
         setShowBorrowForm(false);
         setIsRequestSent(false);
+        setSelectedBook(null);
+        window.history.back(); // Close form
       }, 1500);
     } catch (error) {
       console.error("Error sending borrow request:", error);
+      handleFirestoreError(error, OperationType.CREATE, 'bookRequests');
       alert('অনুরোধ পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     }
   };
@@ -4051,6 +4392,24 @@ function AppContent() {
     });
   };
 
+  const toggleMultiDeviceLogin = async (enable: boolean) => {
+    if (!currentUser) return;
+    setIsPrivacyUpdating(true);
+    try {
+      await setDoc(doc(db, 'user_privacy_settings', currentUser.id), {
+        userId: currentUser.id,
+        multiDeviceLoginEnabled: enable,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error updating privacy settings:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `user_privacy_settings/${currentUser.id}`);
+    } finally {
+      setIsPrivacyUpdating(false);
+      setShowPrivacyConfirm(false);
+    }
+  };
+
   useEffect(() => {
     loadInitialData();
 
@@ -4186,6 +4545,28 @@ function AppContent() {
         handleFirestoreError(error, OperationType.GET, `publicDonors/${currentUser.id}`);
       });
       return () => unsubscribe();
+    }
+  }, [currentUser, isAuthReady]);
+
+  // User Privacy Settings Sync
+  useEffect(() => {
+    if (currentUser && isAuthReady) {
+      const unsubscribe = onSnapshot(doc(db, 'user_privacy_settings', currentUser.id), (docSnap) => {
+        if (docSnap.exists()) {
+          setUserPrivacy(docSnap.data() as UserPrivacySettings);
+        } else {
+          // Default to disabled per request (optional login privacy)
+          setUserPrivacy({
+            userId: currentUser.id,
+            multiDeviceLoginEnabled: false
+          });
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `user_privacy_settings/${currentUser.id}`);
+      });
+      return () => unsubscribe();
+    } else {
+      setUserPrivacy(null);
     }
   }, [currentUser, isAuthReady]);
 
@@ -4357,6 +4738,14 @@ function AppContent() {
         acceptorAddress: currentUser.area || '',
         acceptorPhone: currentUser.phone || ''
       });
+
+      // Notify the author that their request has been accepted
+      await sendOneSignalNotification(
+        post.authorId,
+        'অনুরোধ গৃহীত হয়েছে',
+        `${currentUser.name} আপনার ${post.bloodGroup} রক্তের অনুরোধটি গ্রহণ করেছেন।`
+      );
+
       alert("আপনি সফলভাবে রক্তদানের অনুরোধটি গ্রহণ করেছেন।");
     } catch (error) {
       console.error("Error accepting blood post:", error);
@@ -4449,6 +4838,14 @@ function AppContent() {
 
     try {
       await setDoc(doc(db, 'global_notices', id), noticeData);
+      
+      // Trigger Broadcast Notification for global notice
+      await sendOneSignalNotification(
+        'all',
+        noticeData.title,
+        noticeData.message
+      );
+
       setNewNoticeTitle('');
       setNewNoticeMessage('');
       setActiveGlobalNoticeTab('history');
@@ -4707,22 +5104,35 @@ function AppContent() {
     setIsGlobalLoading(true);
     const member = await loginMember(id, phone);
     if (member) {
-      // Check for active sessions
+      // Check for user-specific privacy settings
+      let multiDeviceEnabled = false;
       try {
-        const q = query(collection(db, 'sessions'), where('userId', '==', member.id), where('status', '==', 'active'));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          // Already logged in elsewhere
-          const activeSess = querySnapshot.docs[0].data();
-          setActiveSessionInfo(activeSess);
-          setShowMultiDeviceError(true);
-          setIsGlobalLoading(false);
-          setPendingLoginMember(member);
-          return;
+        const privacyDoc = await getDoc(doc(db, 'user_privacy_settings', member.id));
+        if (privacyDoc.exists()) {
+          multiDeviceEnabled = privacyDoc.data().multiDeviceLoginEnabled;
         }
       } catch (err) {
-        console.error("Error checking sessions:", err);
+        console.error("Error fetching privacy settings during login:", err);
+      }
+
+      // Check for active sessions ONLY if multi-device protection is enabled
+      if (multiDeviceEnabled) {
+        try {
+          const q = query(collection(db, 'sessions'), where('userId', '==', member.id), where('status', '==', 'active'));
+          const querySnapshot = await getDocs(q);
+          
+          if (!querySnapshot.empty) {
+            // Already logged in elsewhere
+            const activeSess = querySnapshot.docs[0].data();
+            setActiveSessionInfo(activeSess);
+            setShowMultiDeviceError(true);
+            setIsGlobalLoading(false);
+            setPendingLoginMember(member);
+            return;
+          }
+        } catch (err) {
+          console.error("Error checking sessions:", err);
+        }
       }
 
       // Check for Cloud PIN
@@ -7593,6 +8003,30 @@ function AppContent() {
                 isDarkMode={isDarkMode}
               />
               <ProfileMenuLink 
+                icon={<Smartphone className={cn("w-5 h-5", userPrivacy?.multiDeviceLoginEnabled ? "text-emerald-500" : "text-slate-400")} />} 
+                label="Multi Device Login" 
+                onClick={() => {
+                  if (!userPrivacy?.multiDeviceLoginEnabled) {
+                    setShowPrivacyConfirm(true);
+                  } else {
+                    toggleMultiDeviceLogin(false);
+                  }
+                }} 
+                isDarkMode={isDarkMode}
+                rightElement={
+                  <div className={cn("w-14 h-6 rounded-full relative transition-colors p-1 flex items-center", userPrivacy?.multiDeviceLoginEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700")}>
+                    <motion.div 
+                      animate={{ 
+                        x: userPrivacy?.multiDeviceLoginEnabled ? 32 : 0,
+                      }}
+                      className="w-4 h-4 bg-white rounded-full shadow-sm flex items-center justify-center font-bold text-[8px]"
+                    >
+                      {isPrivacyUpdating && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
+                    </motion.div>
+                  </div>
+                }
+              />
+              <ProfileMenuLink 
                 icon={theme === 'system' ? <Settings2 className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />} 
                 label={theme === 'system' ? "Mode: Auto" : theme === 'dark' ? "Mode: Dark" : "Mode: Light"} 
                 onClick={toggleTheme} 
@@ -7662,6 +8096,50 @@ function AppContent() {
               onClose={() => window.history.back()} 
               isDarkMode={isDarkMode} 
             />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showPrivacyConfirm && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={cn(
+                  "w-full max-w-sm rounded-3xl p-6 space-y-4",
+                  isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-white"
+                )}
+              >
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-500 mx-auto">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-lg font-black italic">সতর্ক বার্তা!</h3>
+                  <p className="text-xs opacity-70 leading-relaxed Bengali">
+                    এটি চালু করলে কেউ আপনার আইডিতে লগইন করতে পারবে না। অতি প্রয়োজন না হলে এটি চালু করবেন না। এটির বিপরীতে আপনি পিন সেট করতে পারেন।
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => toggleMultiDeviceLogin(true)}
+                    disabled={isPrivacyUpdating}
+                    className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isPrivacyUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'চালু করুন'}
+                  </button>
+                  <button 
+                    onClick={() => setShowPrivacyConfirm(false)}
+                    disabled={isPrivacyUpdating}
+                    className={cn(
+                      "flex-1 py-3 rounded-xl text-sm font-bold active:scale-95 transition-all text-center",
+                      isDarkMode ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
@@ -10211,6 +10689,7 @@ function AppContent() {
             onClose={() => window.history.back()} 
             isDarkMode={isDarkMode} 
             bookshelves={bookshelves} 
+            currentUser={currentUser}
           />
         )}
       </AnimatePresence>

@@ -117,5 +117,17 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
     }
+
+    // User Privacy Settings Collection
+    match /user_privacy_settings/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Bookshelf Clicks Collection
+    match /bookshelf_clicks/{clickId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+    }
   }
 }
