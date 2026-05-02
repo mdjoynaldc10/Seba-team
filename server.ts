@@ -6,6 +6,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 import multer from "multer";
+import { initializeApp, cert, getApp, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 dotenv.config();
 
@@ -17,6 +19,76 @@ const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Firebase Admin Setup
+const firebaseApp = (getApps().length === 0) ? initializeApp({
+  credential: cert({
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  })
+}) : getApp();
+
+const db = getFirestore(firebaseApp);
+
+// Listen for push notifications in the queue
+db.collection("push_notifications_queue")
+  .where("status", "==", "pending")
+  .onSnapshot(snapshot => {
+    snapshot.docChanges().forEach(async change => {
+      if (change.type === "added") {
+        const data = change.doc.data();
+        const docId = change.doc.id;
+        
+        console.log(`Processing notification relay: ${docId}`);
+        
+        const appId = process.env.VITE_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
+        const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
+
+        if (!appId || !apiKey) {
+          console.error("OneSignal config missing for relay (AppID/APIKey)");
+          await change.doc.ref.update({ status: "failed", error: "Missing configuration on server" });
+          return;
+        }
+
+        try {
+          const body: any = {
+            app_id: appId,
+            headings: { en: data.title },
+            contents: { en: data.message },
+            chrome_web_icon: "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj",
+          };
+
+          if (data.targetId === "all") {
+            body.included_segments = ["All"];
+          } else {
+            body.include_external_user_ids = [data.targetId];
+          }
+
+          const response = await fetch("https://onesignal.com/api/v1/notifications", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Authorization": `Basic ${apiKey}`
+            },
+            body: JSON.stringify(body)
+          });
+
+          const result = await response.json();
+          console.log(`Relay response for ${docId}:`, result);
+          
+          await change.doc.ref.update({ 
+            status: "sent", 
+            processedAt: new Date().toISOString(),
+            onesignalResponse: result 
+          });
+        } catch (error: any) {
+          console.error(`Relay error for ${docId}:`, error);
+          await change.doc.ref.update({ status: "failed", error: error.message });
+        }
+      }
+    });
+  });
 
 // Google Sheets Setup
 const auth = new google.auth.GoogleAuth({
@@ -256,8 +328,8 @@ app.post("/api/delete-account", async (req, res) => {
 });
 
 app.post("/api/onesignal", async (req, res) => {
-  const appId = process.env.VITE_ONESIGNAL_APP_ID;
-  const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY;
+  const appId = process.env.VITE_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
 
   if (!appId || !apiKey) {
     return res.status(400).json({ error: "OneSignal configuration missing on server" });
