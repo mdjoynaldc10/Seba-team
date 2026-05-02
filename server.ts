@@ -85,6 +85,32 @@ async function findEmptyRow() {
 }
 
 // API Routes
+app.post("/api/onesignal", async (req, res) => {
+  const { appId, apiKey, body } = req.body;
+  const finalAppId = appId || process.env.VITE_ONESIGNAL_APP_ID || "d3869272-3f12-4299-873d-82d22cc72023";
+  const finalApiKey = apiKey || process.env.VITE_ONESIGNAL_REST_API_KEY || "NDYxMjkzYWYtMTRjNS00YjNiLTg2NzEtZDBmZmQ3MmQ0ZGIz";
+
+  try {
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${finalApiKey}`
+      },
+      body: JSON.stringify({
+        ...body,
+        app_id: finalAppId
+      })
+    });
+    
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error("OneSignal Proxy error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/proxy", async (req, res) => {
   const { url } = req.query;
   if (!url || typeof url !== "string") {
@@ -280,4 +306,13 @@ async function startServer() {
   });
 }
 
-startServer();
+// Export for Vercel
+export default app;
+
+if (process.env.NODE_ENV !== "production") {
+  startServer();
+} else {
+  // In some environments, we might still want to start the server manually
+  // but Vercel will use the exported app.
+  startServer();
+}

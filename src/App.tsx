@@ -345,8 +345,7 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
   }
 
   try {
-    const body: any = {
-      app_id: appId,
+    const notificationBody: any = {
       headings: { en: title },
       contents: { en: message },
       chrome_web_icon: appLogo,
@@ -357,18 +356,22 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
     };
 
     if (targetId === 'all') {
-      body.included_segments = ["Total Subscriptions"];
+      notificationBody.included_segments = ["Total Subscriptions"];
     } else {
-      body.include_external_user_ids = [targetId];
+      notificationBody.include_external_user_ids = [targetId];
     }
 
-    await fetch("https://onesignal.com/api/v1/notifications", {
+    // Call our own server proxy instead of OneSignal directly to avoid CORS issues on Vercel
+    await fetch("/api/onesignal", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Authorization": `Basic ${apiKey}`
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        appId: appId,
+        apiKey: apiKey,
+        body: notificationBody
+      })
     });
   } catch (error) {
     console.error("Error sending OneSignal notification:", error);
