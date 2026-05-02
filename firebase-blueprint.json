@@ -245,27 +245,9 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "userName", "latitude", "longitude", "updatedAt"]
-    },
-    "push_notifications_queue": {
-      "title": "Push Notification Queue",
-      "description": "Queue for notifications to be sent via OneSignal backend",
-      "type": "object",
-      "properties": {
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "targetId": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "sent", "failed"] },
-        "error": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["title", "message", "targetId", "status", "createdAt"]
     }
   },
   "firestore": {
-    "/push_notifications_queue/{notificationId}": {
-      "schema": "push_notifications_queue",
-      "description": "Relay queue for OneSignal notifications"
-    },
     "/user_locations/{userId}": {
       "schema": "user_locations",
       "description": "Real-time locations of users updated every minute"

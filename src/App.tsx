@@ -83,7 +83,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { GoogleGenAI } from "@google/genai";
 import { db, auth, storage } from './firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy, deleteField, addDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, getDoc, updateDoc, orderBy, deleteField } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { BD_DATA } from './constants/bdData';
@@ -324,33 +324,43 @@ const isDeveloper = (member: Member | null) => {
 };
 
 const sendOneSignalNotification = async (targetId: string | 'all', title: string, message: string) => {
+  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+  const appLogo = "https://lh3.googleusercontent.com/d/1aARAJB-W7yKVIH4Aj-QBOG6lSryLFfUj";
+
+  if (!appId) {
+    console.warn("OneSignal App ID missing. Skipping push notification.");
+    return;
+  }
+
   try {
-    const queueRef = collection(db, 'push_notifications_queue');
-    await addDoc(queueRef, {
-      title,
-      message,
-      targetId,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    });
-    console.log("Notification added to Firestore queue for relaying.");
-  } catch (error) {
-    console.error("Error creating notification relay doc:", error);
-    // Fallback to direct backend API call if Firestore fails
-    try {
-      await fetch("/api/onesignal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          headings: { en: title },
-          contents: { en: message },
-          include_external_user_ids: targetId === 'all' ? undefined : [targetId],
-          included_segments: targetId === 'all' ? ["Total Subscriptions"] : undefined
-        })
-      });
-    } catch (e) {
-      console.error("Relay fallback also failed:", e);
+    const body: any = {
+      headings: { en: title },
+      contents: { en: message },
+      chrome_web_icon: appLogo,
+      chrome_web_image: appLogo,
+      android_accent_color: "FF10b981",
+      small_icon: appLogo,
+      large_icon: appLogo,
+    };
+
+    if (targetId === 'all') {
+      body.included_segments = ["Total Subscriptions"];
+    } else {
+      body.include_external_user_ids = [targetId];
     }
+
+    const response = await fetch("/api/onesignal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body)
+    });
+    
+    const data = await response.json();
+    console.log("OneSignal notification response:", data);
+  } catch (error) {
+    console.error("Error sending OneSignal notification via backend:", error);
   }
 };
 
