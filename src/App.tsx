@@ -349,7 +349,11 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
       body.include_external_user_ids = [targetId];
     }
 
-    const response = await fetch("/api/onesignal", {
+    const backendBaseUrl = window.location.hostname.includes('vercel.app') 
+      ? "https://ais-pre-s34y6u4k2ijbkncpakipbx-27628823743.europe-west2.run.app" 
+      : "";
+
+    const response = await fetch(`${backendBaseUrl}/api/onesignal`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
