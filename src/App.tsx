@@ -361,8 +361,13 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
       body: JSON.stringify(body)
     });
     
-    const data = await response.json();
-    console.log("OneSignal notification response:", data);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OneSignal Server Error:", errorData);
+    } else {
+      const data = await response.json();
+      console.log("OneSignal notification sent successfully:", data);
+    }
   } catch (error) {
     console.error("Error sending OneSignal notification via backend:", error);
   }
@@ -3638,6 +3643,11 @@ function AppContent() {
         oneSignalInitialized.current = true;
         console.log("OneSignal initialized successfully on:", window.location.origin);
         
+        // Show slidedown if not already subscribed
+        if (!OneSignal.Notifications.permission) {
+          OneSignal.Slidedown.prompt();
+        }
+
         // Use a small delay to ensure SDK internal state is fully ready
         setTimeout(() => {
           if (currentUser && typeof OneSignal.login === 'function') {
