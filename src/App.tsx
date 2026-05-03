@@ -351,7 +351,7 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
 
     const backendBaseUrl = window.location.hostname.includes('vercel.app') 
       ? "https://ais-pre-s34y6u4k2ijbkncpakipbx-27628823743.europe-west2.run.app" 
-      : "";
+      : (window.location.hostname.includes('localhost') ? 'http://localhost:3000' : '');
 
     const response = await fetch(`${backendBaseUrl}/api/onesignal`, {
       method: "POST",
@@ -3636,7 +3636,7 @@ function AppContent() {
         allowLocalhostAsSecureOrigin: true,
       }).then(() => {
         oneSignalInitialized.current = true;
-        console.log("OneSignal initialized successfully");
+        console.log("OneSignal initialized successfully on:", window.location.origin);
         
         // Use a small delay to ensure SDK internal state is fully ready
         setTimeout(() => {
@@ -3645,7 +3645,7 @@ function AppContent() {
               console.error("OneSignal Login Error (Initial):", err);
             });
           }
-        }, 1000);
+        }, 1500);
       }).catch(err => {
         const errMsg = err?.message || String(err);
         if (errMsg.includes('already initialized')) {
@@ -3654,6 +3654,8 @@ function AppContent() {
             OneSignal.login(currentUser.id).catch(() => {});
           }
         } else if (errMsg.includes('Can only be used on')) {
+          console.warn("OneSignal Domain Mismatch:", window.location.hostname, "does not match OneSignal Dashboard 'Site URL'.");
+          console.warn("Notifications may not work until the dashboard is updated.");
           oneSignalInitialized.current = true; 
         } else {
           console.error("OneSignal Init Error:", err);

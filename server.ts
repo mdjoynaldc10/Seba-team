@@ -15,7 +15,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://seba-team.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    /\.run\.app$/ // Allow all Cloud Run subdomains
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Google Sheets Setup
