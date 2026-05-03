@@ -2603,9 +2603,9 @@ function UserTrackingPage({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url={tileLayerUrl}
           />
-          {userLocations.map((loc) => (
+          {userLocations.map((loc, idx) => (
             <Marker 
-              key={loc.userId} 
+              key={`location-${loc.userId}-${idx}`} 
               position={[loc.latitude, loc.longitude]} 
               icon={customIcon(loc.userId)}
             >
@@ -3630,34 +3630,43 @@ function AppContent() {
   useEffect(() => {
     const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
     if (appId && !oneSignalInitialized.current) {
-      console.log("Initializing OneSignal for domain:", window.location.origin);
+      console.log("Initializing OneSignal...");
       OneSignal.init({
         appId: appId,
         allowLocalhostAsSecureOrigin: true,
       }).then(() => {
         oneSignalInitialized.current = true;
-        
-        // Check session and login
-        if (currentUser) {
-          OneSignal.login(currentUser.id);
-        }
-
         console.log("OneSignal initialized successfully");
+        
+        // Use a small delay to ensure SDK internal state is fully ready
+        setTimeout(() => {
+          if (currentUser && typeof OneSignal.login === 'function') {
+            OneSignal.login(currentUser.id).catch(err => {
+              console.error("OneSignal Login Error (Initial):", err);
+            });
+          }
+        }, 1000);
       }).catch(err => {
         const errMsg = err?.message || String(err);
         if (errMsg.includes('already initialized')) {
           oneSignalInitialized.current = true;
-          if (currentUser) OneSignal.login(currentUser.id);
+          if (currentUser && typeof OneSignal.login === 'function') {
+            OneSignal.login(currentUser.id).catch(() => {});
+          }
         } else if (errMsg.includes('Can only be used on')) {
-          console.warn("OneSignal domain mismatch detected:", errMsg);
-          console.warn("Please ensure your OneSignal Dashboard 'Site URL' matches the current domain.");
           oneSignalInitialized.current = true; 
         } else {
           console.error("OneSignal Init Error:", err);
         }
       });
     } else if (appId && oneSignalInitialized.current && currentUser) {
-      OneSignal.login(currentUser.id).catch(e => console.error("OneSignal Login Error:", e));
+      // Guard the login call
+      if (typeof OneSignal.login === 'function') {
+        OneSignal.login(currentUser.id).catch(e => {
+          // If we see the 'Qe' error or similar, it means OneSignal might be in a weird state
+          console.error("OneSignal Login Error (Update):", e);
+        });
+      }
     }
   }, [currentUser]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
@@ -9996,7 +10005,7 @@ function AppContent() {
                     ) : (
                       <div className="space-y-2">
                         {allMemberProfilePayments.map((p, idx) => (
-                          <div key={`prof-pay-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                          <div key={`profile-payment-new-${p.id || idx}-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                             <div>
                               <span className="block font-bold text-sm">{p.reason}</span>
                               <span className="text-[10px] opacity-60">{formatDate(p.date)}</span>
@@ -10039,7 +10048,7 @@ function AppContent() {
                       return (
                         <div className="space-y-2">
                           {allUserBooks.map((book, idx) => (
-                            <div key={`prof-book-${idx}`} className={cn("p-4 rounded-2xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm")}>
+                            <div key={`profile-book-new-${idx}`} className={cn("p-4 rounded-2xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm")}>
                               <div className="flex justify-between items-start gap-4">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
@@ -10083,7 +10092,7 @@ function AppContent() {
                       ) : (
                         adminDatabaseLinks.map((link, idx) => (
                           <div 
-                            key={`prof-db-link-${link.id}-${idx}`} 
+                            key={`prof-db-link-v2-${link.id}-${idx}`} 
                             className={cn(
                               "p-4 rounded-2xl border flex flex-col gap-3 transition-all",
                               isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
