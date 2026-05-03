@@ -349,9 +349,10 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
       body.include_external_user_ids = [targetId];
     }
 
-    const backendBaseUrl = window.location.hostname.includes('vercel.app') 
+    const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
+    const backendBaseUrl = envBackendUrl || (window.location.hostname.includes('vercel.app') 
       ? "https://ais-pre-s34y6u4k2ijbkncpakipbx-27628823743.europe-west2.run.app" 
-      : (window.location.hostname.includes('localhost') ? 'http://localhost:3000' : '');
+      : (window.location.hostname.includes('localhost') ? 'http://localhost:3000' : ''));
 
     const response = await fetch(`${backendBaseUrl}/api/onesignal`, {
       method: "POST",
