@@ -141,7 +141,71 @@ app.get("/api/health", (req, res) => {
     return res.status(500).json({ status: "error", message: "Google API credentials missing in environment" });
   }
   res.json({ status: "ok" });
-});app.post("/api/signup", async (req, res) => {
+});
+
+app.get("/api/resolve-link", async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Missing url parameter" });
+  }
+
+  try {
+    const response = await fetch(url, { 
+      redirect: "follow",
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    const finalUrl = response.url;
+    
+    const match = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || 
+                  finalUrl.match(/place\/(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+                  finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) ||
+                  finalUrl.match(/q=(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+                  finalUrl.match(/ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+
+    if (match) {
+      return res.json({ 
+        lat: parseFloat(match[1]), 
+        lng: parseFloat(match[2]),
+        finalUrl 
+      });
+    }
+
+    const text = await response.text();
+    // Try to find coordinates in various meta tags or script blocks
+    // 1. Static map URL in meta or og:image or any source
+    const metaMatch = text.match(/https:\/\/maps\.googleapis\.com\/maps\/api\/staticmap\?center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/) ||
+                      text.match(/https:\/\/maps\.google\.com\/maps\/api\/staticmap\?center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/) ||
+                      text.match(/meta content="https:\/\/maps\.google\.com\/maps\/api\/staticmap\?center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/) ||
+                      // 2. Embedded JSON data in script
+                      text.match(/\[\[\[(-?\d+\.\d+),(-?\d+\.\d+)\]/) ||
+                      // 3. Script data for place search
+                      text.match(/"?lat"?\s*:\s*(-?\d+\.\d+)\s*,\s*"?lng"?\s*:\s*(-?\d+\.\d+)/i) ||
+                      // 4. Coordinates in title or content
+                      text.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+    
+    if (metaMatch) {
+      // Basic sanity check for lat/lng
+      const l1 = parseFloat(metaMatch[1]);
+      const l2 = parseFloat(metaMatch[2]);
+      if (Math.abs(l1) <= 90 && Math.abs(l2) <= 180) {
+        return res.json({
+          lat: l1,
+          lng: l2,
+          finalUrl
+        });
+      }
+    }
+
+    res.json({ finalUrl, message: "No coordinates found after parsing HTML" });
+  } catch (error: any) {
+    console.error("Resolve link error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/signup", async (req, res) => {
   try {
     const { bloodGroup, name, district, city, contact, password } = req.body;
     

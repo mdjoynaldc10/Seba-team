@@ -1,8 +1,10 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Tiro+Bangla&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Tiro+Bangla&display=swap');
 
 @theme {
-  --font-sans: "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Tiro Bangla", serif;
+  --font-serif: "Tiro Bangla", serif;
+  --font-mono: "Tiro Bangla", serif;
 }
 
 @layer base {

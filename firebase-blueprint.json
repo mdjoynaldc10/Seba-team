@@ -245,6 +245,19 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "userName", "latitude", "longitude", "updatedAt"]
+    },
+    "bookshelf_clicks": {
+      "title": "Bookshelf Click History",
+      "description": "Records users who clicked to view a bookshelf PIN",
+      "type": "object",
+      "properties": {
+        "shelfAddress": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAddress": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shelfAddress", "userId", "userName", "timestamp"]
     }
   },
   "firestore": {
@@ -311,6 +324,10 @@
     "/blood_posts/{postId}": {
       "schema": "blood_posts",
       "description": "Collection of blood donation requests"
+    },
+    "/bookshelf_clicks/{clickId}": {
+      "schema": "bookshelf_clicks",
+      "description": "Collection tracking PIN code views on bookshelves"
     }
   }
 }
