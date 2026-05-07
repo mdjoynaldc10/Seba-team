@@ -327,15 +327,23 @@ app.post("/api/delete-account", async (req, res) => {
   }
 });
 
+app.get("/api/config", (req, res) => {
+  res.json({
+    oneSignalAppId: process.env.VITE_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID
+  });
+});
+
 app.post("/api/onesignal", async (req, res) => {
-  const appId = process.env.VITE_ONESIGNAL_APP_ID;
-  const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY;
+  const appId = process.env.VITE_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.VITE_ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
 
   if (!appId || !apiKey) {
+    console.error("OneSignal configuration missing on server. App ID:", appId ? "Present" : "Missing", "API Key:", apiKey ? "Present" : "Missing");
     return res.status(400).json({ error: "OneSignal configuration missing on server" });
   }
 
   try {
+    console.log("Relaying OneSignal notification request...");
     const response = await fetch("https://onesignal.com/api/v1/notifications", {
       method: "POST",
       headers: {
@@ -349,6 +357,11 @@ app.post("/api/onesignal", async (req, res) => {
     });
     
     const data = await response.json();
+    if (!response.ok) {
+      console.error("OneSignal API error response:", data);
+    } else {
+      console.log("OneSignal notification relayed successfully:", data);
+    }
     res.json(data);
   } catch (error: any) {
     console.error("OneSignal backend error:", error);

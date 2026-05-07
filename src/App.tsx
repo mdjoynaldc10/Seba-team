@@ -344,22 +344,18 @@ const sendOneSignalNotification = async (targetId: string | 'all', title: string
     };
 
     if (targetId === 'all') {
-      body.included_segments = ["Total Subscriptions"];
+      body.included_segments = ["Subscribed Users"];
     } else {
       body.include_external_user_ids = [targetId];
     }
 
-    const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
-    let backendBaseUrl = envBackendUrl || "";
-    
-    // If we are in production and no backend URL is provided, assume same origin
-    if (!backendBaseUrl && !window.location.hostname.includes('localhost')) {
-      backendBaseUrl = window.location.origin;
-    } else if (!backendBaseUrl && window.location.hostname.includes('localhost')) {
-      backendBaseUrl = "http://localhost:3000";
-    }
+    // Use a simple relative path if no backend URL is explicitly provided
+    const vBackendUrl = import.meta.env.VITE_BACKEND_URL;
+    const backendUrl = vBackendUrl ? `${vBackendUrl}/api/onesignal` : "/api/onesignal";
 
-    const response = await fetch(`${backendBaseUrl}/api/onesignal`, {
+    console.log(`Sending OneSignal notification via: ${backendUrl}`);
+
+    const response = await fetch(backendUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -3234,7 +3230,7 @@ function BookshelfPage({
           ) : (
             bookshelves.map((shelf, idx) => (
               <div 
-                key={`shelf-${idx}-${shelf.address}`} 
+                key={`shelf-item-${shelf.address}`} 
                 className="relative h-36 w-full"
                 style={{ perspective: '1000px' }}
               >
@@ -3737,66 +3733,6 @@ function AppContent() {
     };
   }, []);
 
-  // --- Real-time User Tracking ---
-  useEffect(() => {
-    if (!currentUser) return;
-
-    let intervalId: any;
-
-    const updateLocation = () => {
-      if (typeof navigator !== 'undefined' && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            const { latitude, longitude } = position.coords;
-            try {
-              if (currentUser.id) {
-                await setDoc(doc(db, 'user_locations', currentUser.id), {
-                  userId: currentUser.id,
-                  userName: currentUser.name,
-                  latitude,
-                  longitude,
-                  updatedAt: serverTimestamp()
-                }, { merge: true });
-              }
-            } catch (e) {
-              console.error("Error updating location:", e);
-            }
-          },
-          (error) => {
-            console.debug("Geolocation error:", error);
-          },
-          { enableHighAccuracy: true }
-        );
-      }
-    };
-
-    updateLocation();
-    intervalId = setInterval(updateLocation, 60000);
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!isAdmin(currentUser) || !showTrackingMap) return;
-
-    const unsubscribe = onSnapshot(collection(db, 'user_locations'), (snapshot) => {
-      const locationsMap = new Map<string, UserLocation>();
-      snapshot.forEach(doc => {
-        const data = doc.data() as UserLocation;
-        locationsMap.set(data.userId, data);
-      });
-      setUserLocations(Array.from(locationsMap.values()));
-    });
-
-    return () => unsubscribe();
-  }, [currentUser, showTrackingMap]);
-
-  const [showBookRequestPage, setShowBookRequestPage] = useState(false);
-  const [selectedBookRequest, setSelectedBookRequest] = useState<BookRequest | null>(null);
-  const [activeBorrowedTab, setActiveBorrowedTab] = useState<'my-books' | 'requests' | 'history'>('my-books');
-  const [dueDate, setDueDate] = useState('');
   const [greetingsData, setGreetingsData] = useState(() => {
     const defaults = {
       morning: { main: "শুভ সকাল", sub: "আপনার দিনটি শুভ হোক!", startHour: 5, startPeriod: "AM", endHour: 12, endPeriod: "PM" },
@@ -3805,12 +3741,10 @@ function AppContent() {
       night: { main: "শুভ সন্ধ্যা", sub: "আপনার সন্ধ্যাটি শান্তিময় হোক!", startHour: 6, startPeriod: "PM", endHour: 10, endPeriod: "PM" },
       lateNight: { main: "শুভ রাত্রি", sub: "আপনার রাতটি সুখের হোক!", startHour: 10, startPeriod: "PM", endHour: 5, endPeriod: "AM" }
     };
-
     const saved = localStorage.getItem('seba_greetings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Merge with defaults to ensure all properties exist
         return {
           morning: { ...defaults.morning, ...parsed.morning },
           afternoon: { ...defaults.afternoon, ...parsed.afternoon },
@@ -3827,6 +3761,10 @@ function AppContent() {
   
   // Overlays
   const [showInfoPage, setShowInfoPage] = useState(false);
+  const [showBookRequestPage, setShowBookRequestPage] = useState(false);
+  const [selectedBookRequest, setSelectedBookRequest] = useState<BookRequest | null>(null);
+  const [activeBorrowedTab, setActiveBorrowedTab] = useState<'my-books' | 'requests' | 'history'>('my-books');
+  const [dueDate, setDueDate] = useState('');
   const [showPaymentPage, setShowPaymentPage] = useState(false);
   const [showBorrowedBooksPage, setShowBorrowedBooksPage] = useState(false);
   const [showDonationProjectsPage, setShowDonationProjectsPage] = useState(false);
@@ -3837,95 +3775,70 @@ function AppContent() {
   const oneSignalInitialized = useRef(false);
 
   useEffect(() => {
-    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-    if (appId && !oneSignalInitialized.current) {
-      console.log("Initializing OneSignal...");
-      OneSignal.init({
-        appId: appId,
-        allowLocalhostAsSecureOrigin: true,
-      }).then(() => {
-        oneSignalInitialized.current = true;
-        console.log("OneSignal initialized successfully");
-        
-        // Show slidedown if not already subscribed
-        const notifications = (OneSignal as any).Notifications;
-        if (notifications && !notifications.permission) {
-          const slidedown = (OneSignal as any).Slidedown;
-          if (slidedown && typeof slidedown.prompt === 'function') {
-            slidedown.prompt();
-          }
-        }
+    const initOneSignal = async () => {
+      if (oneSignalInitialized.current) return;
+      
+      try {
+        const configRes = await fetch('/api/config');
+        const configData = await configRes.json();
+        const appId = configData.oneSignalAppId;
 
-        // Use a more robust delay and retry logic to ensure internal OneSignal state is ready
-        let retryCount = 0;
-        const tryLogin = () => {
-          if (currentUser && oneSignalInitialized.current) {
-            try {
-              const os = OneSignal as any;
-              if (os && typeof os.login === 'function') {
-                os.login(currentUser.id).then(() => {
-                  console.log("OneSignal login successful");
-                }).catch((err: any) => {
-                  console.error("OneSignal Login Error (Initial):", err);
-                  if (retryCount < 3) {
-                    retryCount++;
-                    setTimeout(tryLogin, 2000);
-                  }
-                });
-              } else if (os && typeof os.setExternalUserId === 'function') {
-                os.setExternalUserId(currentUser.id).then(() => {
-                   console.log("OneSignal setExternalUserId successful");
-                }).catch((err: any) => {
-                   console.error("OneSignal setExternalUserId Error (Initial):", err);
-                });
-              }
-            } catch (err) {
-              console.error("OneSignal Login Trap (Initial):", err);
-              if (retryCount < 3) {
-                retryCount++;
-                setTimeout(tryLogin, 2000);
-              }
+        if (appId) {
+          console.log("Initializing OneSignal with App ID:", appId);
+          try {
+            await OneSignal.init({
+              appId: appId,
+              allowLocalhostAsSecureOrigin: true,
+            });
+            oneSignalInitialized.current = true;
+            console.log("OneSignal initialized successfully");
+          } catch (initErr: any) {
+            const errMsg = initErr?.message || String(initErr);
+            if (errMsg.includes('already initialized')) {
+              oneSignalInitialized.current = true;
+              console.log("OneSignal already initialized, skipping.");
+            } else if (errMsg.includes('Can only be used on')) {
+              oneSignalInitialized.current = true; 
+              console.warn("OneSignal Domain Mismatch (Development Environment):", errMsg);
+            } else {
+              throw initErr;
             }
           }
-        };
-        setTimeout(tryLogin, 3000);
-      }).catch(err => {
-        const errMsg = err?.message || String(err);
-        if (errMsg.includes('already initialized')) {
-          oneSignalInitialized.current = true;
-          const os = OneSignal as any;
-          if (currentUser && typeof os.login === 'function') {
-            os.login(currentUser.id).catch(() => {});
-          } else if (currentUser && typeof os.setExternalUserId === 'function') {
-            os.setExternalUserId(currentUser.id).catch(() => {});
+          
+          if (oneSignalInitialized.current) {
+            const notifications = (OneSignal as any).Notifications;
+            if (notifications && !notifications.permission) {
+              const slidedown = (OneSignal as any).Slidedown;
+              if (slidedown && typeof slidedown.prompt === 'function') {
+                slidedown.prompt();
+              }
+            }
+
+            let retryCount = 0;
+            const tryLogin = () => {
+              if (currentUser && oneSignalInitialized.current) {
+                const os = OneSignal as any;
+                if (os && typeof os.login === 'function') {
+                  os.login(currentUser.id).then(() => {
+                    console.log("OneSignal login successful");
+                  }).catch((err: any) => {
+                    console.error("OneSignal Login Error:", err);
+                    if (retryCount < 3) {
+                      retryCount++;
+                      setTimeout(tryLogin, 2000);
+                    }
+                  });
+                }
+              }
+            };
+            setTimeout(tryLogin, 3000);
           }
-        } else if (errMsg.includes('Can only be used on')) {
-          console.warn("OneSignal Domain Mismatch:", window.location.hostname);
-          oneSignalInitialized.current = true; 
-        } else {
-          console.error("OneSignal Init Error:", err);
         }
-      });
-    } else if (appId && oneSignalInitialized.current && currentUser) {
-      // Guard the login call specifically for any internal property access errors
-      const loginTimer = setTimeout(() => {
-        try {
-          const os = OneSignal as any;
-          if (typeof os.login === 'function') {
-            os.login(currentUser.id).catch((e: any) => {
-              console.error("OneSignal Login Error (Update):", e);
-            });
-          } else if (typeof os.setExternalUserId === 'function') {
-            os.setExternalUserId(currentUser.id).catch((e: any) => {
-              console.error("OneSignal setExternalUserId Error (Update):", e);
-            });
-          }
-        } catch (e) {
-          console.error("OneSignal Login Trap (Update):", e);
-        }
-      }, 1000);
-      return () => clearTimeout(loginTimer);
-    }
+      } catch (err) {
+        console.error("OneSignal init process error:", err);
+      }
+    };
+    initOneSignal();
   }, [currentUser]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
@@ -8478,9 +8391,9 @@ function AppContent() {
               {filteredPayments.length === 0 ? (
                 <div className="text-center p-10 opacity-50">কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
               ) : (
-                filteredPayments.map((p, idx) => (
+                filteredPayments.map((p) => (
                   <div 
-                    key={`payment-${idx}-${p.date}-${p.reason}`} 
+                    key={`payment-hist-${p.date}-${p.reason}-${p.amount}`} 
                     className={cn(
                       "w-full flex items-center justify-between p-4 rounded-xl border text-left",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -9592,9 +9505,9 @@ function AppContent() {
                 if (projectTransactions.length === 0) {
                   return <div className="text-center p-10 opacity-50">কোনো লেনদেন পাওয়া যায়নি</div>;
                 }
-                return projectTransactions.map((t, idx) => (
+                return projectTransactions.map((t) => (
                   <div 
-                    key={`trans-${idx}-${t.date}`}
+                    key={`project-trans-${t.donorPhone || t.donorName}-${t.date}-${t.amount}`}
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -10692,9 +10605,9 @@ function AppContent() {
                         <p className="text-sm">কোনো নোটিশের ইতিহাস পাওয়া যায়নি।</p>
                       </div>
                     ) : (
-                      globalNotices.map((notice, idx) => (
+                      globalNotices.map((notice) => (
                         <div 
-                          key={`admin-history-notice-v3-${notice.id}-${idx}`} 
+                          key={`admin-global-notice-${notice.id}`} 
                           className={cn(
                             "p-4 rounded-2xl border space-y-3 transition-all",
                             isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -10814,8 +10727,8 @@ function AppContent() {
                         <p className="text-sm opacity-50">বর্তমানে কেউ বইটি সংগ্রহ করেনি</p>
                       </div>
                     ) : (
-                      bookRequests.filter(r => r.bookId === selectedBook.id && r.status === 'approved').map((borrower, idx) => (
-                        <div key={`borrower-${idx}`} className={cn(
+                      bookRequests.filter(r => r.bookId === selectedBook.id && r.status === 'approved').map((borrower) => (
+                        <div key={`borrower-req-${borrower.id}`} className={cn(
                           "p-4 rounded-2xl border flex flex-col gap-3",
                           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100 shadow-sm"
                         )}>
@@ -11042,9 +10955,9 @@ function AppContent() {
                   return <div className="text-center p-10 opacity-50">কোনো নোটিফিকেশন পাওয়া যায়নি</div>;
                 }
 
-                return allNotifs.map((n: any, idx) => (
+                return allNotifs.map((n: any) => (
                   <button 
-                    key={`notif-list-${idx}`}
+                    key={`notif-entry-${n.id || n.title}-${n.createdAt}`}
                     onMouseDown={() => handleLongPressStart('notification', n)}
                     onMouseUp={handleLongPressEnd}
                     onMouseLeave={handleLongPressEnd}
