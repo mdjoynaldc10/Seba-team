@@ -2021,7 +2021,7 @@ function CloudPinPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [mode, setMode] = useState<'manage' | 'set' | 'change'>('manage');
+  const [mode, setMode] = useState<'manage' | 'set' | 'change' | 'reset'>('manage');
   const [currentPinInput, setCurrentPinInput] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [showCurrentPin, setShowCurrentPin] = useState(false);
@@ -2712,28 +2712,43 @@ function CloudPinPage({
 
 function UserTrackingPage({ 
   userLocations, 
+  allMembers,
   onClose, 
   isDarkMode 
 }: { 
   userLocations: UserLocation[], 
+  allMembers: Member[],
   onClose: () => void, 
   isDarkMode: boolean 
 }) {
   const [mapCenter] = useState<[number, number]>([23.8103, 90.4125]); // Default to Dhaka
   
-  const customIcon = (userId: string) => L.divIcon({
-    html: `<div class="bg-emerald-500 text-white font-bold text-[10px] w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-lg pointer-events-none transition-all scale-100 hover:scale-110 active:scale-95">${userId}</div>`,
-    className: '',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-  });
+  const customIcon = (userId: string, photoId?: string) => {
+    const avatarUrl = photoId 
+      ? `https://lh3.googleusercontent.com/d/${photoId}`
+      : "https://www.w3schools.com/howto/img_avatar.png";
+
+    return L.divIcon({
+      html: `
+        <div class="relative group">
+          <div class="w-10 h-10 rounded-full border-2 border-emerald-500 shadow-lg overflow-hidden bg-white transition-all transform hover:scale-125 hover:z-[1001]">
+            <img src="${avatarUrl}" class="w-full h-full object-cover" />
+          </div>
+          <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white shadow-sm"></div>
+        </div>
+      `,
+      className: '',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+    });
+  };
 
   const tileLayerUrl = isDarkMode 
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   return (
-    <OverlayPage key="user-tracking-overlay" title="User Tracking" onClose={onClose} isDarkMode={isDarkMode}>
+    <OverlayPage key="user-tracking-overlay" title="সদস্য ট্র্যাকিং" onClose={onClose} isDarkMode={isDarkMode}>
       <div className="h-[calc(100dvh-120px)] w-full rounded-3xl overflow-hidden relative shadow-inner">
         <MapContainer 
           center={mapCenter} 
@@ -2745,36 +2760,69 @@ function UserTrackingPage({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url={tileLayerUrl}
           />
-          {userLocations.map((loc, idx) => (
-            <Marker 
-              key={`location-${loc.userId}-${idx}`} 
-              position={[loc.latitude, loc.longitude]} 
-              icon={customIcon(loc.userId)}
-            >
-              <Popup className={cn(isDarkMode ? "dark-popup" : "")}>
-                <div className="p-1">
-                  <p className="font-bold text-sm mb-1">{loc.userName}</p>
-                  <p className="text-xs opacity-70">আইডি: {loc.userId}</p>
-                  <p className="text-[10px] opacity-50 mt-1">
-                    আপডেট: {loc.updatedAt?.toDate ? new Date(loc.updatedAt.toDate()).toLocaleTimeString() : 'এইমাত্র'}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {userLocations.map((loc, idx) => {
+            const member = allMembers.find(m => m.id === loc.userId);
+            return (
+              <Marker 
+                key={`location-${loc.userId}-${idx}`} 
+                position={[loc.latitude, loc.longitude]} 
+                icon={customIcon(loc.userId, member?.photoId)}
+              >
+                <Popup className={cn(isDarkMode ? "dark-popup" : "")}>
+                  <div className="p-2 min-w-[200px]">
+                    <div className="flex items-center gap-3 mb-3 border-b pb-2">
+                       <img 
+                         src={member?.photoId ? `https://lh3.googleusercontent.com/d/${member.photoId}` : "https://www.w3schools.com/howto/img_avatar.png"} 
+                         className="w-10 h-10 rounded-full object-cover border border-emerald-500"
+                       />
+                       <div className="overflow-hidden">
+                         <p className="font-bold text-sm leading-tight text-emerald-600 truncate">{loc.userName}</p>
+                         <p className="text-[10px] opacity-60">ID: {loc.userId}</p>
+                       </div>
+                    </div>
+                    
+                    <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                        <span className="truncate">{member?.area || 'ঠিকানা নেই'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>{member?.phone || 'ফোন নেই'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Heart className="w-3.5 h-3.5 text-red-500" />
+                        <span className="font-bold">রক্তের গ্রুপ: {member?.bloodGroup || 'অজানা'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <BadgeCheck className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{member?.designation || 'সদস্য'}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t flex justify-between items-center opacity-50 text-[9px]">
+                      <span>সর্বশেষ অবস্থান</span>
+                      <span>{loc.updatedAt?.toDate ? new Date(loc.updatedAt.toDate()).toLocaleTimeString() : 'এইমাত্র'}</span>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
         
         {/* Map Legend */}
         <div className={cn(
-          "absolute bottom-4 left-4 right-4 p-3 rounded-2xl shadow-xl z-[1000] border backdrop-blur-md",
+          "absolute bottom-4 left-4 right-4 p-3 rounded-2xl shadow-xl z-[1000] border backdrop-blur-md flex items-center justify-between",
           isDarkMode ? "bg-slate-900/80 border-slate-700 text-white" : "bg-white/80 border-slate-100 text-slate-800"
         )}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              <span className="text-xs font-bold leading-none">লাইভ ট্র্যাকিং</span>
-            </div>
-            <span className="text-[10px] opacity-60 font-medium">{userLocations.length} জন সদস্য অনলাইনে আছে</span>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+            <span className="text-xs font-bold leading-none">লাইভ ট্র্যাকিং</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Users className="w-3 h-3 opacity-60" />
+            <span className="text-[10px] opacity-60 font-medium">{userLocations.length} জন অনলাইন</span>
           </div>
         </div>
       </div>
@@ -3035,8 +3083,11 @@ function PinEntryModal({
   );
 }
 
-class ErrorBoundary extends Component<any, any> {
-  state = { hasError: false, error: null };
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
@@ -3048,42 +3099,28 @@ class ErrorBoundary extends Component<any, any> {
 
   render() {
     if (this.state.hasError) {
-      let errorMessage = "Something went wrong.";
-      try {
-        const parsed = JSON.parse(this.state.error.message);
-        if (parsed.error) {
-          errorMessage = `Firestore Error: ${parsed.error} during ${parsed.operationType} on ${parsed.path}`;
-        }
-      } catch (e) {
-        errorMessage = this.state.error.message || String(this.state.error);
-      }
-
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-red-100">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <X className="w-8 h-8" />
+        <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 text-slate-900">
+          <div className="bg-white p-8 rounded-[40px] shadow-2xl max-w-sm w-full border-2 border-red-500/20">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShieldAlert className="w-10 h-10 text-red-500" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900 mb-2">দুঃখিত, একটি সমস্যা হয়েছে</h1>
-            <p className="text-slate-600 mb-6 text-sm leading-relaxed">
-              {errorMessage}
-            </p>
+            <h1 className="text-xl font-black uppercase tracking-tight mb-2">Something went wrong</h1>
+            <p className="text-xs opacity-60 mb-8 font-bold leading-relaxed">{this.state.error?.message || "An unexpected error occurred."}</p>
             <button 
               onClick={() => window.location.reload()}
-              className="w-full py-3 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all"
+              className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
             >
-              আবার চেষ্টা করুন
+              RELOAD APP
             </button>
           </div>
         </div>
       );
     }
-
-    return (this as any).props.children;
+    return this.props.children;
   }
 }
 
-// --- Components ---
 const getBookThumbnail = (link: string | undefined) => {
   if (!link) return '';
   if (link.includes('drive.google.com')) {
@@ -3103,21 +3140,15 @@ const getSafeViewerLink = (link: string | undefined) => {
 };
 
 const LandscapeBlocker = ({ isDarkMode }: { isDarkMode: boolean }) => (
-  <div className={clsx(
-    "landscape-warning fixed inset-0 z-[99999] flex-col items-center justify-center p-6 text-center",
+  <div className={cn(
+    "landscape-warning fixed inset-0 z-[99999] flex flex-col items-center justify-center p-6 text-center lg:hidden",
     isDarkMode ? "bg-slate-900 text-white" : "bg-white text-slate-900"
   )}>
-    <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 animate-bounce">
-      <Smartphone className="w-10 h-10 text-emerald-500 rotate-[-90deg]" />
+    <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-6 animate-bounce">
+      <Smartphone className="w-10 h-10 text-emerald-500 rotate-90" />
     </div>
-    <h2 className="text-2xl font-bold mb-3">অনুগ্রহ করে ফোনটি সোজা করুন</h2>
-    <p className="text-slate-500 max-w-xs mx-auto">
-      এই অ্যাপটি শুধুমাত্র পোর্ট্রেট মোডে ব্যবহারের জন্য ডিজাইন করা হয়েছে। ভালো অভিজ্ঞতার জন্য ফোনটি সোজা করে ধরুন।
-    </p>
-    <div className="mt-8 flex items-center gap-2 text-emerald-500 font-medium">
-      <RotateCcw className="w-5 h-5 animate-spin-slow" />
-      <span>অটো-রোটেশন বন্ধ করুন</span>
-    </div>
+    <h2 className="text-2xl font-black uppercase mb-3">Please Rotate Device</h2>
+    <p className="text-sm opacity-60 font-bold max-w-[250px]">For the best experience, please use this application in portrait mode.</p>
   </div>
 );
 
@@ -3133,16 +3164,24 @@ function BookshelfPage({
   onClose, 
   isDarkMode, 
   bookshelves,
-  currentUser
+  currentUser,
+  allMembers
 }: { 
   onClose: () => void, 
   isDarkMode: boolean, 
   bookshelves: Bookshelf[],
-  currentUser: Member | null
+  currentUser: Member | null,
+  allMembers: Member[]
 }) {
   const [selectedShelfForHistory, setSelectedShelfForHistory] = useState<Bookshelf | null>(null);
   const [shelfClicks, setShelfClicks] = useState<any[]>([]);
+  const [allVisitorCounts, setAllVisitorCounts] = useState<Record<string, number>>({});
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+
+  const toBengaliDigits = (num: number) => {
+    const bengaliNumbers = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return num.toString().padStart(2, '0').split('').map(digit => bengaliNumbers[parseInt(digit)]).join('');
+  };
 
   const toggleFlip = async (index: number, shelf: Bookshelf) => {
     const isNowFlipped = !flippedCards[index];
@@ -3163,6 +3202,29 @@ function BookshelfPage({
       }
     }
   };
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'bookshelf_clicks'), (snapshot) => {
+      const counts: Record<string, Set<string>> = {};
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const address = data.shelfAddress;
+        const userId = data.userId;
+        if (address && userId) {
+          if (!counts[address]) counts[address] = new Set();
+          counts[address].add(userId);
+        }
+      });
+      
+      const visitorCounts: Record<string, number> = {};
+      Object.keys(counts).forEach(addr => {
+        visitorCounts[addr] = counts[addr].size;
+      });
+      setAllVisitorCounts(visitorCounts);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!selectedShelfForHistory) {
@@ -3195,7 +3257,10 @@ function BookshelfPage({
 
   return (
     <OverlayPage key="find-bookshelf-overlay" title="Find Bookshelf" onClose={onClose} isDarkMode={isDarkMode}>
-      <div className="flex flex-col h-[calc(100dvh-120px)] space-y-4 px-3 py-4 md:px-6 font-sans">
+      <div 
+        className="flex flex-col h-[calc(100dvh-120px)] space-y-4 px-3 py-4 md:px-6 font-sans select-none"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         {/* Header Stats */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
@@ -3210,8 +3275,8 @@ function BookshelfPage({
               <ClipboardList className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-xs font-black uppercase tracking-widest opacity-80">বুকশেলফ তালিকা</h4>
-              <p className="text-[10px] opacity-50 font-bold">কার্ডে ক্লিক করে পিন কোড দেখুন</p>
+              <h4 className="text-xs font-black uppercase tracking-widest opacity-80">Bookshelf List</h4>
+              <p className="text-[10px] opacity-50 font-bold">Click card to see PIN code</p>
             </div>
           </div>
           <div className="text-right">
@@ -3230,8 +3295,8 @@ function BookshelfPage({
           ) : (
             bookshelves.map((shelf, idx) => (
               <div 
-                key={`shelf-item-${shelf.address}`} 
-                className="relative h-36 w-full"
+                key={`shelf-item-${shelf.address}-${idx}`} 
+                className="relative h-28 w-full"
                 style={{ perspective: '1000px' }}
               >
                 <motion.div
@@ -3246,33 +3311,38 @@ function BookshelfPage({
                      onClick={() => toggleFlip(idx, shelf)}
                      style={{ backfaceVisibility: 'hidden' }}
                      className={cn(
-                        "absolute inset-0 px-4 py-6 rounded-[40px] border-2 transition-all flex flex-col justify-center cursor-pointer",
+                        "absolute inset-0 px-4 py-4 rounded-[32px] border-2 transition-all flex flex-col justify-center cursor-pointer",
                         isDarkMode ? "bg-slate-800 border-slate-700 hover:border-emerald-500/30" : "bg-white border-slate-100 shadow-sm hover:border-emerald-500/30"
                      )}
                    >
-                     <div className="flex justify-between items-start">
+                     <div className="flex justify-between items-center">
                         <div className="min-w-0 flex-1 pr-4">
-                           <div className="flex items-center gap-2 text-emerald-500 mb-2">
-                              <MapPin className="w-4 h-4" />
-                              <span className="text-[10px] font-black uppercase tracking-[0.2em]">{shelf.district}</span>
+                           <div className="flex items-center gap-2 text-emerald-500 mb-1">
+                              <MapPin className="w-3.5 h-3.5" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em]">{shelf.district}</span>
                            </div>
-                           <h3 className="text-base font-black truncate leading-none mb-1">{shelf.address}</h3>
-                           <p className="text-[9px] font-bold opacity-30 uppercase tracking-widest mt-2 flex items-center gap-1.5">
-                              <Unlock className="w-3 h-3" /> পিন কোড জানতে ক্লিক করুন
+                           <h3 className="text-sm font-black truncate leading-tight mb-1">{shelf.address}</h3>
+                           <p className="text-[8px] font-bold opacity-30 uppercase tracking-widest mt-1.5 flex items-center gap-1.5">
+                              <Unlock className="w-2.5 h-2.5" /> Click to see PIN code
                            </p>
                         </div>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedShelfForHistory(shelf);
-                          }}
-                          className={cn(
-                            "w-12 h-12 rounded-[20px] flex items-center justify-center transition-all group active:scale-90 shrink-0",
-                            isDarkMode ? "bg-slate-900/50 text-slate-500 hover:text-emerald-500" : "bg-slate-50 text-slate-400 hover:text-emerald-500"
-                          )}
-                        >
-                          <Users2 className="w-6 h-6" />
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedShelfForHistory(shelf);
+                            }}
+                            className={cn(
+                              "w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all group active:scale-95 shrink-0 border border-emerald-500/10",
+                              isDarkMode ? "bg-emerald-500/5 hover:bg-emerald-500/10" : "bg-emerald-50 hover:bg-emerald-100"
+                            )}
+                          >
+                            <span className="text-emerald-500 text-lg font-black leading-none drop-shadow-sm">
+                              {toBengaliDigits(allVisitorCounts[shelf.address] || 0)}
+                            </span>
+                            <span className="text-emerald-500/40 text-[7px] font-black uppercase tracking-tighter mt-0.5">Visitors</span>
+                          </button>
+                        </div>
                      </div>
                    </div>
 
@@ -3284,20 +3354,19 @@ function BookshelfPage({
                        transform: 'rotateY(180deg)' 
                      }}
                      className={cn(
-                        "absolute inset-0 p-6 rounded-[40px] border-2 border-emerald-500/50 flex flex-col items-center justify-center text-center cursor-pointer",
+                        "absolute inset-0 p-4 rounded-[32px] border-2 border-emerald-500/50 flex flex-col items-center justify-center text-center cursor-pointer",
                         isDarkMode ? "bg-slate-900" : "bg-emerald-50"
                      )}
                    >
                       <motion.div
                         initial={{ scale: 0.8 }}
                         animate={{ scale: 1 }}
-                        className="space-y-1"
+                        className="space-y-0.5"
                       >
-                         <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-1">সিকিউরিটি পিন</p>
-                         <h2 className="text-4xl font-black tracking-[-0.05em] text-emerald-600 tabular-nums">
+                         <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-0.5">SECURITY PIN</p>
+                         <h2 className="text-3xl font-black tracking-[-0.05em] text-emerald-600 tabular-nums">
                             {shelf.pinCode}
                          </h2>
-                         <div className="h-1 w-8 bg-emerald-500/20 mx-auto rounded-full mt-2" />
                       </motion.div>
                    </div>
                 </motion.div>
@@ -3334,7 +3403,7 @@ function BookshelfPage({
               
               <div className="p-8 pb-4 flex items-center justify-between shrink-0">
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-500 mb-2">ক্লিক হিস্টোরি (৪৮ ঘণ্টা)</h3>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-500 mb-2">Click History (48 hours)</h3>
                   <div className="flex items-center gap-2">
                     <MapPin className="w-5 h-5 text-emerald-500" />
                     <p className="text-sm font-black truncate">{selectedShelfForHistory.address}</p>
@@ -3354,53 +3423,63 @@ function BookshelfPage({
                     <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
                       <Clock className="w-10 h-10" />
                     </div>
-                    <p className="text-sm font-black uppercase tracking-widest mb-1">এখনও কোনো ক্লিক পাওয়া যায়নি</p>
-                    <p className="text-[10px] font-medium leading-relaxed max-w-[200px]">৪৮ ঘণ্টার মধ্যে পিন কোড দেখা ব্যবহারকারীদের তালিকা এখানে প্রদর্শিত হবে</p>
+                    <p className="text-sm font-black uppercase tracking-widest mb-1">No clicks found yet</p>
+                    <p className="text-[10px] font-medium leading-relaxed max-w-[200px]">Users who viewed the PIN code in the last 48 hours will appear here.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40">ভিজিটরস প্রোফাইল</span>
-                      <span className="text-[10px] font-black px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full">{shelfClicks.length} জন</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Visitors Profile</span>
+                      <span className="text-[10px] font-black px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full">{shelfClicks.length}</span>
                     </div>
-                    {shelfClicks.map((click, i) => (
-                      <motion.div 
-                        key={`hist-${click.id || i}`}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className={cn(
-                          "flex items-center gap-4 p-5 rounded-[32px] border transition-all",
-                          isDarkMode ? "bg-slate-800/20 border-slate-800" : "bg-slate-50/50 border-slate-100"
-                        )}
-                      >
-                        <div className="w-12 h-12 rounded-[20px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center text-emerald-500 shadow-sm relative overflow-hidden group">
-                           <Users2 className="w-6 h-6" />
-                           <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-black truncate uppercase tracking-tight">{click.userName}</p>
-                          <p className="text-[10px] opacity-40 truncate font-bold uppercase tracking-tighter mt-0.5">{click.userAddress || 'ঠিকানা পাওয়া যায়নি'}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="flex items-center gap-1.5 justify-end text-emerald-500 mb-1">
-                             <Clock className="w-3 h-3" />
-                             <p className="text-[10px] font-black uppercase tracking-tighter">
-                                {click.timestamp?.toMillis ? new Date(click.timestamp.toMillis()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now'}
-                             </p>
+                    {shelfClicks.map((click, i) => {
+                      const member = allMembers.find(m => m.id === click.userId);
+                      const avatarUrl = member?.photoId 
+                        ? `https://lh3.googleusercontent.com/d/${member.photoId}`
+                        : "https://www.w3schools.com/howto/img_avatar.png";
+
+                      return (
+                        <motion.div 
+                          key={`hist-${click.id || i}`}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className={cn(
+                            "flex items-center gap-4 p-5 rounded-[32px] border transition-all",
+                            isDarkMode ? "bg-slate-800/20 border-slate-800" : "bg-slate-50/50 border-slate-100 shadow-sm"
+                          )}
+                        >
+                          <div className="w-12 h-12 rounded-[20px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 relative overflow-hidden shrink-0 shadow-sm">
+                             <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" />
+                             <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <p className="text-[8px] opacity-30 font-black uppercase tracking-widest">
-                             {click.timestamp?.toMillis ? new Date(click.timestamp.toMillis()).toLocaleDateString() : ''}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black truncate uppercase tracking-tight text-emerald-600 dark:text-emerald-500">{click.userName}</p>
+                            <div className="flex flex-col gap-0.5 mt-0.5">
+                              <p className="text-[9px] opacity-60 font-bold uppercase tracking-tighter">আইডি: {click.userId || 'অজানা'}</p>
+                              <p className="text-[10px] opacity-40 truncate font-bold uppercase tracking-tighter">{click.userAddress || 'ঠিকানা পাওয়া যায়নি'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="flex items-center gap-1.5 justify-end text-emerald-500 mb-1">
+                               <Clock className="w-3 h-3" />
+                               <p className="text-[10px] font-black uppercase tracking-tighter">
+                                  {click.timestamp?.toMillis ? new Date(click.timestamp.toMillis()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now'}
+                               </p>
+                            </div>
+                            <p className="text-[8px] opacity-30 font-black uppercase tracking-widest">
+                               {click.timestamp?.toMillis ? new Date(click.timestamp.toMillis()).toLocaleDateString() : ''}
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
               
               <div className="p-8 bg-emerald-500/5 text-center shrink-0 border-t border-emerald-500/10">
-                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">এই তালিকা ৪৮ ঘণ্টা পর স্বয়ংক্রিয়ভাবে মুছে যাবে</p>
+                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">This list will be automatically erased after 48 hours.</p>
               </div>
             </motion.div>
           </div>
@@ -3817,17 +3896,25 @@ function AppContent() {
             let retryCount = 0;
             const tryLogin = () => {
               if (currentUser && oneSignalInitialized.current) {
-                const os = OneSignal as any;
-                if (os && typeof os.login === 'function') {
-                  os.login(currentUser.id).then(() => {
-                    console.log("OneSignal login successful");
-                  }).catch((err: any) => {
-                    console.error("OneSignal Login Error:", err);
-                    if (retryCount < 3) {
-                      retryCount++;
-                      setTimeout(tryLogin, 2000);
-                    }
-                  });
+                try {
+                  const os = OneSignal as any;
+                  if (os && typeof os.login === 'function') {
+                    os.login(currentUser.id).then(() => {
+                      console.log("OneSignal login successful");
+                    }).catch((err: any) => {
+                      console.error("OneSignal Login Error Branch:", err);
+                      // Fallback to external user id if login fails
+                      if (os.setExternalUserId) {
+                        os.setExternalUserId(currentUser.id);
+                      }
+                      if (retryCount < 3) {
+                        retryCount++;
+                        setTimeout(tryLogin, 3000);
+                      }
+                    });
+                  }
+                } catch (osErr) {
+                  console.error("OneSignal tryLogin execution error:", osErr);
                 }
               }
             };
@@ -3840,6 +3927,62 @@ function AppContent() {
     };
     initOneSignal();
   }, [currentUser]);
+
+  // --- Real-time User Tracking ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let intervalId: any;
+
+    const updateLocation = () => {
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+              if (currentUser.id) {
+                await setDoc(doc(db, 'user_locations', currentUser.id), {
+                  userId: currentUser.id,
+                  userName: currentUser.name,
+                  latitude,
+                  longitude,
+                  updatedAt: serverTimestamp()
+                }, { merge: true });
+              }
+            } catch (e) {
+              console.error("Error updating location:", e);
+            }
+          },
+          (error) => {
+            console.debug("Geolocation error:", error);
+          },
+          { enableHighAccuracy: true }
+        );
+      }
+    };
+
+    updateLocation();
+    intervalId = setInterval(updateLocation, 60000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!isAdmin(currentUser) || !showTrackingMap) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'user_locations'), (snapshot) => {
+      const locationsMap = new Map<string, UserLocation>();
+      snapshot.forEach(doc => {
+        const data = doc.data() as UserLocation;
+        locationsMap.set(data.userId, data);
+      });
+      setUserLocations(Array.from(locationsMap.values()));
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, showTrackingMap]);
   const [isNumberCopied, setIsNumberCopied] = useState(false);
   const [showTicTacToe, setShowTicTacToe] = useState(false);
   const [showDatabasePage, setShowDatabasePage] = useState(false);
@@ -8328,6 +8471,7 @@ function AppContent() {
           {showTrackingMap && currentUser && (
             <UserTrackingPage 
               userLocations={userLocations} 
+              allMembers={allMembers}
               onClose={() => window.history.back()} 
               isDarkMode={isDarkMode} 
             />
@@ -9507,7 +9651,7 @@ function AppContent() {
                 }
                 return projectTransactions.map((t) => (
                   <div 
-                    key={`project-trans-${t.donorPhone || t.donorName}-${t.date}-${t.amount}`}
+                    key={`project-trans-${t.mobileNumber || t.donorName}-${t.date}-${t.amount}`}
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border",
                       isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"
@@ -9538,8 +9682,8 @@ function AppContent() {
         {showBorrowedBooksPage && currentUser && (
           <OverlayPage key="borrowed-books-overlay" title="বই সংগ্রহ ও অনুরোধ" onClose={() => window.history.back()} isDarkMode={isDarkMode}>
             <div className="space-y-6">
-              {/* Tabs for Admin/Dev - ONLY show if not viewing personal books to keep personal view clean */}
-              {(isAdmin(currentUser) || isDeveloper(currentUser)) && activeBorrowedTab !== 'my-books' && (
+              {/* Tabs for Admin/Dev */}
+              {(isAdmin(currentUser) || isDeveloper(currentUser)) && (
                 <div className="flex gap-2 p-1 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-2xl border border-emerald-500/20 relative">
                   <button 
                     onClick={() => setActiveBorrowedTab('my-books')} 
@@ -10191,8 +10335,8 @@ function AppContent() {
                       <div className={cn("p-4 rounded-xl border text-center opacity-50", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>কোনো পেমেন্ট হিস্টোরি পাওয়া যায়নি</div>
                     ) : (
                       <div className="space-y-2">
-                        {allMemberProfilePayments.map((p, idx) => (
-                          <div key={`profile-payment-new-${p.id || idx}-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
+                        {allMemberProfilePayments.map((p: any, idx) => (
+                          <div key={`profile-payment-new-${idx}`} className={cn("flex items-center justify-between p-3 rounded-xl border", isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                             <div>
                               <span className="block font-bold text-sm">{p.reason}</span>
                               <span className="text-[10px] opacity-60">{formatDate(p.date)}</span>
@@ -10928,6 +11072,7 @@ function AppContent() {
             isDarkMode={isDarkMode} 
             bookshelves={bookshelves} 
             currentUser={currentUser}
+            allMembers={allMembers}
           />
         )}
       </AnimatePresence>
@@ -10943,9 +11088,9 @@ function AppContent() {
               {(() => {
                 const mySheetNotifications = notifications.filter(n => n.id === currentUser.id && n.message);
                 const allNotifs = [
-                  ...realTimeNotifications.map(n => ({ ...n, isRealTime: true })),
-                  ...mySheetNotifications.map(n => ({ ...n, isRealTime: false }))
-                ].sort((a, b) => {
+                  ...realTimeNotifications.map(n => ({ ...n, isRealTime: true } as any)),
+                  ...mySheetNotifications.map(n => ({ ...n, isRealTime: false } as any))
+                ].sort((a: any, b: any) => {
                   const dateA = a.isRealTime ? new Date(a.createdAt).getTime() : 0;
                   const dateB = b.isRealTime ? new Date(b.createdAt).getTime() : 0;
                   return dateB - dateA;
@@ -10955,9 +11100,9 @@ function AppContent() {
                   return <div className="text-center p-10 opacity-50">কোনো নোটিফিকেশন পাওয়া যায়নি</div>;
                 }
 
-                return allNotifs.map((n: any) => (
+                return allNotifs.map((n: any, idx: number) => (
                   <button 
-                    key={`notif-entry-${n.id || n.title}-${n.createdAt}`}
+                    key={`notif-entry-${n.id || n.title}-${idx}-${n.createdAt || n.message}`}
                     onMouseDown={() => handleLongPressStart('notification', n)}
                     onMouseUp={handleLongPressEnd}
                     onMouseLeave={handleLongPressEnd}
